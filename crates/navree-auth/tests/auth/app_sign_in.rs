@@ -3,7 +3,8 @@
 //! pages, `GET /auth/app/finish` to the app's callback with a one-time
 //! code, and `POST /api/auth/app/exchange` with the verifier from the app's
 //! own HTTP stack; the page that asks a browser that was already signed in
-//! first, `POST /auth/app/confirm`. Also: a platform sign-in waiting for its
+//! first, `POST /auth/app/confirm`. The same for a Windows app, which comes
+//! back on a link of its own scheme. Also: a platform sign-in waiting for its
 //! second step, finished on the two-factor page.
 
 use std::sync::Arc;
@@ -503,12 +504,16 @@ async fn a_start_without_an_s256_challenge_or_a_callback_is_refused() {
         ),
         format!("platform=apple&app={BUNDLE}&code_challenge={challenge}"),
         format!("platform=apple&app={BUNDLE}&code_challenge=abc&code_challenge_method=S256"),
-        // Not an app of auth.apps, an app without a callback, another platform.
+        // Not an app of auth.apps, an app without a callback, a system the
+        // hand-over does not know, and one these settings list no app of.
         format!(
             "platform=apple&app=com.evil.app&code_challenge={challenge}&code_challenge_method=S256"
         ),
         format!(
             "platform=apple&app=com.example.kiosk&code_challenge={challenge}&code_challenge_method=S256"
+        ),
+        format!(
+            "platform=linux&app={BUNDLE}&code_challenge={challenge}&code_challenge_method=S256"
         ),
         format!(
             "platform=windows&app={BUNDLE}&code_challenge={challenge}&code_challenge_method=S256"
@@ -1441,6 +1446,475 @@ async fn an_https_callback_must_be_on_the_sites_own_host() {
     get(&app.client(), "/app/signed-in")
         .await
         .assert_status(200);
+}
+
+/// The package family name of the Windows app, by which a build installed
+/// from its package names itself.
+const FAMILY: &str = "CharkhaSupply_8wekyb3d8bbwe";
+/// The id a build of the Windows app with no package was built with.
+const UNPACKAGED: &str = "com.charkha.supply";
+/// The Windows app's callback: a link on its own scheme.
+const WINDOWS_CALLBACK: &str = "charkha:/signed-in";
+
+/// The app of these tests with a Windows app listed beside the others.
+fn with_windows(clock: &Arc<FixedClock>, sink: &Arc<RecordingSink>) -> TestAppBuilder {
+    builder(clock, sink)
+        .config("auth.apps.windows.supply.package_family_name", FAMILY)
+        .config("auth.apps.windows.supply.app_id", UNPACKAGED)
+        .config("auth.apps.windows.supply.callback", WINDOWS_CALLBACK)
+}
+
+/// `GET /auth/app/sign-in` for the Windows app named `id`, with `more` after
+/// the query.
+async fn start_windows(
+    client: &TestClient,
+    id: &str,
+    challenge: &str,
+    state: &str,
+    more: &str,
+) -> TestResponse {
+    get(
+        client,
+        &format!(
+            "/auth/app/sign-in?platform=windows&app={id}&code_challenge={challenge}\
+             &code_challenge_method=S256&state={state}{more}"
+        ),
+    )
+    .await
+}
+
+/// The Windows callback the hand-over sent the browser to: its `code`, or
+/// its `error`, with the state checked. The address before the query is the
+/// configured callback, to the letter.
+fn windows_callback(response: &TestResponse, state: &str) -> (Option<String>, Option<String>) {
+    assert_eq!(response.status().as_u16(), 303, "{}", response.text());
+    assert_eq!(response.header("cache-control"), Some("no-store"));
+    assert_eq!(response.header("referrer-policy"), Some("no-referrer"));
+    let to = location(response);
+    let (address, query) = to.split_once('?').expect("a query");
+    assert_eq!(address, WINDOWS_CALLBACK);
+    let pairs: Vec<(String, String)> = url::form_urlencoded::parse(query.as_bytes())
+        .into_owned()
+        .collect();
+    assert!(
+        pairs.contains(&("state".to_owned(), state.to_owned())),
+        "{pairs:?}"
+    );
+    let named = |name: &str| {
+        pairs
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.clone())
+    };
+    (named("code"), named("error"))
+}
+
+/// The person signs in in the browser for the Windows app named `id`: the
+/// browser and the code its callback carried.
+async fn browser_sign_in_for_windows(
+    app: &TestApp,
+    id: &str,
+    challenge: &str,
+    state: &str,
+) -> (TestClient, String) {
+    let browser = app.client();
+    let started = start_windows(&browser, id, challenge, state, "")
+        .await
+        .assert_status(303);
+    assert_eq!(location(&started), "/auth/app/finish");
+    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&browser, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+    let (code, error) = windows_callback(&get(&browser, &back).await, state);
+    assert_eq!(error, None);
+    (browser, code.expect("a code"))
+}
+
+/// The exchange as the Windows app `id` posts it.
+async fn exchange_as(
+    client: &TestClient,
+    platform: &str,
+    id: &str,
+    code: &str,
+    verifier: &str,
+) -> TestResponse {
+    client
+        .post("/api/auth/app/exchange")
+        .xsrf()
+        .json(&json!({
+            "platform": platform,
+            "app": id,
+            "code": code,
+            "code_verifier": verifier,
+        }))
+        .send()
+        .await
+}
+
+// A Windows app signs a person in through their own browser: the start with
+// its id, an S256 challenge and a state, the sign-in pages, a one-time code
+// on the link of its own scheme, and the exchange from its own HTTP stack.
+// A build installed from a package names itself by its package family name,
+// a build with no package by the id it was built with.
+#[tokio::test]
+async fn a_sign_in_in_the_browser_is_handed_to_a_windows_app() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = with_windows(&clock, &sink).build().await;
+    let user = create_user(&app, "simran@example.com").await;
+    for (id, state) in [(FAMILY, "w-1"), (UNPACKAGED, "w-2")] {
+        let (verifier, challenge) = pkce(id);
+        // The app names the callback it comes back on, as the shell told it.
+        let browser = app.client();
+        start_windows(
+            &browser,
+            id,
+            &challenge,
+            state,
+            "&redirect_uri=charkha%3A%2Fsigned-in",
+        )
+        .await
+        .assert_status(303);
+        let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+        let back = finish_with_attempt(&location(&to_sign_in));
+        sign_in_form(&browser, "simran@example.com", &back)
+            .await
+            .assert_status(303);
+        let (code, error) = windows_callback(&get(&browser, &back).await, state);
+        assert_eq!(error, None);
+        let code = code.expect("a code");
+        // The browser signed in only for the hand-over: it is signed out again.
+        whoami(&browser).await.assert_status(401);
+
+        let desktop = phone(&app).await;
+        whoami(&desktop).await.assert_status(401);
+        exchange_as(&desktop, "windows", id, &code, &verifier)
+            .await
+            .assert_status(200)
+            .assert_json_path("email", json!("simran@example.com"));
+        whoami(&desktop)
+            .await
+            .assert_status(200)
+            .assert_json_path("id", json!(user.id));
+        let login = sink.with_action("auth.login");
+        let handed = login.last().unwrap();
+        assert_eq!(handed.metadata["method"], "app_hand_over");
+        assert_eq!(handed.metadata["platform"], "windows");
+        assert_eq!(handed.metadata["app"], id);
+    }
+    assert!(sink.with_action("auth.app_sign_in_refused").is_empty());
+}
+
+// The start is refused for an id that is not a Windows app's, a callback
+// that is not the app's, a challenge that is not S256, and a state that is
+// no state; and nothing then waits in the browser.
+#[tokio::test]
+async fn a_windows_start_with_a_wrong_app_callback_challenge_or_state_is_refused() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = with_windows(&clock, &sink).build().await;
+    let (_, challenge) = pkce("windows-start");
+    let s256 = format!("code_challenge={challenge}&code_challenge_method=S256");
+    let client = app.client();
+    for (what, query) in [
+        // The app's id.
+        (
+            "an id no Windows app has",
+            format!("platform=windows&app=CharkhaOther_8wekyb3d8bbwe&{s256}&state=x"),
+        ),
+        (
+            "the id in another case",
+            format!("platform=windows&app=charkhasupply_8wekyb3d8bbwe&{s256}&state=x"),
+        ),
+        (
+            "the name of the app's settings",
+            format!("platform=windows&app=supply&{s256}&state=x"),
+        ),
+        (
+            "the Apple app's id",
+            format!("platform=windows&app={BUNDLE}&{s256}&state=x"),
+        ),
+        (
+            "the Windows app's id as an Apple app",
+            format!("platform=apple&app={FAMILY}&{s256}&state=x"),
+        ),
+        (
+            "the Windows app's id as an Android app",
+            format!("platform=android&app={UNPACKAGED}&{s256}&state=x"),
+        ),
+        ("no app", format!("platform=windows&{s256}&state=x")),
+        // The callback the request names.
+        (
+            "another path on the scheme",
+            format!("platform=windows&app={FAMILY}&{s256}&state=x&redirect_uri=charkha%3A%2Fother"),
+        ),
+        (
+            "the scheme with a host",
+            format!(
+                "platform=windows&app={FAMILY}&{s256}&state=x&redirect_uri=charkha%3A%2F%2Fsigned-in"
+            ),
+        ),
+        (
+            "the scheme in capitals",
+            format!(
+                "platform=windows&app={FAMILY}&{s256}&state=x&redirect_uri=Charkha%3A%2Fsigned-in"
+            ),
+        ),
+        (
+            "another scheme",
+            format!(
+                "platform=windows&app={FAMILY}&{s256}&state=x&redirect_uri=charkhb%3A%2Fsigned-in"
+            ),
+        ),
+        (
+            "the Apple app's callback",
+            format!(
+                "platform=windows&app={FAMILY}&{s256}&state=x\
+                 &redirect_uri=https%3A%2F%2Fexample.com%2Fapp%2Fsigned-in"
+            ),
+        ),
+        (
+            "a port of the machine",
+            format!(
+                "platform=windows&app={FAMILY}&{s256}&state=x\
+                 &redirect_uri=http%3A%2F%2F127.0.0.1%3A5123%2Fsigned-in"
+            ),
+        ),
+        // The challenge.
+        (
+            "no challenge",
+            format!("platform=windows&app={FAMILY}&state=x"),
+        ),
+        (
+            "a plain challenge",
+            format!(
+                "platform=windows&app={FAMILY}&code_challenge={challenge}\
+                 &code_challenge_method=plain&state=x"
+            ),
+        ),
+        (
+            "no method",
+            format!("platform=windows&app={FAMILY}&code_challenge={challenge}&state=x"),
+        ),
+        (
+            "a short challenge",
+            format!(
+                "platform=windows&app={FAMILY}&code_challenge=abc&code_challenge_method=S256&state=x"
+            ),
+        ),
+        // The state.
+        (
+            "a state of 513 bytes",
+            format!(
+                "platform=windows&app={FAMILY}&{s256}&state={}",
+                "s".repeat(513)
+            ),
+        ),
+        (
+            "a state with a line break",
+            format!("platform=windows&app={FAMILY}&{s256}&state=a%0Ab"),
+        ),
+    ] {
+        let response = get(&client, &format!("/auth/app/sign-in?{query}")).await;
+        assert_eq!(
+            response.status().as_u16(),
+            400,
+            "{what}: {}",
+            response.text()
+        );
+        assert_eq!(response.header("location"), None, "{what}");
+        // Nothing waits in the browser.
+        refused_page(get(&client, "/auth/app/finish").await);
+    }
+    // The longest state there is, and the callback named to the letter, start.
+    start_windows(
+        &client,
+        FAMILY,
+        &challenge,
+        &"s".repeat(512),
+        "&redirect_uri=charkha%3A%2Fsigned-in",
+    )
+    .await
+    .assert_status(303);
+}
+
+// The code works once, for the id that started the hand-over, with the
+// verifier whose challenge started it: not twice, not for the app's other
+// id, not for another system's app, not with another verifier.
+#[tokio::test]
+async fn a_windows_apps_code_works_once_for_its_id_with_its_verifier() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = with_windows(&clock, &sink).build().await;
+    create_user(&app, "simran@example.com").await;
+    let (verifier, challenge) = pkce("windows-once");
+
+    // Used twice.
+    let (_, code) = browser_sign_in_for_windows(&app, FAMILY, &challenge, "w-3").await;
+    let desktop = phone(&app).await;
+    exchange_as(&desktop, "windows", FAMILY, &code, &verifier)
+        .await
+        .assert_status(200);
+    refused(exchange_as(&desktop, "windows", FAMILY, &code, &verifier).await);
+
+    // As the same app's other id, as another system's app, and as an app
+    // of another system that has the same id: each use takes the code.
+    for (platform, id) in [
+        ("windows", UNPACKAGED),
+        ("apple", BUNDLE),
+        ("apple", FAMILY),
+        ("android", FAMILY),
+    ] {
+        let (_, code) = browser_sign_in_for_windows(&app, FAMILY, &challenge, "w-4").await;
+        let stranger = phone(&app).await;
+        refused(exchange_as(&stranger, platform, id, &code, &verifier).await);
+        refused(exchange_as(&stranger, "windows", FAMILY, &code, &verifier).await);
+        whoami(&stranger).await.assert_status(401);
+    }
+
+    // A wrong verifier, and the code is gone with it.
+    let (_, code) = browser_sign_in_for_windows(&app, FAMILY, &challenge, "w-5").await;
+    let (other_verifier, _) = pkce("windows-other");
+    let stranger = phone(&app).await;
+    refused(exchange_as(&stranger, "windows", FAMILY, &code, &other_verifier).await);
+    refused(exchange_as(&stranger, "windows", FAMILY, &code, &verifier).await);
+    whoami(&stranger).await.assert_status(401);
+
+    // Too late.
+    let (_, code) = browser_sign_in_for_windows(&app, FAMILY, &challenge, "w-6").await;
+    clock.advance(Duration::from_secs(APP_CODE_TTL_SECS + 1));
+    refused(exchange_as(&stranger, "windows", FAMILY, &code, &verifier).await);
+
+    assert_eq!(
+        refusal_reasons(&sink),
+        [
+            "unknown or expired code",
+            "code of another app",
+            "unknown or expired code",
+            "code of another app",
+            "unknown or expired code",
+            "code of another app",
+            "unknown or expired code",
+            "code of another app",
+            "unknown or expired code",
+            "wrong code verifier",
+            "unknown or expired code",
+            "code expired",
+        ]
+    );
+}
+
+// Any program on the machine can register a scheme and start the hand-over
+// itself, so a Windows app never rides on a sign-in the browser already
+// had: the person is asked, is signed out there, and signs in again.
+#[tokio::test]
+async fn a_windows_app_never_gets_the_browsers_sign_in() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = with_windows(&clock, &sink).build().await;
+    create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    sign_in_form(&browser, "simran@example.com", "/")
+        .await
+        .assert_status(303);
+    let (verifier, challenge) = pkce("windows-browser");
+
+    // Opening the start address changes nothing by itself.
+    start_windows(&browser, FAMILY, &challenge, "w-7", "")
+        .await
+        .assert_status(303);
+    whoami(&browser).await.assert_status(200);
+    // Cancel: the app hears no on its callback, and the browser stays signed in.
+    let (_, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    let cancelled = answer(&browser, &token, &csrf_token, "cancel").await;
+    assert_eq!(
+        windows_callback(&cancelled, "w-7"),
+        (None, Some("access_denied".to_owned()))
+    );
+    whoami(&browser).await.assert_status(200);
+    refused_page(get(&browser, "/auth/app/finish").await);
+
+    // Continue: no code leaves for the scheme. The browser is signed out,
+    // and the person signs in again for the app.
+    start_windows(&browser, FAMILY, &challenge, "w-8", "")
+        .await
+        .assert_status(303);
+    let (page, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    assert!(
+        page.contains(&format!("Sign in again to continue to {FAMILY}")),
+        "{page}"
+    );
+    let to_sign_in = answer(&browser, &token, &csrf_token, "continue")
+        .await
+        .assert_status(303);
+    assert!(location(&to_sign_in).starts_with("/sign-in?next="));
+    whoami(&browser).await.assert_status(401);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&browser, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+    let (code, error) = windows_callback(&get(&browser, &back).await, "w-8");
+    assert_eq!(error, None);
+    exchange_as(
+        &phone(&app).await,
+        "windows",
+        FAMILY,
+        &code.expect("a code"),
+        &verifier,
+    )
+    .await
+    .assert_status(200);
+
+    // A sign-in made for something else while a hand-over waits is not
+    // handed to the scheme either.
+    let other = app.client();
+    start_windows(&other, FAMILY, &challenge, "w-9", "")
+        .await
+        .assert_status(303);
+    get(&other, "/auth/app/finish").await.assert_status(303);
+    sign_in_form(&other, "simran@example.com", "/orders")
+        .await
+        .assert_status(303);
+    refused_page(get(&other, "/auth/app/finish").await);
+}
+
+// A Windows app's callback is a link on its own scheme and nothing else,
+// and it has an id: anything else stops the boot, naming the setting.
+#[tokio::test]
+async fn a_windows_app_with_another_kind_of_callback_or_no_id_does_not_boot() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    for callback in [
+        "https://example.com/app/signed-in",
+        "http://127.0.0.1:5123/signed-in",
+        "Charkha:/signed-in",
+        "charkha:/signed-in?from=windows",
+        "ms-settings:/signed-in",
+    ] {
+        let error = with_windows(&clock, &sink)
+            .config("auth.apps.windows.supply.callback", callback)
+            .try_build()
+            .await
+            .expect_err(callback)
+            .to_string();
+        assert!(
+            error.contains("auth.apps.windows.supply.callback"),
+            "{callback}: {error}"
+        );
+    }
+    let error = builder(&clock, &sink)
+        .config("auth.apps.windows.supply.callback", WINDOWS_CALLBACK)
+        .try_build()
+        .await
+        .expect_err("no id")
+        .to_string();
+    assert!(
+        error.contains("auth.apps.windows.supply must name the app"),
+        "{error}"
+    );
+    // With an https `app.url`, a Windows app's callback has no host to be on.
+    with_windows(&clock, &sink)
+        .config("app.url", "https://example.com")
+        .try_build()
+        .await
+        .expect("a scheme is checked against no host");
 }
 
 // A platform sign-in (Sign in with Apple in the app) that needs a second
