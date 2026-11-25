@@ -20,6 +20,7 @@ public static class ViewReading
             Home = Reading.Or<string>(json, "home", Reading.Text, "/"),
             Theme = Reading.Opt<Models.Theme>(json, "theme", Models.ReadTheme),
             User = Reading.Opt<Models.User>(json, "user", Models.ReadUser),
+            UserWas = Reading.Opt<string>(json, "user_was", Reading.Text),
         };
     }
 

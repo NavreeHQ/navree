@@ -37,12 +37,14 @@ public sealed class TranscriptTests
     }
 
     [TestMethod]
-    public async Task The_six_sign_in_and_person_key_conversations_replay_and_the_client_reads_every_step()
+    public async Task The_sign_in_and_person_key_conversations_replay_and_the_client_reads_every_step()
     {
         string[] names =
         [
             "person-key-steady.json",
             "person-key-other-id.json",
+            "person-key-secret.json",
+            "person-key-was.json",
             "session-ended-outside.json",
             "sign-in-cover.json",
             "sign-in-another-person.json",

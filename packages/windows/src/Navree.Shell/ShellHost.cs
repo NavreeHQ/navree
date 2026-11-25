@@ -106,7 +106,10 @@ public sealed partial class ShellHost : IDisposable
                 // The first person named since a sign-out or a clean start gets what waited for nobody; when the person before returns
                 // after nobody was named, what waited for nobody is let go of so a newcomer's reminder never reaches the person before.
                 GiveWaitingTo: mark => Place?.GiveWaitingTo(mark),
-                DropWaitingForNobody: () => Place?.DropWaitingForNobody()),
+                DropWaitingForNobody: () => Place?.DropWaitingForNobody(),
+
+                // The same person under the mark of the key the core makes with the install's secret: what waits for them goes with them.
+                MoveWaiting: (from, to) => Place?.MoveWaiting(from, to)),
             ReportProblem);
 
         // Only naming the session's folder has to be done before a web view starts. The older folders are deleted off the window's thread: a
@@ -129,7 +132,12 @@ public sealed partial class ShellHost : IDisposable
             Note(session.SetAsideAtStart + " kept file(s) of a session that ended could not be deleted yet: they are set aside, never read, and deleted at a later start");
         }
 
-        client = new CoreClient(ClientEnvironment.Config(options), OnUpdate, OnProblem, () => dispatcher.TryEnqueue(NoteStop));
+        // The core makes its key for a person with the secret of this install, which stands beside what is kept and outlasts a sign-out.
+        // A mark kept from before the install had one is the mark of a plain key: the core is asked to say what the plain key of the
+        // person it names was, so that person is not taken for another, and only for as long as such a mark is kept.
+        string secret = InstallSecret.Open(options.KeptFolder ?? KeptStore.DefaultFolder(options.AppName), options.AppName);
+        bool keepsPlainKey = keptFor is not null && PersonWatch.IsPlainKeyMark(keptFor);
+        client = new CoreClient(ClientEnvironment.Config(options, secret, keepsPlainKey), OnUpdate, OnProblem, () => dispatcher.TryEnqueue(NoteStop));
 
         // What the system says is told to the core when it changes, not only when the core is made.
         environment = new EnvironmentWatcher(
