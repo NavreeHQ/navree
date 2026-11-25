@@ -2150,6 +2150,23 @@ fn what_an_author_says_of_a_control_is_said_to_a_native_client_and_never_written
 }
 
 #[test]
+fn a_link_a_browser_reloads_the_page_for_is_a_plain_link_to_a_native_client() {
+    let page = TestNative::of(
+        &View::new("Sign in").body(
+            el("a")
+                .href("/sign-in/passkey")
+                .flag("data-ui-noboost", true)
+                .child("Sign in with a passkey"),
+        ),
+    );
+    assert!(page.is_native(), "{:?}", page.why());
+    assert_eq!(
+        page.tap("Sign in with a passkey"),
+        Some(Action::navigate("/sign-in/passkey"))
+    );
+}
+
+#[test]
 fn a_forms_cancel_link_is_the_cancel_role_by_itself() {
     let page = TestNative::build(phone(), || {
         View::new("Refund").body(refund_form().cancel("Back to the order", "/orders/1"))
