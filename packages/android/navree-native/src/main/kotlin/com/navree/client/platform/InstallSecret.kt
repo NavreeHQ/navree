@@ -15,12 +15,15 @@ import java.security.SecureRandom
  * ([PersonWatch]). A sign-out leaves it: one person has one key at every
  * start of this install, also after somebody signed out in between.
  *
- * A file that is not there, or does not hold a secret, is replaced by a new
- * secret. The keys made with the new one are other keys: the person named
- * next is then another person than the one whose mark is kept, and what was
- * kept goes, as it does for anybody else. A secret that cannot be written
- * down is used for as long as the app's process lives, and the same follows
- * at the next start.
+ * A file that is not there, cannot be read, or does not hold a secret is
+ * replaced by a new secret. The client has no way to stop a start for a file
+ * it cannot read: what is kept and does not open is as good as none to it
+ * ([SealedCache], [PersonWatch]), and the start goes on, so a file that
+ * cannot be read is treated as one that is not there. The keys made with the
+ * new secret are other keys: the person named next is then another person
+ * than the one whose mark is kept, and what was kept goes, as it does for
+ * anybody else. A secret that cannot be written down is used for as long as
+ * the app's process lives, and the same follows at the next start.
  *
  * It is a secret: it is given to the core and to nothing else, and is never
  * written to a log.
