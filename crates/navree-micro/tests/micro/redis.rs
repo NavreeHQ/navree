@@ -289,7 +289,7 @@ async fn wildcards_dead_letters_and_names() {
         payload: bytes::Bytes::from_static(b"{\"deal\":1}"),
         attempts: 5,
         error: "boom".into(),
-        failed_at: chrono::Utc::now(),
+        failed_at: navree_datetime::Timestamp::now(),
     };
     transport.dead_letter(letter).await.unwrap();
     assert_eq!(server.payloads("crm:dead"), ["{\"deal\":1}"]);

@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use bytes::Bytes;
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{Db, DbError, Executor, MigrationSet, Row, Statement, Uow};
 use serde::de::DeserializeOwned;
@@ -111,7 +111,7 @@ pub struct DeadLetter {
     /// The last error.
     pub error: String,
     /// When the event was dead-lettered.
-    pub failed_at: DateTime<Utc>,
+    pub failed_at: Timestamp,
 }
 
 impl DeadLetter {
@@ -364,7 +364,7 @@ impl Store {
                     letter.payload.to_vec().into(),
                     i64::from(letter.attempts).into(),
                     letter.error.clone().into(),
-                    letter.failed_at.timestamp_millis().into(),
+                    letter.failed_at.as_millis().into(),
                 ],
             ))
             .await?;
@@ -462,10 +462,7 @@ fn dead_letter_of(row: &Row) -> Result<DeadLetter, DbError> {
         payload: payload.into(),
         attempts: u32::try_from(attempts).unwrap_or(u32::MAX),
         error: row.get("error")?,
-        failed_at: Utc
-            .timestamp_millis_opt(failed_at)
-            .single()
-            .unwrap_or_else(Utc::now),
+        failed_at: Timestamp::from_millis(failed_at).unwrap_or_else(|_| Timestamp::now()),
     })
 }
 
@@ -488,7 +485,7 @@ mod tests {
             payload: Bytes::from_static(br#"{"deal_id":1}"#),
             attempts: 5,
             error: "smtp refused".into(),
-            failed_at: Utc::now(),
+            failed_at: Timestamp::now(),
         };
         let envelope = letter.envelope();
         assert_eq!(envelope.pattern(), "deal.won");

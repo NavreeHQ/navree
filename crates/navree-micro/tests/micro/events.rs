@@ -524,7 +524,7 @@ async fn the_relay_publishes_what_a_crashed_process_left_in_the_outbox(scratch: 
         "content-type": "application/json",
     })
     .to_string();
-    let old = chrono::Utc::now().timestamp_millis() - 60_000;
+    let old = navree_datetime::Timestamp::now().as_millis() - 60_000;
     db.execute(&Statement::portable(
         "INSERT INTO micro_outbox (id, pattern, headers, payload, seq, created_at) VALUES (?, ?, ?, ?, ?, ?)",
         [

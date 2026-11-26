@@ -48,7 +48,6 @@ test-mysql = ["navree-db/mysql"]
 async-nats = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 bytes = { workspace = true }
-chrono = { workspace = true }
 futures-util = { workspace = true }
 hmac = { workspace = true, optional = true }
 http = { workspace = true }
@@ -56,6 +55,7 @@ kafka-protocol = { workspace = true, optional = true }
 lapin = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }
