@@ -288,7 +288,7 @@ pub async fn trial_reminders(ctx: WorkflowCtx, input: TrialReminders) -> Result<
     let mail = ctx.app().get::<LearnerMail>().await?;
     let user_id = input.user_id;
     let started = ctx.now().await;
-    let three_days_before = input.ends_at - chrono::TimeDelta::days(3);
+    let three_days_before = input.ends_at - navree::datetime::Span::days(3);
     if started < three_days_before {
         ctx.sleep_until(three_days_before).await;
         let mail = mail.clone();
@@ -308,7 +308,7 @@ pub async fn trial_reminders(ctx: WorkflowCtx, input: TrialReminders) -> Result<
 
 A run that sleeps is stored as `sleeping` with its `wake_at`. With a queue, the wake-up is a `workflows.run` job delayed until then; `workflows:tick` wakes the runs whose job was lost a minute after their time. Without a queue, `workflows:tick` wakes them within a minute.
 
-`ctx.now()` reads the app's clock (`dyn Clock`) once and stores the answer, so a replay sees the same instant. Read the time with it, never with `Utc::now()`, in workflow code.
+`ctx.now()` reads the app's clock (`dyn Clock`) once and stores the answer, so a replay sees the same instant. Read the time with it, never with `Timestamp::now()`, in workflow code.
 
 ## Waiting for events
 

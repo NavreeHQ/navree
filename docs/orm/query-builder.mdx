@@ -342,12 +342,14 @@ let next = Deal::query()
 A query can write every row it matches in one statement:
 
 ```rust
-let cutoff = Utc::now() - Duration::days(90);
+use navree::datetime::{Span, Timestamp};
+
+let cutoff = Timestamp::now() - Span::days(90);
 
 let lost: u64 = Deal::query()
     .where_(Deal::STAGE.eq(Stage::Lead))
     .where_(Deal::UPDATED_AT.lt(cutoff))
-    .update(&uow, [Deal::STAGE.set(Stage::Lost), Deal::CLOSED_AT.set(Utc::now())])
+    .update(&uow, [Deal::STAGE.set(Stage::Lost), Deal::CLOSED_AT.set(Timestamp::now())])
     .await?;
 
 let removed: u64 = Activity::query()
@@ -428,7 +430,7 @@ let changed: u64 = affecting_statement(
     &uow,
     raw("UPDATE deals SET stage = ? WHERE closed_at < ?", [
         Value::from("lost"),
-        Value::from(Utc::now() - Duration::days(365)),
+        Value::from(Timestamp::now() - Span::days(365)),
     ]),
 )
 .await?;

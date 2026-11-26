@@ -294,7 +294,7 @@ Navree adds two filters to the built-in ones.
 
 ### date
 
-`{{ value|date("%d %b %Y") }}` formats a date with a [chrono `strftime`](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) format, `%Y-%m-%d` by default. The value can be an RFC 3339 date-time (kept in its own offset), a date-time without an offset (`2026-10-25T14:30:00`), a date (`2026-10-25`) or a Unix timestamp in seconds (UTC). `none` prints nothing.
+`{{ value|date("%d %b %Y") }}` formats a date with a [`strftime` pattern](/docs/digging-deeper/dates-and-times/#patterns), `%Y-%m-%d` by default. The value can be an RFC 3339 date-time (kept in its own offset), a date-time without an offset (`2026-10-25T14:30:00`), a date (`2026-10-25`) or a Unix timestamp in seconds (UTC). `none` prints nothing.
 
 ```jinja
 {{ "2026-11-01"|date("%-d %B") }}                  {# 1 November #}

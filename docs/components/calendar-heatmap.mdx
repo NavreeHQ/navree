@@ -8,17 +8,17 @@ description: "A day per cell, a column per week, each cell shaded by its day's v
 `CalendarHeatmap` shows how steady a habit is over weeks and months: training load, steps, minutes of meditation. Each day is a cell, each week a column and each weekday a row, and a cell is shaded by its day's value in five steps: nothing, then four. Months are named above the weeks and weekdays beside the rows. A day with no data is a hollow dashed cell, because a day the watch was off is not a day of zero.
 
 ```rust
-use chrono::{Duration, NaiveDate};
+use navree::datetime::Date;
 use navree::ui::charts::*;
 use navree::ui::*;
 
-let first = NaiveDate::from_ymd_opt(2026, 5, 16).unwrap_or_default();
+let first = Date::new(2026, 5, 16).unwrap_or_default();
 CalendarHeatmap::new("Training consistency")
     .description("Last 6 months of activity, Harleen Kaur")
     .locale("en-IN")
-    .days((0..181).map(|d| {
+    .days((0..181).filter_map(|d| {
         let load = if d % 9 == 4 { None } else { Some((d * 37 % 130) as f64) };
-        (first + Duration::days(d), load)
+        Some((first.add_days(d)?, load))
     }))
     .ink(Ink::slot(5))
     .value_name("Training load")
@@ -48,6 +48,7 @@ A day of zero, or less, is the faintest cell. A value above zero takes one of fo
 `.ink(Ink)` sets the colour the steps are made of: a chart colour, a tone or the accent (the default). The stylesheet steps it through the page's own surface, with one ramp for the light palette and another for the dark one, so every theme gets a ramp that is right for it.
 
 ```rust
+use navree::datetime::Weekday;
 use navree::ui::charts::*;
 use navree::ui::*;
 
@@ -56,7 +57,7 @@ CalendarHeatmap::new("Daily steps")
     .steps(HeatSteps::at(4_000, 8_000, 12_000))
     .unit("steps")
     .locale("en-IN")
-    .week_start(chrono::Weekday::Sun)
+    .week_start(Weekday::Sunday)
 ```
 
 <UiPreview example="calendar-heatmap/steps" />

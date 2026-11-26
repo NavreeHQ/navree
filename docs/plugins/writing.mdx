@@ -193,7 +193,7 @@ Any unknown key, disallowed feature, out-of-namespace config or grant, or malfor
 // plugins/notices/src/model.rs
 /// The `notice` entity (`notices_notices` table, subject `notices.Notice`).
 pub mod notice {
-    use chrono::{DateTime, Utc};
+    use navree::datetime::Timestamp;
     use serde::{Deserialize, Serialize};
     use uuid::Uuid;
 
@@ -215,9 +215,9 @@ pub mod notice {
         /// Identifier of the user who posted the notice.
         pub posted_by: Uuid,
         /// Instant when the notice expires.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// Instant when the notice was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 ```
@@ -331,9 +331,9 @@ pub async fn expire_notices(app: &AppContext) -> Result<u64, BoxError> {
     }
     let now = match app.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
-        None => Utc::now(),
+        None => navree::datetime::Timestamp::now(),
     };
-    let cutoff = now - TimeDelta::days(i64::from(settings.keep_days));
+    let cutoff = now - navree::datetime::Span::days(i64::from(settings.keep_days));
     let db = app.get::<Db>().await?;
     let uow = db.uow(None, None).await;
     let removed = notice::Model::query()

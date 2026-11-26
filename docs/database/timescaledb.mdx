@@ -224,12 +224,12 @@ Compression (TimescaleDB's columnstore) stores old chunks by column, often at a 
 When the retention period is a setting, or other rows go with the old ones, prune from code: a command or a [scheduled task](/docs/digging-deeper/scheduling/). `navree::db::prune_time_series` deletes the rows older than a cutoff and returns how many. On a hypertable partitioned by that column it drops the chunks that lie entirely before the cutoff and deletes only the rows of the chunk that straddles it; on any other table it is one `DELETE`:
 
 ```rust title="src/modules/analytics/prune.rs"
-use chrono::{TimeDelta, Utc};
+use navree::datetime::{Span, Timestamp};
 use navree::db::{Db, DbError, prune_time_series};
 
 /// Deletes the events older than `days`; returns how many.
 pub async fn prune_events(db: &Db, days: i64) -> Result<u64, DbError> {
-    let cutoff = Utc::now() - TimeDelta::days(days);
+    let cutoff = Timestamp::now() - Span::days(days);
     let tx = db.begin().await?;
     let deleted = prune_time_series(&tx, "events", "occurred_at", cutoff).await?;
     tx.commit().await?;
@@ -237,7 +237,7 @@ pub async fn prune_events(db: &Db, days: i64) -> Result<u64, DbError> {
 }
 ```
 
-The cutoff has the time column's type: a `DateTime<Utc>` for timestamps, an `i64` for integer time columns (`TimePoint::Integer`). Navree's own prune commands use this helper.
+The cutoff has the time column's type: a `Timestamp` for timestamps, an `i64` for integer time columns (`TimePoint::Integer`). Navree's own prune commands use this helper.
 
 The function takes any executor (`Db`, a `Transaction` from `Db::begin`, a `Uow`) and returns `Result<u64, DbError>`. Run it on a `Transaction`, as above, to have the count, the dropped chunks and the delete apply together; inside a request, pass the `&Uow`. The scheduler's run table is pruned this way.
 
@@ -278,10 +278,10 @@ A continuous aggregate is a view, so you read it like a table: `table("events_da
 The query builder groups rows into time buckets with TimescaleDB's `time_bucket`: the start of the bucket each row's time falls in. A chart of the last day, one point per 15 minutes:
 
 ```rust
-use chrono::{TimeDelta, Utc};
+use navree::datetime::{Span, Timestamp};
 use navree::orm::{Expr, col, table};
 
-let since = Utc::now() - TimeDelta::days(1);
+let since = Timestamp::now() - Span::days(1);
 let points = table("readings")
     .select_time_bucket("15 minutes", "taken_at", "bucket")
     .select_expr(Expr::avg(col("celsius")), "average")
@@ -292,7 +292,7 @@ let points = table("readings")
     .get(&db)
     .await?;
 for point in &points {
-    let bucket: chrono::DateTime<Utc> = point.get("bucket")?;
+    let bucket: Timestamp = point.get("bucket")?;
     let average: f64 = point.get("average")?;
     println!("{bucket}: {average:.1} °C");
 }

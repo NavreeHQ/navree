@@ -128,7 +128,7 @@ A field without a `header` is headed by its name in sentence case: `company` is 
 | `#[export(with = "cents_to_cell")]` | A `fn(&FieldType) -> Cell` instead of the field's `IntoCell` |
 | `#[export(skip)]` | Leaves the field out |
 
-Each field becomes a `Cell` (`Empty`, `Text`, `Int`, `Float`, `Bool`, `Date`, `DateTime`) through `IntoCell`, which is implemented for strings, integers, floats, `bool`, `chrono` dates, date-times and times, `Uuid`, `serde_json::Value`, and `Option<T>` (`None` is an empty cell). Implement `IntoCell` for your own types, or point a field at a function with `with`.
+Each field becomes a `Cell` (`Empty`, `Text`, `Int`, `Float`, `Bool`, `Date`, `DateTime`) through `IntoCell`, which is implemented for strings, integers, floats, `bool`, `navree::datetime` dates, date-times and times (`Date`, `Time`, `DateTime`, `Timestamp`, `Zoned`), `Uuid`, `serde_json::Value`, and `Option<T>` (`None` is an empty cell). Implement `IntoCell` for your own types, or point a field at a function with `with`.
 
 ### Downloads
 

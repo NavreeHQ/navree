@@ -82,6 +82,7 @@ Commands:
   plugin:add         Install a plugin: add the crate (or turn on a first-party package's feature), wire its module, and write what it suggests where you can read it
   plugin:remove      Unwire a plugin and remove its crate; its configuration, grants and data stay
   plugin:list        List the plugins this app depends on and whether each is wired
+  upgrade            Move an app's or crate's dates and times off chrono onto Navree's own
   help               Print this message or the help of the given subcommand(s)
 
 Options:
@@ -257,7 +258,7 @@ The name may be written `SalesReport`, `sales_report` or `sales-report`: all thr
 
 A page takes `AppShell`, which reads the `Shell` the app registers, so the app needs `UiModule` and a registered `Shell` ([how](/docs/ui/app-shell/#registering-it)). `navree new <app> --ui navree` creates an app with both. A module's pages see the shell only when a global module exports it (`m.global()`) or the module imports the module that does. The generated test registers a shell of its own that way, so it runs either way.
 
-`make:table` loads the rows from the module's model when it finds one named for a row (`models/deal.rs`, the module's `entity.rs` or `entities/deal.rs`) with an `id: Uuid`, a `name: String` and a `created_at: DateTime<Utc>`, as `make:module` and `make:model` write them. It then also writes `From<Deal> for DealRow` and the `index` handler, which loads a page with `query.load_as(Deal::query(), &uow, ..)`. Without such a model it writes the row and `deals_table`, sketches the handler in a comment and says so.
+`make:table` loads the rows from the module's model when it finds one named for a row (`models/deal.rs`, the module's `entity.rs` or `entities/deal.rs`) with an `id: Uuid`, a `name: String` and a `created_at: Timestamp`, as `make:module` and `make:model` write them. It then also writes `From<Deal> for DealRow` and the `index` handler, which loads a page with `query.load_as(Deal::query(), &uow, ..)`. Without such a model it writes the row and `deals_table`, sketches the handler in a comment and says so.
 
 ### Plugins
 
@@ -314,6 +315,7 @@ The tools of the ecosystem add their own commands to the CLI. They run in the CL
 | `navree native:coverage` | `--platform <system>`, `--form <device>`, `--json`, `--fail-on <web\|layout>`, `--features <list>`, `--file <path>` | Asks every page route of the app as a native client and prints its grade (`idiom`, `layout` or `web`) and what is missing, with totals; a gate for a store build or CI. Needs the [native preview](#native-apps) and `native.toml` for route parameters. |
 | `navree native:init` | `--name`, `--origin`, `--bundle-id`, `--team`, `--dir`, `--package`, `--package-version`, `--package-path`, `--dry-run` | Writes the project of the app's [Apple client](#native-apps) in `apple/`: an iPhone and iPad app and a Mac app on the Swift package, as an XcodeGen `project.yml`. Never overwrites a file. |
 | `navree native:doctor` | `--platform <ios\|android\|windows\|all>`, `--url <site>`, `--json` | Checks what a [native build](#native-apps) needs, without changing anything: the preview feature, `auth.apps`, passkey origins, push keys, sign-in providers, the Android and Apple toolchains. Each item is ready, missing or not applicable, with the next step for what is missing. |
+| `navree upgrade` | `--check`, `[PATH]` | Rewrites an existing app's or plugin's `Cargo.toml` and `.rs` files from `chrono` onto [`navree::datetime`](/docs/digging-deeper/dates-and-times/#upgrading-existing-code), leaving `// navree upgrade:` comments where a calendar-vs-span or time-zone choice is needed. `--check` reports what would change without writing anything. |
 
 [Harbor](/docs/tools/harbor/) adds the commands that prepare servers, keep their secrets and ship releases. Every one takes `--env <name>`, which uses `harbor.<name>.toml` instead of `harbor.toml` (the default comes from `NAVREE_HARBOR_ENV`):
 

@@ -527,7 +527,7 @@ impl BillingProvider for UpiPay {
         &self,
         headers: &http::HeaderMap,
         body: &[u8],
-        _now: chrono::DateTime<chrono::Utc>,
+        _now: navree::datetime::Timestamp,
         _tolerance: std::time::Duration,
     ) -> Result<(), WebhookError> {
         todo!("compare the signature header with an HMAC of `body`")

@@ -423,7 +423,7 @@ let terms = ai
 Free text is for people. When code consumes the answer, ask for a type. `ai.structured::<T>(prompt)` returns a `T`:
 
 ```rust title="crates/crm-deals/src/insights.rs"
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use navree::openapi::ToSchema;
@@ -439,7 +439,7 @@ pub struct FollowUpEmail {
     pub body: String,
     /// The day to send it, when the activity suggests one.
     #[validate(skip)]
-    pub send_on: Option<NaiveDate>,
+    pub send_on: Option<Date>,
 }
 
 impl DealInsights {

@@ -319,13 +319,13 @@ Each `Contributed<C>` carries the `value` (an `Arc<C>`) and the contributing `mo
 `override_value` replaces the provider of a type wherever it's registered; the original factory never runs. If no module registers the type, the value is provided globally. Fix the time in a test:
 
 ```rust
-use chrono::TimeZone;
 use navree::contracts::{Clock, FixedClock};
+use navree::datetime::Timestamp;
 use navree::testing::TestApp;
 
 #[tokio::test]
 async fn deals_use_the_fixed_clock() {
-    let now = chrono::Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap();
+    let now = Timestamp::utc(2026, 10, 26, 9, 0, 0).unwrap();
     let app = TestApp::builder()
         .override_value::<dyn Clock>(Arc::new(FixedClock::new(now)))
         .module(DealsModule)

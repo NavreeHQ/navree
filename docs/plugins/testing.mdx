@@ -54,14 +54,14 @@ A plugin that registers a driver (`m.disk_driver`, `m.mail_transport`, `m.cache_
 
 Each driver trait documents the exact invariants its methods must uphold (`DiskDriver`, `MailTransport`, `CacheBackend` and the rest). Navree's internal repository conformance suite is not part of the public API; instead, write an integration test that selects your driver in `TestApp` and exercises the public operations and edge cases.
 
-For a storage driver, a memory-backed `DiskDriver` registered under `"sanduk"` and six calls through `Disk` (`put`, `get`, `exists`, `size`, `list`, `delete`, followed by `get` of a missing path) verify the core round-trip. Add `chrono` and `tokio-stream` alongside the `[dev-dependencies]` that `navree make:plugin` writes (`chrono = "0.4"`, `tokio-stream = "0.1"`, plus `"storage"` and `"http"` on `navree`):
+For a storage driver, a memory-backed `DiskDriver` registered under `"sanduk"` and six calls through `Disk` (`put`, `get`, `exists`, `size`, `list`, `delete`, followed by `get` of a missing path) verify the core round-trip. Add `tokio-stream` alongside the `[dev-dependencies]` that `navree make:plugin` writes (`tokio-stream = "0.1"`, plus `"storage"` and `"http"` on `navree`):
 
 ```rust title="tests/disk_driver.rs"
 use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::http::body::Bytes;
 use navree::kernel::BoxFuture;
 use navree::plugin::prelude::*;
@@ -72,7 +72,7 @@ use navree::storage::{
 };
 use navree::testing::TestApp;
 
-type Files = Arc<Mutex<BTreeMap<String, (Bytes, DateTime<Utc>)>>>;
+type Files = Arc<Mutex<BTreeMap<String, (Bytes, Timestamp)>>>;
 
 #[derive(Clone, Default)]
 struct Sanduk {
@@ -80,7 +80,7 @@ struct Sanduk {
 }
 
 impl Sanduk {
-    fn file(&self, path: &str) -> Result<(Bytes, DateTime<Utc>), DiskDriverError> {
+    fn file(&self, path: &str) -> Result<(Bytes, Timestamp), DiskDriverError> {
         let files = self.files.lock().unwrap();
         files.get(path).cloned().ok_or(DiskDriverError::NotFound)
     }
@@ -99,7 +99,7 @@ impl DiskDriver for Sanduk {
         self.files
             .lock()
             .unwrap()
-            .insert(path.to_owned(), (contents, Utc::now()));
+            .insert(path.to_owned(), (contents, Timestamp::now()));
         Box::pin(async { Ok(()) })
     }
 
@@ -196,7 +196,7 @@ impl DiskUpload for SandukUpload {
         files
             .lock()
             .unwrap()
-            .insert(path, (Bytes::from(buffer), Utc::now()));
+            .insert(path, (Bytes::from(buffer), Timestamp::now()));
         Box::pin(async { Ok(()) })
     }
 

@@ -22,6 +22,7 @@ Records are created through the executor you pass, like any other save, so they 
 A factory implements `ModelFactory` for one model: `definition` returns one new model, usually with fake data. Link it to the model with `#[model(factory = ..)]`, which gives the model a `factory()` function:
 
 ```rust title="src/modules/deals/factories/deal.rs"
+use navree::datetime::Timestamp;
 use navree::orm::factory::{FactoryContext, ModelFactory, Pivot, Relationships};
 
 #[derive(Model, Clone, Debug, Default, Serialize)]
@@ -33,10 +34,10 @@ pub struct Deal {
     pub amount_cents: i64,
     #[model(cast = "string_enum")]
     pub stage: Stage,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub closed_at: Option<Timestamp>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 /// Lead deals of a new company each, with fake titles.
@@ -101,17 +102,19 @@ let body = Deal::factory().raw_one()?;
 States change the model after the definition, in the order you add them. A named state is a function of the factory:
 
 ```rust
+use navree::datetime::{Span, Timestamp};
+
 impl DealFactory {
     /// A won deal: `Deal::factory().state(DealFactory::won)`.
     pub fn won(deal: &mut Deal) {
         deal.stage = Stage::Won;
-        deal.closed_at = Some(Utc::now());
+        deal.closed_at = Some(Timestamp::now());
     }
 
     /// A lost deal.
     pub fn lost(deal: &mut Deal) {
         deal.stage = Stage::Lost;
-        deal.closed_at = Some(Utc::now());
+        deal.closed_at = Some(Timestamp::now());
     }
 }
 
@@ -122,7 +125,7 @@ let big = Deal::factory()
     .create_one(&db)
     .await?;
 let dated = Deal::factory()
-    .state_with(|deal, ctx| deal.created_at = ctx.fake().past(Duration::days(30)))
+    .state_with(|deal, ctx| deal.created_at = ctx.fake().past(Span::days(30)))
     .create(&db)
     .await?;
 let trashed = Deal::factory().trashed().create_one(&db).await?;

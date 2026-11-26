@@ -94,7 +94,7 @@ The task is named after the job's `NAME`. `m.schedule` registers the job type wi
 `s.task(name, f)` calls an async function with the app's `AppContext`. A closure works:
 
 ```rust
-use chrono::{TimeDelta, Utc};
+use navree::datetime::{Span, Timestamp};
 use navree::db::Db;
 use navree::notify::notifications::Model as Stored;
 use navree::orm::Model as _;
@@ -102,7 +102,7 @@ use navree::orm::Model as _;
 m.schedule(|s| {
     s.task("notifications.prune", |ctx| async move {
         let db = ctx.get::<Db>().await?;
-        let cutoff = Utc::now() - TimeDelta::days(90);
+        let cutoff = Timestamp::now() - Span::days(90);
         Stored::query()
             .where_(Stored::READ_AT.lt(cutoff))
             .delete(&*db)
@@ -205,17 +205,17 @@ An expression that can never match, such as `0 0 30 2 *`, is accepted: the searc
 
 #### Checking an expression in code
 
-The parser is public as `navree::schedule::CronExpression`, for a setting or a form field that holds an expression. `parse` (or `str::parse`) returns a `CronError` with the `field()`, the `token()` and the `reason()`; `MAX_EXPRESSION_LEN` is the 256-byte limit. `next_after(instant, &zone)` gives the first run after an instant on the clock of a `chrono` time zone (`Zone::tz()` gives one), and `is_due(tick, &zone)` says whether a whole minute is a run, by the rules in [When clocks change](#when-clocks-change):
+The parser is public as `navree::schedule::CronExpression`, for a setting or a form field that holds an expression. `parse` (or `str::parse`) returns a `CronError` with the `field()`, the `token()` and the `reason()`; `MAX_EXPRESSION_LEN` is the 256-byte limit. `next_after(instant, zone)` gives the first run after an instant on the clock of a `CronZone` (`navree::datetime::Zone`, `Offset`, or `navree::time::Zone`), and `is_due(tick, zone)` says whether a whole minute is a run, by the rules in [When clocks change](#when-clocks-change):
 
 ```rust
-use chrono::{TimeZone, Utc};
+use navree::datetime::{Timestamp, Zone};
 use navree::schedule::CronExpression;
 
 let cron: CronExpression = "*/15 9-17 * * MON-FRI".parse().unwrap();
-let after = Utc.with_ymd_and_hms(2026, 10, 26, 9, 7, 0).unwrap();
+let after = Timestamp::utc(2026, 10, 26, 9, 7, 0).unwrap();
 assert_eq!(
-    cron.next_after(after, &Utc),
-    Some(Utc.with_ymd_and_hms(2026, 10, 26, 9, 15, 0).unwrap())
+    cron.next_after(after, Zone::UTC),
+    Some(Timestamp::utc(2026, 10, 26, 9, 15, 0).unwrap())
 );
 
 let error = "61 * * * *".parse::<CronExpression>().unwrap_err();
@@ -359,14 +359,14 @@ Rows are kept for seven days; the scheduler deletes older ones at the top of eve
 Resolve the `Scheduler` and call `tick` with a time: it runs the tasks due at that minute, waits for them and returns one `RunOutcome` per due task (`task`, `tick` and a `RunStatus`). Tasks that aren't due are left out. Override the app's `dyn Clock` with a `FixedClock` so the tasks see the same time. The example boots the app with `temp_database()`, a SQLite file, so the app's tests need the `sqlite` feature (see [database tests](/docs/testing/database-tests/)):
 
 ```rust title="tests/schedule.rs"
-use chrono::{DateTime, Utc};
 use navree::contracts::{Clock, FixedClock};
+use navree::datetime::Timestamp;
 use navree::prelude::*;
 use navree::schedule::{RunStatus, Scheduler, SkipReason};
 use navree::testing::TestApp;
 
-fn at(time: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(time).unwrap().with_timezone(&Utc)
+fn at(time: &str) -> Timestamp {
+    Timestamp::parse_rfc3339(time).unwrap()
 }
 
 #[tokio::test]

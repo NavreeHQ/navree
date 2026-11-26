@@ -132,7 +132,7 @@ Loaded tags carry their pivot row. `with_pivot` adds pivot columns to it (the tw
 ```rust
 let tags = deal.tags().get(&db).await?;
 for tag in &tags {
-    let added_at: Option<DateTime<Utc>> = tag.pivot_value("created_at")?;
+    let added_at: Option<Timestamp> = tag.pivot_value("created_at")?;
     println!("{} added at {added_at:?}", tag.name);
 }
 ```
@@ -151,8 +151,8 @@ pub struct DealTag {
     pub deal_id: Uuid,
     pub tag_id: i64,
     pub added_by: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 pub fn tags(&self) -> BelongsToMany<Deal, Tag, DealTag> {
@@ -263,7 +263,7 @@ let quiet = Deal::query().doesnt_have("activities").get(&db).await?;
 
 let overdue = Deal::query()
     .where_has(Deal::activities, |q| {
-        q.where_(Activity::DUE_AT.lt(Utc::now()))
+        q.where_(Activity::DUE_AT.lt(Timestamp::now()))
             .where_(Activity::COMPLETED_AT.is_null())
     })
     .get(&db)

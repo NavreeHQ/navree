@@ -1752,7 +1752,6 @@ dependencies = [
 name = "docs-snippets"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree",
  "serde",

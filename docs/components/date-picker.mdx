@@ -85,23 +85,25 @@ When the text can't be read, or the day can't be chosen, the box is marked `aria
 
 ## In a form
 
-`#[form(widget = date_picker)]` draws a field as a DatePicker, and `NaiveDate` reads it back. `FormView::dates(locale, today)` sets the language and today for every picker in the form.
+`#[form(widget = date_picker)]` draws a field as a DatePicker, and `Date` reads it back. `FormView::dates(locale, today)` sets the language and today for every picker in the form.
 
 ```rust
+use navree::datetime::{Date, Weekday};
+
 #[derive(Deserialize, Validate, Form)]
 struct Booking {
     /// Start date
     #[validate(skip)]
     #[form(widget = date_picker, date_rules = open_days, help = "A weekday in the next three months.")]
-    start: NaiveDate,
+    start: Date,
     /// End date
     #[validate(skip)]
     #[form(widget = date_picker)]
-    end: Option<NaiveDate>,
+    end: Option<Date>,
 }
 
 fn open_days() -> DateRules {
-    DateRules::new().min(today).disable_weekdays([Weekday::Sat, Weekday::Sun])
+    DateRules::new().min(today).disable_weekdays([Weekday::Saturday, Weekday::Sunday])
 }
 ```
 

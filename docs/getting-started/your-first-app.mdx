@@ -119,9 +119,9 @@ pub struct Task {
     /// Whether it is done. // [!code ++]
     pub done: bool, // [!code ++]
     /// When the record was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the record last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 ```
 

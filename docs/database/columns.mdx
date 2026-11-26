@@ -76,8 +76,8 @@ When an [ORM model](/docs/orm/models/) maps the table, pick the column for the f
 | `i32`, `i64` | `integer`, `big_integer` |
 | `bool` | `boolean` |
 | `Decimal` | `decimal(name, p, s)` |
-| `DateTime<Utc>` | `timestamp_tz` (`timestamps_tz()` and `soft_deletes_tz()` for the conventional ones) |
-| `NaiveDate` | `date` |
+| `Timestamp`, `Zoned` | `timestamp_tz` (`timestamps_tz()` and `soft_deletes_tz()` for the conventional ones) |
+| `Date`, `Time`, `DateTime` | `date`, `time`, `date_time` |
 | JSON casts, `serde_json::Value` | `json` (`jsonb` on PostgreSQL) |
 | string enum cast | `string` with a `.length(..)`, or `enumeration` |
 | `Option<T>` | the same, `.nullable()` |

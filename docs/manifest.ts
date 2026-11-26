@@ -258,6 +258,7 @@ export const sections: DocsSection[] = [
       "queues",
       "batches-and-operations",
       "scheduling",
+      "dates-and-times",
       "time-zones",
       // Mail
       "mail",

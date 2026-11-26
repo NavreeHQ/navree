@@ -85,7 +85,7 @@ A sheet's or a dialog's own buttons go in its footer (`Sheet::footer`, `Dialog::
 For records, the columns of a [DataTable](/docs/ui/data-table/) say which is the record's name, a line under it, its state and what stands at its end, and a row says what it opens:
 
 ```rust
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::{DataTable, TablePage, TableQuery, TableRow};
 
 #[derive(Clone, TableRow)]
@@ -100,7 +100,7 @@ pub struct OrderRow {
     #[col(sortable, numeric, role = trailing)]
     pub total: i64,
     #[col(sortable, filter = date, label = "Placed")]
-    pub placed_on: NaiveDate,
+    pub placed_on: Date,
 }
 
 pub fn orders_table<'a>(

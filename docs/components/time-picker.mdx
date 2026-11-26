@@ -37,7 +37,7 @@ match resolve(date, time, &zone) {
 }
 ```
 
-`.instant()` picks the first of two, and the shifted time for a gap, when you don't want to ask. `resolve` works with any `chrono` time zone: a fixed offset, UTC, or a named zone from the time zone data your app already has. `.zone_note(text)` writes the zone under the picker, so a person knows which clock they are choosing on.
+`.instant()` picks the first of two, and the shifted time for a gap, when you don't want to ask. `resolve` works with any `WallZone` (`navree::datetime::Zone`, `Offset`, or `navree::time::Zone`): a fixed offset, UTC, or a named zone from the compiled IANA database. `.zone_note(text)` writes the zone under the picker, so a person knows which clock they are choosing on.
 
 <UiPreview example="time-picker/zone" />
 

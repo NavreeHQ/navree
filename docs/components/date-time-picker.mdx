@@ -10,11 +10,14 @@ description: "A date and a time of day in one control: a date box with its calen
 The two boxes share a line where each has room for what it holds beside its buttons. Where they don't, in a narrow column or a form on a phone, the time box goes under the date box.
 
 ```rust
-use chrono::NaiveDate;
+use navree::datetime::{Date, Time};
 use navree::ui::dates::*;
 use navree::ui::*;
 
-let starts = NaiveDate::from_ymd_opt(2026, 11, 12).and_then(|day| day.and_hms_opt(14, 30, 0));
+let starts = Date::new(2026, 11, 12)
+    .ok()
+    .zip(Time::new(14, 30, 0).ok())
+    .map(|(day, time)| day.at(time));
 Field::new("starts", "Starts")
     .control(DateTimePicker::new("starts").value_opt(starts))
 ```

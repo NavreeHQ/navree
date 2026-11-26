@@ -80,7 +80,7 @@ SQLite writes it into `CREATE TABLE`, MySQL enforces it from 8.0.16. For a model
 A library model is a navree-orm model with the four columns, implementing `Library`:
 
 ```rust title="src/templates/model.rs"
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::orm::prelude::*;
 use navree::workspace::library::{Library, LibraryScope};
 use serde::Serialize;
@@ -97,8 +97,8 @@ pub struct Template {
     pub slug: String,
     pub name: String,
     pub body: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 impl Library for Template {}

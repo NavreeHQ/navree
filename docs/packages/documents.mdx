@@ -499,8 +499,10 @@ Each is a `DocumentsError::TooLarge`, a 413 whose message names the limit. The s
 `save` renders and writes the PDF to the documents disk (`documents.disk`, else the storage default):
 
 ```rust
+use navree::datetime::{Span, Timestamp};
+
 let stored = documents.save(&Render::template("reports/audit").data(&report), "reports/2026-q3.pdf").await?;
-let link = stored.temporary_url(Utc::now() + Duration::hours(1)).await?; // a download link, no session needed
+let link = stored.temporary_url(Timestamp::now() + Span::hours(1)).await?; // a download link, no session needed
 ```
 
 Long documents belong on a worker. `queue` dispatches the `documents.render` job and returns at once with a `QueuedDocument`, which serializes, so a handler can return it and the client can poll:

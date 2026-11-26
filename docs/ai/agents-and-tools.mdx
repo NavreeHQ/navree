@@ -193,7 +193,7 @@ fn equals(field: &str, value: impl ToString) -> Condition {
 Arguments are one struct per tool. It derives `Deserialize`, `ToSchema` and `Validate`, the same derives as a [validated request body](/docs/basics/validation/):
 
 ```rust title="crates/crm-deals/src/assistant.rs"
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::validation::Validate;
 use serde::Deserialize;
 use navree::openapi::ToSchema;
@@ -236,7 +236,7 @@ pub struct LogActivity {
     pub body: Option<String>,
     /// For tasks: when it is due (RFC 3339, UTC).
     #[validate(skip)]
-    pub due_at: Option<DateTime<Utc>>,
+    pub due_at: Option<Timestamp>,
 }
 ```
 
