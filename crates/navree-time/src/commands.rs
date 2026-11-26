@@ -1,6 +1,6 @@
 //! The `time:zones` command.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_kernel::{AppContext, BoxError, CommandSpec};
 
 use crate::Zones;
@@ -37,7 +37,7 @@ async fn zones(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     }
     let now = match ctx.try_get::<Zones>().await {
         Some(zones) => zones.now(),
-        None => Utc::now(),
+        None => Timestamp::now(),
     };
     println!(
         "{}",
@@ -51,7 +51,7 @@ async fn zones(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
 pub fn zones_listing(
     search: Option<&str>,
     country: Option<&str>,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<String, BoxError> {
     let zones = zone_list(country, search).map_err(|_| {
         format!(

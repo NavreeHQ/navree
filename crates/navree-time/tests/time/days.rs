@@ -1,6 +1,6 @@
 //! `LocalDay` and `DayRange`: calendar days counted on a zone's clock.
 
-use chrono::{TimeDelta, Timelike, Weekday};
+use navree_datetime::{Span, Weekday};
 use navree_time::{DayRange, LocalDay, Zone};
 
 use crate::support::{date, day, utc, zone};
@@ -14,7 +14,7 @@ fn days_parse_and_print_as_yyyy_mm_dd() {
     assert_eq!(LocalDay::new(2026, 2, 30), None);
     assert_eq!(LocalDay::from(date("2026-10-27")), d);
     assert_eq!((d.year(), d.month(), d.day()), (2026, 10, 27));
-    assert_eq!(d.weekday(), Weekday::Tue);
+    assert_eq!(d.weekday(), Weekday::Tuesday);
     for bad in [
         "2026-13-01",
         "2026-02-30",
@@ -82,7 +82,7 @@ fn a_day_spans_from_its_local_midnight_to_the_next() {
         (utc("2026-10-26T18:30:00Z"), utc("2026-10-27T18:30:00Z"))
     );
     assert_eq!(
-        d.at(chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap(), &kolkata),
+        d.at(navree_datetime::Time::new(9, 0, 0).unwrap(), &kolkata),
         utc("2026-10-27T03:30:00Z")
     );
 }
@@ -94,9 +94,9 @@ fn days_are_shorter_or_longer_when_clocks_change() {
         let (start, end) = day(d).utc_bounds(&london);
         end - start
     };
-    assert_eq!(length("2026-03-29"), TimeDelta::hours(23));
-    assert_eq!(length("2026-10-25"), TimeDelta::hours(25));
-    assert_eq!(length("2026-06-01"), TimeDelta::hours(24));
+    assert_eq!(length("2026-03-29"), Span::hours(23));
+    assert_eq!(length("2026-10-25"), Span::hours(25));
+    assert_eq!(length("2026-06-01"), Span::hours(24));
 }
 
 #[test]
@@ -115,11 +115,11 @@ fn a_day_starts_at_its_first_instant_even_when_midnight_is_skipped() {
             let start = d.start_in(&z);
             assert_eq!(LocalDay::of(start, &z), d, "{name} {d}");
             assert_eq!(
-                LocalDay::of(start - TimeDelta::seconds(1), &z),
+                LocalDay::of(start - Span::seconds(1), &z),
                 d.pred(),
                 "{name} {d}: the second before the start is the day before"
             );
-            if z.local(start).hour() != 0 {
+            if z.local(start).time().hour() != 0 {
                 found_gap = true;
             }
             d = d.succ();

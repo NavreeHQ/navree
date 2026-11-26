@@ -6227,7 +6227,6 @@ dependencies = [
 name = "navree-time"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "http",
  "http-body-util",

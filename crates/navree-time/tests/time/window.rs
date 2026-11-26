@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use chrono::Weekday;
+use navree_datetime::Weekday;
 use navree_time::{FixedHolidays, Holidays, SendWindow, weekend_days};
 
 use crate::support::{day, utc, zone};
@@ -132,22 +132,22 @@ fn custom_calendars_close_their_days() {
 
 #[test]
 fn working_days_follow_the_country() {
-    assert_eq!(weekend_days("US"), [Weekday::Sat, Weekday::Sun]);
-    assert_eq!(weekend_days("SA"), [Weekday::Fri, Weekday::Sat]);
-    assert_eq!(weekend_days("IN"), [Weekday::Sun]);
-    assert_eq!(weekend_days("ae"), [Weekday::Sat, Weekday::Sun]);
-    assert_eq!(weekend_days("XX"), [Weekday::Sat, Weekday::Sun]);
+    assert_eq!(weekend_days("US"), [Weekday::Saturday, Weekday::Sunday]);
+    assert_eq!(weekend_days("SA"), [Weekday::Friday, Weekday::Saturday]);
+    assert_eq!(weekend_days("IN"), [Weekday::Sunday]);
+    assert_eq!(weekend_days("ae"), [Weekday::Saturday, Weekday::Sunday]);
+    assert_eq!(weekend_days("XX"), [Weekday::Saturday, Weekday::Sunday]);
 
     let riyadh = zone("Asia/Riyadh");
     let window = SendWindow::working_days_in("SA").between("09:00", "17:00");
     assert_eq!(
         window.days(),
         [
-            Weekday::Mon,
-            Weekday::Tue,
-            Weekday::Wed,
-            Weekday::Thu,
-            Weekday::Sun
+            Weekday::Monday,
+            Weekday::Tuesday,
+            Weekday::Wednesday,
+            Weekday::Thursday,
+            Weekday::Sunday
         ]
     );
     // Thursday 29 October 2026, 18:00 in Riyadh: next is Sunday 1 November.
@@ -159,8 +159,8 @@ fn working_days_follow_the_country() {
 
 #[test]
 fn windows_are_built_from_days_and_times() {
-    let saturdays = SendWindow::on(&[Weekday::Sat]).between("10:00", "12:00");
-    assert_eq!(saturdays.days(), [Weekday::Sat]);
+    let saturdays = SendWindow::on(&[Weekday::Saturday]).between("10:00", "12:00");
+    assert_eq!(saturdays.days(), [Weekday::Saturday]);
     assert_eq!(saturdays.start().to_string(), "10:00:00");
     assert_eq!(
         saturdays.end().map(|t| t.to_string()),

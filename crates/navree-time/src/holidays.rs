@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use chrono::{NaiveDate, Weekday};
+use navree_datetime::{Date, Weekday};
 use serde::Serialize;
 
 use crate::{DayRange, LocalDay};
@@ -323,7 +323,7 @@ impl Rules {
 
     /// The `n`th `weekday` of `month` (1-based).
     fn nth(&self, month: u32, weekday: Weekday, n: u32) -> LocalDay {
-        let date = NaiveDate::from_weekday_of_month_opt(self.year, month, weekday, n as u8)
+        let date = Date::nth_weekday_of_month(self.year, month as u8, weekday, n as u8)
             .expect("the first four weekdays of a month exist");
         LocalDay::from(date)
     }
@@ -342,8 +342,8 @@ impl Rules {
     fn observed(&mut self, month: u32, day: u32, name: &str) {
         let date = self.date(month, day);
         let observed = match date.weekday() {
-            Weekday::Sat => date.pred(),
-            Weekday::Sun => date.succ(),
+            Weekday::Saturday => date.pred(),
+            Weekday::Sunday => date.succ(),
             _ => date,
         };
         if observed == date {
@@ -357,8 +357,8 @@ impl Rules {
     fn next_monday(&mut self, month: u32, day: u32, name: &str) {
         let date = self.date(month, day);
         match date.weekday() {
-            Weekday::Sat => self.add(date.add_days(2), &format!("{name} (substitute day)")),
-            Weekday::Sun => self.add(date.succ(), &format!("{name} (substitute day)")),
+            Weekday::Saturday => self.add(date.add_days(2), &format!("{name} (substitute day)")),
+            Weekday::Sunday => self.add(date.succ(), &format!("{name} (substitute day)")),
             _ => self.add(date, name),
         }
     }
@@ -369,15 +369,15 @@ impl Rules {
         let christmas = self.date(12, 25);
         let substitute = |name: &str| format!("{name} (substitute day)");
         match christmas.weekday() {
-            Weekday::Fri => {
+            Weekday::Friday => {
                 self.add(christmas, "Christmas Day");
                 self.add(christmas.add_days(3), &substitute("Boxing Day"));
             }
-            Weekday::Sat => {
+            Weekday::Saturday => {
                 self.add(christmas.add_days(2), &substitute("Christmas Day"));
                 self.add(christmas.add_days(3), &substitute("Boxing Day"));
             }
-            Weekday::Sun => {
+            Weekday::Sunday => {
                 self.add(christmas.succ(), "Boxing Day");
                 self.add(christmas.add_days(2), &substitute("Christmas Day"));
             }
@@ -390,22 +390,22 @@ impl Rules {
 
     fn united_states(&mut self) {
         self.observed(1, 1, "New Year's Day");
-        let mlk = self.nth(1, Weekday::Mon, 3);
+        let mlk = self.nth(1, Weekday::Monday, 3);
         self.add(mlk, "Martin Luther King Jr. Day");
-        let presidents = self.nth(2, Weekday::Mon, 3);
+        let presidents = self.nth(2, Weekday::Monday, 3);
         self.add(presidents, "Presidents' Day");
-        let memorial = self.last(5, Weekday::Mon);
+        let memorial = self.last(5, Weekday::Monday);
         self.add(memorial, "Memorial Day");
         if self.year >= 2021 {
             self.observed(6, 19, "Juneteenth");
         }
         self.observed(7, 4, "Independence Day");
-        let labor = self.nth(9, Weekday::Mon, 1);
+        let labor = self.nth(9, Weekday::Monday, 1);
         self.add(labor, "Labor Day");
-        let columbus = self.nth(10, Weekday::Mon, 2);
+        let columbus = self.nth(10, Weekday::Monday, 2);
         self.add(columbus, "Columbus Day");
         self.observed(11, 11, "Veterans Day");
-        let thanksgiving = self.nth(11, Weekday::Thu, 4);
+        let thanksgiving = self.nth(11, Weekday::Thursday, 4);
         self.add(thanksgiving, "Thanksgiving Day");
         self.observed(12, 25, "Christmas Day");
     }
@@ -416,11 +416,11 @@ impl Rules {
         self.add(good_friday, "Good Friday");
         let easter_monday = self.easter(1);
         self.add(easter_monday, "Easter Monday");
-        let early_may = self.nth(5, Weekday::Mon, 1);
+        let early_may = self.nth(5, Weekday::Monday, 1);
         self.add(early_may, "Early May bank holiday");
-        let spring = self.last(5, Weekday::Mon);
+        let spring = self.last(5, Weekday::Monday);
         self.add(spring, "Spring bank holiday");
-        let summer = self.last(8, Weekday::Mon);
+        let summer = self.last(8, Weekday::Monday);
         self.add(summer, "Summer bank holiday");
         self.christmas_and_boxing_day();
     }
@@ -483,22 +483,22 @@ impl Rules {
         self.add(good_friday, "Good Friday");
         // The Monday before 25 May.
         let mut victoria = self.date(5, 24);
-        while victoria.weekday() != Weekday::Mon {
+        while victoria.weekday() != Weekday::Monday {
             victoria = victoria.pred();
         }
         self.add(victoria, "Victoria Day");
         let canada_day = self.date(7, 1);
-        if canada_day.weekday() == Weekday::Sun {
+        if canada_day.weekday() == Weekday::Sunday {
             self.add(canada_day.succ(), "Canada Day (observed)");
         } else {
             self.add(canada_day, "Canada Day");
         }
-        let labour = self.nth(9, Weekday::Mon, 1);
+        let labour = self.nth(9, Weekday::Monday, 1);
         self.add(labour, "Labour Day");
         if self.year >= 2021 {
             self.fixed(9, 30, "National Day for Truth and Reconciliation");
         }
-        let thanksgiving = self.nth(10, Weekday::Mon, 2);
+        let thanksgiving = self.nth(10, Weekday::Monday, 2);
         self.add(thanksgiving, "Thanksgiving");
         self.fixed(11, 11, "Remembrance Day");
         self.fixed(12, 25, "Christmas Day");

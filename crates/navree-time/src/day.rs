@@ -3,7 +3,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Datelike, Months, NaiveDate, NaiveTime, TimeDelta, Utc, Weekday};
+use navree_datetime::{Date, Time, Timestamp, Weekday};
 use serde::de::{self, Deserializer, Unexpected};
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -27,7 +27,7 @@ use crate::Zone;
 /// # Ok::<(), navree_time::LocalDayError>(())
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LocalDay(NaiveDate);
+pub struct LocalDay(Date);
 
 /// Text that is not a day in the form `yyyy-MM-dd`.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -37,7 +37,9 @@ pub struct LocalDayError(String);
 impl LocalDay {
     /// The day `year`-`month`-`day`, if it exists.
     pub fn new(year: i32, month: u32, day: u32) -> Option<LocalDay> {
-        NaiveDate::from_ymd_opt(year, month, day).map(LocalDay)
+        let month = u8::try_from(month).ok()?;
+        let day = u8::try_from(day).ok()?;
+        Date::new(year, month, day).ok().map(LocalDay)
     }
 
     /// Parses `yyyy-MM-dd` (four-digit year, two-digit month and day).
@@ -54,18 +56,18 @@ impl LocalDay {
         if !shaped {
             return Err(invalid());
         }
-        NaiveDate::parse_from_str(text, "%Y-%m-%d")
+        Date::parse("%Y-%m-%d", text)
             .map(LocalDay)
             .map_err(|_| invalid())
     }
 
     /// The local day `at` falls on in `zone`.
-    pub fn of(at: DateTime<Utc>, zone: &Zone) -> LocalDay {
-        LocalDay(zone.local(at).date_naive())
+    pub fn of(at: Timestamp, zone: &Zone) -> LocalDay {
+        LocalDay(zone.local(at).date())
     }
 
     /// The date.
-    pub fn date(&self) -> NaiveDate {
+    pub fn date(&self) -> Date {
         self.0
     }
 
@@ -76,12 +78,12 @@ impl LocalDay {
 
     /// The month, 1 to 12.
     pub fn month(&self) -> u32 {
-        self.0.month()
+        u32::from(self.0.month_number())
     }
 
     /// The day of the month, 1 to 31.
     pub fn day(&self) -> u32 {
-        self.0.day()
+        u32::from(self.0.day())
     }
 
     /// The day of the week.
@@ -91,70 +93,60 @@ impl LocalDay {
 
     /// The next day.
     pub fn succ(&self) -> LocalDay {
-        LocalDay(self.0.succ_opt().unwrap_or(self.0))
+        LocalDay(self.0.tomorrow().unwrap_or(self.0))
     }
 
     /// The previous day.
     pub fn pred(&self) -> LocalDay {
-        LocalDay(self.0.pred_opt().unwrap_or(self.0))
+        LocalDay(self.0.yesterday().unwrap_or(self.0))
     }
 
     /// The day `days` days later (earlier when negative).
     pub fn add_days(&self, days: i64) -> LocalDay {
-        LocalDay(
-            self.0
-                .checked_add_signed(TimeDelta::days(days))
-                .unwrap_or(self.0),
-        )
+        LocalDay(self.0.add_days(days).unwrap_or(self.0))
     }
 
     /// The first day of this day's month.
     pub fn first_of_month(&self) -> LocalDay {
-        LocalDay(self.0.with_day(1).unwrap_or(self.0))
+        LocalDay(self.0.first_of_month())
     }
 
     /// The last day of this day's month.
     pub fn last_of_month(&self) -> LocalDay {
-        let first = self.first_of_month().0;
-        LocalDay(
-            first
-                .checked_add_months(Months::new(1))
-                .and_then(|next| next.pred_opt())
-                .unwrap_or(self.0),
-        )
+        LocalDay(self.0.last_of_month())
     }
 
     /// The first instant of the day in `zone`: local midnight, or the first
     /// instant after it where clocks skip midnight.
-    pub fn start_in(&self, zone: &Zone) -> DateTime<Utc> {
-        zone.to_utc(self.0.and_time(NaiveTime::MIN))
+    pub fn start_in(&self, zone: &Zone) -> Timestamp {
+        zone.to_utc(self.0.at(Time::MIDNIGHT))
     }
 
     /// The first instant of the next day in `zone` (the day's exclusive end).
-    pub fn end_in(&self, zone: &Zone) -> DateTime<Utc> {
+    pub fn end_in(&self, zone: &Zone) -> Timestamp {
         self.succ().start_in(zone)
     }
 
     /// `(start, end)`: the half-open span of instants that fall on this day
     /// in `zone`. Usually 24 hours; 23 or 25 when clocks change.
-    pub fn utc_bounds(&self, zone: &Zone) -> (DateTime<Utc>, DateTime<Utc>) {
+    pub fn utc_bounds(&self, zone: &Zone) -> (Timestamp, Timestamp) {
         (self.start_in(zone), self.end_in(zone))
     }
 
     /// The instant this day's `time` is in `zone` (see [`Zone::to_utc`]
     /// for times skipped or repeated by DST changes).
-    pub fn at(&self, time: NaiveTime, zone: &Zone) -> DateTime<Utc> {
-        zone.to_utc(self.0.and_time(time))
+    pub fn at(&self, time: Time, zone: &Zone) -> Timestamp {
+        zone.to_utc(self.0.at(time))
     }
 }
 
-impl From<NaiveDate> for LocalDay {
-    fn from(date: NaiveDate) -> Self {
+impl From<Date> for LocalDay {
+    fn from(date: Date) -> Self {
         LocalDay(date)
     }
 }
 
-impl From<LocalDay> for NaiveDate {
+impl From<LocalDay> for Date {
     fn from(day: LocalDay) -> Self {
         day.0
     }
@@ -261,7 +253,7 @@ impl DayRange {
 
     /// The last `days` days in `zone`, today (at `now`) included; at least
     /// today.
-    pub fn last_days(days: u32, zone: &Zone, now: DateTime<Utc>) -> DayRange {
+    pub fn last_days(days: u32, zone: &Zone, now: Timestamp) -> DayRange {
         let to = zone.today(now);
         let from = to.add_days(1 - i64::from(days.max(1)));
         DayRange { from, to }
@@ -278,7 +270,7 @@ impl DayRange {
     /// How many days the range covers (1 for a single day; 0 when `to` is
     /// before `from`).
     pub fn day_count(&self) -> u32 {
-        let days = (self.to.date() - self.from.date()).num_days() + 1;
+        let days = self.from.date().days_until(self.to.date()) + 1;
         u32::try_from(days.max(0)).unwrap_or(u32::MAX)
     }
 
@@ -296,7 +288,7 @@ impl DayRange {
 
     /// `(start, end)`: the half-open span of instants from the start of
     /// `from` to the end of `to`, both counted in `zone`.
-    pub fn utc_bounds(&self, zone: &Zone) -> (DateTime<Utc>, DateTime<Utc>) {
+    pub fn utc_bounds(&self, zone: &Zone) -> (Timestamp, Timestamp) {
         (self.from.start_in(zone), self.to.end_in(zone))
     }
 }

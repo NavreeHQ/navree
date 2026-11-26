@@ -5,7 +5,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::DateTime;
+use navree_datetime::Zoned;
 use http::request::Parts;
 use navree_contracts::{AuthState, Clock, ZoneLevel, ZoneRequest};
 use navree_http::extract::FromRequestParts;
@@ -16,7 +16,7 @@ use serde::ser::Error as _;
 use serde::{Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::{LocalDay, Tz, Zone, Zones};
+use crate::{LocalDay, Zone, Zones};
 
 /// The zone of the current request: the signed-in user's, else the
 /// request's workspace's, else its organization's, else the app's default
@@ -82,7 +82,7 @@ impl CurrentZone {
     }
 
     /// The current time on the app's clock, in this zone.
-    pub fn now(&self) -> DateTime<Tz> {
+    pub fn now(&self) -> Zoned {
         self.zone.local(self.clock.now())
     }
 

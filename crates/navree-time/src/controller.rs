@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::Method;
 use http::header::{CACHE_CONTROL, HeaderValue};
 use navree_http::response::{IntoResponse, Response};
@@ -29,8 +29,8 @@ pub struct ZoneResource {
 
 impl ZoneResource {
     /// `zone` with its offset at `now`.
-    pub fn new(zone: Zone, now: DateTime<Utc>) -> Self {
-        let seconds = zone.offset_at(now).local_minus_utc();
+    pub fn new(zone: Zone, now: Timestamp) -> Self {
+        let seconds = zone.offset_at(now).seconds();
         ZoneResource {
             name: zone.name().to_owned(),
             offset: zone.offset_label(now),

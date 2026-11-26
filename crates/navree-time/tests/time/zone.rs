@@ -1,6 +1,5 @@
 //! `Zone`: IANA names, aliases, countries, offsets and DST conversions.
 
-use chrono::{Datelike, Timelike};
 use navree_time::{Zone, tzdata_version};
 
 use crate::support::{local, utc, zone};
@@ -182,7 +181,7 @@ fn display_parse_default_and_ordering() {
 fn offsets_follow_daylight_saving_time() {
     let kolkata = zone("Asia/Kolkata");
     let at = utc("2026-01-15T12:00:00Z");
-    assert_eq!(kolkata.offset_at(at).local_minus_utc(), 5 * 3600 + 1800);
+    assert_eq!(kolkata.offset_at(at).seconds(), 5 * 3600 + 1800);
     assert_eq!(kolkata.offset_label(at), "+05:30");
     let new_york = zone("America/New_York");
     assert_eq!(new_york.offset_label(utc("2026-01-15T12:00:00Z")), "-05:00");
@@ -195,7 +194,11 @@ fn offsets_follow_daylight_saving_time() {
 fn instants_read_on_the_local_clock() {
     let local_time = zone("Asia/Kolkata").local(utc("2026-10-26T20:00:00Z"));
     assert_eq!(
-        (local_time.day(), local_time.hour(), local_time.minute()),
+        (
+            local_time.date().day(),
+            local_time.time().hour(),
+            local_time.time().minute()
+        ),
         (27, 1, 30)
     );
 }
@@ -222,7 +225,7 @@ fn wall_clock_times_become_instants_across_dst_changes() {
     // A whole skipped day: Samoa jumped from 29 to 31 December 2011.
     let apia = zone("Pacific/Apia");
     let skipped = apia.to_utc(local("2011-12-30T12:00"));
-    assert_eq!(apia.local(skipped).day(), 31);
+    assert_eq!(apia.local(skipped).date().day(), 31);
 }
 
 #[test]
@@ -233,7 +236,6 @@ fn the_tz_database_version_is_known() {
 
 #[test]
 fn every_zone_and_link_of_the_tz_database_release_is_known_by_name() {
-    use chrono::Offset as _;
     use navree_time::Tz;
 
     let all: Vec<Tz> = Tz::all().collect();
@@ -266,8 +268,8 @@ fn every_zone_and_link_of_the_tz_database_release_is_known_by_name() {
         ] {
             let at = utc(stamp);
             assert_eq!(
-                at.with_timezone(&link_tz).offset().fix(),
-                at.with_timezone(&target_tz).offset().fix(),
+                link_tz.offset_at(at).offset(),
+                target_tz.offset_at(at).offset(),
                 "{link} vs {target} at {stamp}"
             );
             assert_eq!(link_tz.abbreviation(at), target_tz.abbreviation(at));
@@ -282,7 +284,7 @@ fn every_zone_and_link_of_the_tz_database_release_is_known_by_name() {
 fn the_offset_at_each_recorded_instant_is_the_one_written_down() {
     use std::collections::HashMap;
 
-    use chrono::{DateTime, Offset as _, TimeZone as _, Utc};
+    use navree_datetime::Timestamp;
     use navree_time::Tz;
 
     const FIXTURE: &str = include_str!("fixtures/offsets.txt");
@@ -324,9 +326,9 @@ fn the_offset_at_each_recorded_instant_is_the_one_written_down() {
             samples.len()
         );
         for &(ts, expected) in samples {
-            let dt = DateTime::<Utc>::from_timestamp(ts, 0).unwrap().naive_utc();
-            let got = tz.offset_from_utc_datetime(&dt).fix().local_minus_utc();
-            assert_eq!(got, expected, "{} at {ts} ({dt}Z)", tz.name());
+            let at = Timestamp::from_secs(ts).unwrap();
+            let got = tz.offset_at(at).offset().seconds();
+            assert_eq!(got, expected, "{} at {ts} ({at})", tz.name());
         }
     };
 
@@ -344,33 +346,29 @@ fn the_offset_at_each_recorded_instant_is_the_one_written_down() {
 
 #[test]
 fn a_wall_clock_time_in_a_gap_is_none_and_in_an_overlap_is_both() {
-    use chrono::{LocalResult, Offset as _, TimeZone as _};
-    use navree_time::Tz;
+    use navree_time::{LocalTime, Tz};
 
     let ny: Tz = "America/New_York".parse().unwrap();
     // Spring-forward gap: 2026-03-08 02:00 jumps to 03:00.
-    assert_eq!(
-        ny.from_local_datetime(&local("2026-03-08T02:30")),
-        LocalResult::None
-    );
+    assert_eq!(ny.resolve_local(local("2026-03-08T02:30")), LocalTime::None);
     assert!(matches!(
-        ny.from_local_datetime(&local("2026-03-08T01:59")),
-        LocalResult::Single(_)
+        ny.resolve_local(local("2026-03-08T01:59")),
+        LocalTime::Single(_)
     ));
     assert!(matches!(
-        ny.from_local_datetime(&local("2026-03-08T03:00")),
-        LocalResult::Single(_)
+        ny.resolve_local(local("2026-03-08T03:00")),
+        LocalTime::Single(_)
     ));
 
     // Fall-back overlap: 2026-11-01 02:00 falls back to 01:00.
-    match ny.from_local_datetime(&local("2026-11-01T01:30")) {
-        LocalResult::Ambiguous(earliest, latest) => {
-            assert_eq!(earliest.to_utc(), utc("2026-11-01T05:30:00Z"));
-            assert_eq!(latest.to_utc(), utc("2026-11-01T06:30:00Z"));
-            assert_eq!(earliest.offset().abbreviation(), "EDT");
-            assert_eq!(latest.offset().abbreviation(), "EST");
-            assert_eq!(earliest.offset().fix().local_minus_utc(), -4 * 3600);
-            assert_eq!(latest.offset().fix().local_minus_utc(), -5 * 3600);
+    match ny.resolve_local(local("2026-11-01T01:30")) {
+        LocalTime::Ambiguous((earliest_at, earliest_off), (latest_at, latest_off)) => {
+            assert_eq!(earliest_at, utc("2026-11-01T05:30:00Z"));
+            assert_eq!(latest_at, utc("2026-11-01T06:30:00Z"));
+            assert_eq!(earliest_off.abbreviation(), "EDT");
+            assert_eq!(latest_off.abbreviation(), "EST");
+            assert_eq!(earliest_off.offset().seconds(), -4 * 3600);
+            assert_eq!(latest_off.offset().seconds(), -5 * 3600);
         }
         other => panic!("expected Ambiguous, got {other:?}"),
     }
@@ -378,15 +376,14 @@ fn a_wall_clock_time_in_a_gap_is_none_and_in_an_overlap_is_both() {
     // Samoa skipped the whole local day 2011-12-30.
     let apia: Tz = "Pacific/Apia".parse().unwrap();
     assert_eq!(
-        apia.from_local_datetime(&local("2011-12-30T12:00")),
-        LocalResult::None
+        apia.resolve_local(local("2011-12-30T12:00")),
+        LocalTime::None
     );
 }
 
 #[test]
 fn a_zone_far_past_its_last_change_follows_its_standing_rule() {
-    use chrono::{LocalResult, TimeZone as _};
-    use navree_time::Tz;
+    use navree_time::{LocalTime, Tz};
 
     // Year 2400 is centuries past every explicit historical change.
     let ny = zone("America/New_York");
@@ -395,12 +392,12 @@ fn a_zone_far_past_its_last_change_follows_its_standing_rule() {
     // In 2400, 1 March is Wednesday, so the second Sunday of March is 12 March.
     let ny_tz: Tz = ny.tz();
     assert_eq!(
-        ny_tz.from_local_datetime(&local("2400-03-12T02:30")),
-        LocalResult::None
+        ny_tz.resolve_local(local("2400-03-12T02:30")),
+        LocalTime::None
     );
     assert!(matches!(
-        ny_tz.from_local_datetime(&local("2400-11-05T01:30")),
-        LocalResult::Ambiguous(_, _)
+        ny_tz.resolve_local(local("2400-11-05T01:30")),
+        LocalTime::Ambiguous(_, _)
     ));
 
     // Ireland uses negative winter offset relative to its summer standard time.
@@ -445,14 +442,14 @@ fn a_zone_far_past_its_last_change_follows_its_standing_rule() {
 
 #[test]
 fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
-    use chrono::{LocalResult, TimeZone as _};
+    use navree_time::LocalTime;
 
     let lord_howe = zone("Australia/Lord_Howe");
     // Southern summer (+11:00) vs southern winter (+10:30): a 30-minute shift.
     assert_eq!(
         lord_howe
             .offset_at(utc("2026-01-15T12:00:00Z"))
-            .local_minus_utc(),
+            .seconds(),
         11 * 3600
     );
     assert_eq!(
@@ -462,7 +459,7 @@ fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
     assert_eq!(
         lord_howe
             .offset_at(utc("2026-07-15T12:00:00Z"))
-            .local_minus_utc(),
+            .seconds(),
         10 * 3600 + 1800
     );
     assert_eq!(
@@ -472,14 +469,14 @@ fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
     assert_eq!(
         lord_howe
             .tz()
-            .from_local_datetime(&local("2026-10-04T02:15")),
-        LocalResult::None
+            .resolve_local(local("2026-10-04T02:15")),
+        LocalTime::None
     );
     assert!(matches!(
         lord_howe
             .tz()
-            .from_local_datetime(&local("2026-04-05T01:45")),
-        LocalResult::Ambiguous(_, _)
+            .resolve_local(local("2026-04-05T01:45")),
+        LocalTime::Ambiguous(_, _)
     ));
 
     let kolkata = zone("Asia/Kolkata");
@@ -493,7 +490,7 @@ fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
     ] {
         let at = utc(stamp);
         assert_eq!(
-            kolkata.offset_at(at).local_minus_utc(),
+            kolkata.offset_at(at).seconds(),
             5 * 3600 + 1800,
             "{stamp}"
         );
@@ -502,8 +499,8 @@ fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
 }
 
 #[test]
-fn a_zone_is_a_time_zone_for_chronos_own_conversions() {
-    use chrono::{Offset as _, TimeZone as _, Utc};
+fn a_zone_and_its_tz_agree_on_clocks_and_offsets() {
+    use navree_datetime::{Date, Time};
     use navree_time::Tz;
 
     let kolkata = zone("Asia/Kolkata");
@@ -512,18 +509,18 @@ fn a_zone_is_a_time_zone_for_chronos_own_conversions() {
     assert_eq!(tz.name(), "Asia/Kolkata");
 
     let instant = utc("2026-11-18T16:30:00Z");
-    let on_clock = instant.with_timezone(&tz);
+    let on_clock = tz.local(instant);
     assert_eq!(on_clock, kolkata.local(instant));
-    assert_eq!(Tz::from_offset(on_clock.offset()), tz);
-    assert_eq!(on_clock.offset().fix().local_minus_utc(), 5 * 3600 + 1800);
+    assert_eq!(tz.offset_at(instant).tz(), tz);
+    assert_eq!(on_clock.offset().seconds(), 5 * 3600 + 1800);
     assert_eq!(
         on_clock.format("%Y-%m-%d %H:%M:%S %Z %:z").to_string(),
         "2026-11-18 22:00:00 IST +05:30"
     );
 
-    let built = tz
-        .with_ymd_and_hms(2026, 11, 18, 22, 0, 0)
-        .single()
-        .unwrap();
-    assert_eq!(built.with_timezone(&Utc), instant);
+    let wall = Date::new(2026, 11, 18)
+        .unwrap()
+        .at(Time::new(22, 0, 0).unwrap());
+    let (built, _) = tz.resolve_local(wall).single().unwrap();
+    assert_eq!(built, instant);
 }

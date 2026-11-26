@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use navree_datetime::{Date, DateTime, Timestamp, Zoned};
 use http::request::Parts;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
@@ -21,10 +21,9 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 /// An RFC 3339 instant.
-pub fn utc(text: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(text)
-        .unwrap_or_else(|e| panic!("bad instant `{text}`: {e}"))
-        .with_timezone(&Utc)
+pub fn utc(text: &str) -> Timestamp {
+    Zoned::parse_rfc3339(text)
+        .unwrap_or_else(|e| panic!("bad instant `{text}`: {e}")).timestamp()
 }
 
 /// A `yyyy-MM-dd` day.
@@ -39,14 +38,14 @@ pub fn zone(name: &str) -> Zone {
 }
 
 /// A wall-clock time, `yyyy-MM-ddTHH:MM`.
-pub fn local(text: &str) -> NaiveDateTime {
-    NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M")
+pub fn local(text: &str) -> DateTime {
+    DateTime::parse("%Y-%m-%dT%H:%M", text)
         .unwrap_or_else(|e| panic!("bad local time `{text}`: {e}"))
 }
 
 /// A calendar date.
-pub fn date(text: &str) -> NaiveDate {
-    NaiveDate::parse_from_str(text, "%Y-%m-%d").unwrap()
+pub fn date(text: &str) -> Date {
+    Date::parse("%Y-%m-%d", text).unwrap()
 }
 
 /// The header naming the signed-in user of a test request.
