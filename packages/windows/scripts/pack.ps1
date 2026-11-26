@@ -82,7 +82,7 @@ foreach ($project in $projects) {
     if ((Read-Metadata $nuspec 'license' 'type') -ne 'expression' -or (Read-Metadata $nuspec 'license') -ne 'MIT OR Apache-2.0') {
         $wrong += "${id}: the licence is not the expression MIT OR Apache-2.0"
     }
-    if ((Read-Metadata $nuspec 'projectUrl') -ne 'https://navree.com') { $wrong += "${id}: the project's address is not https://navree.com" }
+    if ((Read-Metadata $nuspec 'projectUrl').TrimEnd('/') -ne 'https://navree.com') { $wrong += "${id}: the project's address is not https://navree.com" }
     if ((Read-Metadata $nuspec 'repository' 'url') -ne 'https://github.com/NavreeHQ/navree') {
         $wrong += "${id}: the repository's address is not https://github.com/NavreeHQ/navree"
     }
