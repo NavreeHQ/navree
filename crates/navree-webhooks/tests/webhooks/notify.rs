@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_contracts::BoxFuture;
 use navree_db::DatabaseModule;
 use navree_notify::{
@@ -235,7 +235,7 @@ async fn vonage_statuses_and_replies_are_applied() {
     let id = remind(&app, &[Channel::Sms]).await;
     let send = |body: serde_json::Value, secret: &'static str| {
         let body = body.to_string();
-        let authorization = Vonage::sign(secret, body.as_bytes(), Utc::now().timestamp(), "jti");
+        let authorization = Vonage::sign(secret, body.as_bytes(), Timestamp::now().as_secs(), "jti");
         app.client()
             .post("/api/webhooks/notify/vonage")
             .header("authorization", authorization)

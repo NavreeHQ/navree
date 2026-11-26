@@ -99,7 +99,7 @@ async fn winning_a_deal_notifies_subscribed_endpoints() {
 
 impl Harness {
     fn clock_now(&self) -> i64 {
-        navree_contracts::Clock::now(&*self.clock).timestamp()
+        navree_contracts::Clock::now(&*self.clock).as_secs()
     }
 }
 
@@ -141,7 +141,7 @@ async fn failed_attempts_follow_the_retry_schedule_then_fail() {
     assert_eq!(delivery.last_status_code, Some(500));
     assert_eq!(
         delivery.next_attempt_at,
-        Some(super::support::start() + chrono::TimeDelta::seconds(5))
+        Some(super::support::start() + navree_datetime::Span::seconds(5))
     );
 
     // Not due yet: nothing happens a second early.

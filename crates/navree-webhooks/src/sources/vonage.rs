@@ -3,7 +3,7 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use chrono::DateTime;
+use navree_datetime::Timestamp;
 use http::HeaderMap;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
@@ -92,7 +92,7 @@ impl Vonage {
         }
         let timestamp = claims["iat"]
             .as_i64()
-            .and_then(|secs| DateTime::from_timestamp(secs, 0))
+            .and_then(|secs| Timestamp::from_secs(secs).ok())
             .ok_or_else(malformed)?;
         check_age(timestamp, tolerance)?;
         let (_, status) = body_fields(body, "message_uuid", "status");
@@ -123,7 +123,7 @@ impl WebhookSource for Vonage {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone as _, Utc};
+    use navree_datetime::Timestamp;
     use http::HeaderValue;
 
     use super::*;
@@ -138,7 +138,7 @@ mod tests {
     }
 
     fn at(secs: i64) -> Option<Tolerance> {
-        Some(Tolerance::at(Utc.timestamp_opt(secs, 0).unwrap(), 300))
+        Some(Tolerance::at(Timestamp::from_secs(secs).unwrap(), 300))
     }
 
     #[test]
@@ -148,7 +148,7 @@ mod tests {
         let verified = Vonage::verify(SECRET, &headers(&auth), body, at(IAT + 10)).unwrap();
         assert_eq!(verified.id.as_deref(), Some("jti-1"));
         assert_eq!(verified.event_type.as_deref(), Some("delivered"));
-        assert_eq!(verified.timestamp.map(|t| t.timestamp()), Some(IAT));
+        assert_eq!(verified.timestamp.map(|t| t.as_secs()), Some(IAT));
 
         let inbound = br#"{"message_uuid":"bbbb","message_type":"text","text":"STOP"}"#;
         let auth = Vonage::sign(SECRET, inbound, IAT, "jti-2");

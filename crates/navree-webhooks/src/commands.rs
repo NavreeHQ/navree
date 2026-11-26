@@ -181,7 +181,7 @@ async fn prune_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxErro
 
 #[cfg(test)]
 mod tests {
-    use chrono::DateTime;
+    use navree_datetime::Timestamp;
 
     use super::*;
 
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn endpoints_print_status_events_and_failures() {
-        let at = DateTime::from_timestamp(1_793_002_627, 0).unwrap();
+        let at = Timestamp::from_secs(1_793_002_627).unwrap();
         let endpoint = Endpoint {
             id: Uuid::nil(),
             workspace_id: None,

@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::{Mutex, MutexGuard};
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_crypto::jose::{JwkSet, VerifyingKey};
 use navree_crypto::sns::CertificateCache;
 use navree_http_client::HttpClient;
@@ -11,10 +11,10 @@ use navree_http_client::HttpClient;
 use crate::verify::VerifyError;
 
 /// How long Google's keys are kept when the response has no `max-age`.
-const DEFAULT_KEYS_TTL: TimeDelta = TimeDelta::hours(1);
+const DEFAULT_KEYS_TTL: Span = Span::hours(1);
 /// The shortest time between two fetches of Google's keys for a key id
 /// the cached set lacks.
-const KEYS_REFRESH_INTERVAL: TimeDelta = TimeDelta::minutes(1);
+const KEYS_REFRESH_INTERVAL: Span = Span::minutes(1);
 
 /// Google's OAuth 2.0 public keys, which sign the OIDC tokens of Pub/Sub
 /// push requests.
@@ -42,8 +42,8 @@ pub struct SenderKeys {
 #[derive(Clone)]
 struct Cached<T> {
     value: T,
-    fetched_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
+    fetched_at: Timestamp,
+    expires_at: Timestamp,
 }
 
 impl SenderKeys {
@@ -66,7 +66,7 @@ impl SenderKeys {
     pub async fn certificate(
         &self,
         url: &str,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<VerifyingKey, VerifyError> {
         if let Some(key) = self.certificates.get(url, now) {
             return Ok(key);
@@ -91,7 +91,7 @@ impl SenderKeys {
     pub async fn google_keys(
         &self,
         kid: Option<&str>,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<JwkSet, VerifyError> {
         if let Some(cached) = lock(&self.google).as_ref() {
             let fresh = cached.expires_at > now;
@@ -142,14 +142,14 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// The `max-age` of a `Cache-Control` value.
-fn max_age(cache_control: &str) -> Option<TimeDelta> {
+fn max_age(cache_control: &str) -> Option<Span> {
     cache_control
         .split(',')
         .filter_map(|directive| directive.trim().split_once('='))
         .find(|(name, _)| name.trim().eq_ignore_ascii_case("max-age"))
         .and_then(|(_, secs)| secs.trim().parse::<i64>().ok())
         .filter(|secs| *secs > 0)
-        .map(TimeDelta::seconds)
+        .and_then(Span::try_seconds)
 }
 
 #[cfg(test)]
@@ -160,7 +160,7 @@ mod tests {
     fn max_age_is_read_from_cache_control() {
         assert_eq!(
             max_age("public, max-age=19193, must-revalidate, no-transform"),
-            Some(TimeDelta::seconds(19_193))
+            Some(Span::seconds(19_193))
         );
         assert_eq!(max_age("no-cache"), None);
         assert_eq!(max_age("max-age=0"), None);

@@ -160,7 +160,7 @@ pub use navree_crypto::sns::SnsMessage;
 mod tests {
     use std::sync::Arc;
 
-    use chrono::{DateTime, TimeDelta, Utc};
+    use navree_datetime::{Span, Timestamp, Zoned};
     use http::{HeaderMap, Method};
     use navree_http_client::{FakeResponse, FakeServer, HttpClient};
     use serde_json::{Value, json};
@@ -205,10 +205,9 @@ mod tests {
         (Arc::new(SenderKeys::new(client)), server)
     }
 
-    fn now() -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339("2026-10-26T08:00:00Z")
+    fn now() -> Timestamp {
+        Timestamp::parse_rfc3339("2026-10-26T08:00:00Z")
             .unwrap()
-            .with_timezone(&Utc)
     }
 
     async fn verify(
@@ -240,7 +239,7 @@ mod tests {
             assert_eq!(verified.event_type.as_deref(), Some("Notification"));
             assert_eq!(
                 verified.timestamp.unwrap().to_rfc3339(),
-                DateTime::parse_from_rfc3339(message["Timestamp"].as_str().unwrap())
+                Zoned::parse_rfc3339(message["Timestamp"].as_str().unwrap())
                     .unwrap()
                     .to_rfc3339()
             );
@@ -286,7 +285,7 @@ mod tests {
         source: &SourceOptions,
         body: &[u8],
         keys: &Arc<SenderKeys>,
-        at: DateTime<Utc>,
+        at: Timestamp,
     ) -> Result<Verdict, VerifyError> {
         let headers = HeaderMap::new();
         let request = IncomingRequest::new(source, &headers, body)
@@ -300,9 +299,9 @@ mod tests {
         let (keys, server) = fake_keys();
         let message = body(&fixture("notification_v2"));
         // Published at 07:59:30: an hour either side passes.
-        let published = now() - TimeDelta::seconds(30);
+        let published = now() - Span::seconds(30);
         for offset in [-3_600, 0, 3_600] {
-            let at = published + TimeDelta::seconds(offset);
+            let at = published + Span::seconds(offset);
             let verdict = verify_at(&source(), &message, &keys, at).await;
             assert!(
                 matches!(verdict, Ok(Verdict::Verified(_))),
@@ -315,7 +314,7 @@ mod tests {
         // before any certificate is fetched.
         let (keys, server) = fake_keys();
         for offset in [-3_601, 3_601, 86_400] {
-            let at = published + TimeDelta::seconds(offset);
+            let at = published + Span::seconds(offset);
             assert_eq!(
                 verify_at(&source(), &message, &keys, at).await,
                 Err(VerifyError::TimestampOutOfTolerance {
@@ -344,7 +343,7 @@ mod tests {
             tolerance_secs: Some(7_200),
             ..source()
         };
-        let two_hours_on = now() + TimeDelta::hours(1) + TimeDelta::minutes(30);
+        let two_hours_on = now() + Span::hours(1) + Span::minutes(30);
         assert!(matches!(
             verify_at(&lenient, &message, &keys, two_hours_on).await,
             Ok(Verdict::Verified(_))

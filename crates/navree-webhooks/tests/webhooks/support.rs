@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
 use navree_db::{DatabaseModule, Db};
 use navree_events::{Event, EventBus, EventsModule};
@@ -85,10 +85,9 @@ impl Module for DealsModule {
 }
 
 /// 2026-10-26T08:00:00Z.
-pub fn start() -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339("2026-10-26T08:00:00Z")
+pub fn start() -> Timestamp {
+    Timestamp::parse_rfc3339("2026-10-26T08:00:00Z")
         .unwrap()
-        .with_timezone(&Utc)
 }
 
 /// A test app with the outgoing stack and its fakes.

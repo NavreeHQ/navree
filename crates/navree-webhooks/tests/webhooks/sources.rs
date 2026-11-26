@@ -45,7 +45,7 @@ fn sns_message(name: &str) -> Vec<u8> {
 }
 
 fn now() -> i64 {
-    start().timestamp()
+    start().as_secs()
 }
 
 /// What the routes answer: what the handler saw.
@@ -54,7 +54,7 @@ fn seen<S: WebhookSource>(hook: &VerifiedWebhook<S>, extra: Value) -> Json<Value
         "source": hook.source(),
         "id": hook.id(),
         "event": hook.event_type(),
-        "timestamp": hook.timestamp().map(|t| t.timestamp()),
+        "timestamp": hook.timestamp().map(|t| t.as_secs()),
         "extra": extra,
     }))
 }

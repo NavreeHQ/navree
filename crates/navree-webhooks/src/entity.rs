@@ -30,7 +30,7 @@
 pub mod endpoint {
     use std::fmt;
 
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use serde_json::Value;
     use uuid::Uuid;
@@ -62,19 +62,19 @@ pub mod endpoint {
         #[model(hidden)]
         pub previous_secret: Option<String>,
         /// When the previous secret stops signing.
-        pub previous_secret_expires_at: Option<DateTime<Utc>>,
+        pub previous_secret_expires_at: Option<Timestamp>,
         /// Whether deliveries are sent.
         pub enabled: bool,
         /// When it was disabled.
-        pub disabled_at: Option<DateTime<Utc>>,
+        pub disabled_at: Option<Timestamp>,
         /// Why: `manual`, `failing` or `gone`.
         pub disabled_reason: Option<String>,
         /// Since when every attempt has failed (cleared by a success).
-        pub failing_since: Option<DateTime<Utc>>,
+        pub failing_since: Option<Timestamp>,
         /// When it was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 
     impl fmt::Debug for Model {
@@ -98,7 +98,7 @@ pub mod endpoint {
 
 /// `webhook_deliveries`: one message to one endpoint.
 pub mod delivery {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -126,21 +126,21 @@ pub mod delivery {
         /// Attempts allowed before it fails.
         pub max_attempts: i32,
         /// When the next attempt is due (pending deliveries).
-        pub next_attempt_at: Option<DateTime<Utc>>,
+        pub next_attempt_at: Option<Timestamp>,
         /// The status code of the last attempt, if the endpoint answered.
         pub last_status_code: Option<i32>,
         /// The error of the last failed attempt.
         pub last_error: Option<String>,
         /// When the message was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
 /// `webhook_attempts`: one HTTP request of a delivery.
 pub mod attempt {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -169,14 +169,14 @@ pub mod attempt {
         /// How long it took, in milliseconds.
         pub duration_ms: i64,
         /// When it was made.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
 /// `webhook_receipts`: incoming messages already handled
 /// ([`mark_processed`](crate::VerifiedWebhook::mark_processed)).
 pub mod receipt {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -191,13 +191,13 @@ pub mod receipt {
         /// The sender's message id.
         pub message_id: String,
         /// When it was handled.
-        pub received_at: DateTime<Utc>,
+        pub received_at: Timestamp,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use serde_json::json;
     use uuid::Uuid;
 
@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn an_endpoint_never_shows_its_secrets_in_debug_output() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let endpoint = endpoint::Model {
             id: Uuid::now_v7(),
             workspace_id: None,

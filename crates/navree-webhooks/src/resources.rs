@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -154,16 +154,16 @@ pub struct Endpoint {
     /// Whether deliveries are sent.
     pub enabled: bool,
     /// When it was disabled.
-    pub disabled_at: Option<DateTime<Utc>>,
+    pub disabled_at: Option<Timestamp>,
     /// Why it was disabled: `manual`, `failing` (it failed for
     /// `webhooks.disable_after_days`) or `gone` (it answered 410).
     pub disabled_reason: Option<String>,
     /// Since when every attempt has failed; `null` after a success.
-    pub failing_since: Option<DateTime<Utc>>,
+    pub failing_since: Option<Timestamp>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl Endpoint {
@@ -273,7 +273,7 @@ pub struct Delivery {
     /// Attempts allowed.
     pub max_attempts: u32,
     /// When the next attempt is due.
-    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub next_attempt_at: Option<Timestamp>,
     /// The status code of the last attempt, if the endpoint answered.
     pub last_status_code: Option<u16>,
     /// The error of the last failed attempt.
@@ -282,9 +282,9 @@ pub struct Delivery {
     #[schema(value_type = Object)]
     pub payload: Value,
     /// When the message was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl From<&delivery::Model> for Delivery {
@@ -333,7 +333,7 @@ pub struct Attempt {
     /// How long it took, in milliseconds.
     pub duration_ms: u64,
     /// When it was made.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl From<&attempt::Model> for Attempt {

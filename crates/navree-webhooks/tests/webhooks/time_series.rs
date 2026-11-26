@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use http::Method;
 use navree_db::navree_schema::{IndexKind, ReferentialAction, Schema};
 use navree_db::{Db, Executor, MIGRATIONS_TABLE, Statement};
@@ -97,7 +97,7 @@ async fn pruning_takes_a_delivery_s_attempts_however_late() {
             response_body: None,
             error: None,
             duration_ms: 12,
-            created_at: start() + TimeDelta::days(9),
+            created_at: start() + Span::days(9),
         }],
     )
     .await

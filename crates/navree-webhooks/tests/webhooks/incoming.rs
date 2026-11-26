@@ -49,7 +49,7 @@ fn seen<S: WebhookSource>(hook: &VerifiedWebhook<S>, first: bool) -> Result<Json
         "first": first,
         "id": hook.id(),
         "event": hook.event_type(),
-        "timestamp": hook.timestamp().map(|t| t.timestamp()),
+        "timestamp": hook.timestamp().map(|t| t.as_secs()),
         "body": body,
     })))
 }
@@ -152,7 +152,7 @@ fn incoming_app_with(clock: Arc<FixedClock>) -> TestAppBuilder {
 }
 
 fn now() -> i64 {
-    start().timestamp()
+    start().as_secs()
 }
 
 #[tokio::test]

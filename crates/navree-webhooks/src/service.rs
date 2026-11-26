@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
+use navree_datetime::{Precision, Span, Timestamp};
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue, USER_AGENT};
 use navree_contracts::{Clock, Dispatcher, Job, JobEnvelope, JobOptions, SystemClock};
 use navree_crypto::Encrypter;
@@ -124,7 +124,7 @@ impl Deps {
             .ok_or(WebhooksError::Missing("QueueModule (a job dispatcher)"))
     }
 
-    fn now(&self) -> DateTime<Utc> {
+    fn now(&self) -> Timestamp {
         self.clock.now()
     }
 }
@@ -245,10 +245,10 @@ impl Webhooks {
     }
 
     /// The current time (the app's `dyn Clock` when it has one).
-    pub async fn now(&self) -> DateTime<Utc> {
+    pub async fn now(&self) -> Timestamp {
         match self.deps().await {
             Ok(deps) => deps.now(),
-            Err(_) => Utc::now(),
+            Err(_) => Timestamp::now(),
         }
     }
 
@@ -353,7 +353,7 @@ impl Webhooks {
         let current = self.find_in(uow, id).await?;
         let secret = generate_secret();
         let now = deps.now();
-        let overlap = TimeDelta::from_std(ROTATION_OVERLAP).unwrap_or(TimeDelta::MAX);
+        let overlap = Span::try_from(ROTATION_OVERLAP).unwrap_or(Span::MAX);
         let mut model = current.clone();
         model.secret = self.seal(deps, &secret)?;
         model.previous_secret = Some(current.secret.clone());
@@ -589,8 +589,8 @@ impl Webhooks {
         let db = deps.db()?;
         let now = deps.now();
         let cutoff = |n: u64| {
-            now.checked_sub_signed(days_of(n))
-                .unwrap_or(DateTime::<Utc>::MIN_UTC)
+            now.checked_sub(days_of(n))
+                .unwrap_or(Timestamp::MIN)
         };
         let deliveries_before = cutoff(days.unwrap_or(self.options().retain_days));
         let receipts_before = cutoff(days.unwrap_or(self.options().incoming.receipt_days));
@@ -979,7 +979,7 @@ impl Webhooks {
                     }));
                 }
                 let next_attempt_at = next_delay
-                    .map(|delay| now + TimeDelta::from_std(delay).unwrap_or(TimeDelta::MAX));
+                    .map(|delay| now + Span::try_from(delay).unwrap_or(Span::MAX));
                 delivery::Model::query()
                     .where_key(delivery.id)
                     .update(
@@ -1045,7 +1045,7 @@ impl Webhooks {
     ) -> Result<SendOutcome, WebhooksError> {
         let client = deps.client()?;
         let now = deps.now();
-        let timestamp = now.timestamp();
+        let timestamp = now.as_secs();
         let signature = self
             .signing_secrets(deps, endpoint, now)?
             .iter()
@@ -1105,7 +1105,7 @@ impl Webhooks {
         &self,
         deps: &Deps,
         endpoint: &endpoint::Model,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<Vec<String>, WebhooksError> {
         let mut secrets = vec![self.open(deps, &endpoint.secret)?];
         if let (Some(previous), Some(until)) = (
@@ -1339,11 +1339,11 @@ impl fmt::Debug for Dispatch<'_> {
 }
 
 /// `n` days (saturating).
-fn days_of(n: u64) -> TimeDelta {
+fn days_of(n: u64) -> Span {
     i64::try_from(n)
         .ok()
-        .and_then(TimeDelta::try_days)
-        .unwrap_or(TimeDelta::MAX)
+        .and_then(Span::try_days)
+        .unwrap_or(Span::MAX)
 }
 
 /// A new message id: `msg_` and a UUID v7 in simple form.
@@ -1354,7 +1354,7 @@ pub(crate) fn new_message_id() -> String {
 /// The body of a delivery: `{"type", "timestamp", "data"}`.
 pub(crate) fn render_body(
     event_type: &str,
-    timestamp: DateTime<Utc>,
+    timestamp: Timestamp,
     data: &Value,
 ) -> Result<String, WebhooksError> {
     #[derive(Serialize)]
@@ -1366,7 +1366,7 @@ pub(crate) fn render_body(
     }
     serde_json::to_string(&Body {
         kind: event_type,
-        timestamp: timestamp.to_rfc3339_opts(SecondsFormat::Secs, true),
+        timestamp: timestamp.to_rfc3339_with(Precision::Secs, true),
         data,
     })
     .map_err(|error| WebhooksError::Payload {
@@ -1440,7 +1440,7 @@ async fn insert_attempt<E: Executor + ?Sized>(
     delivery: &delivery::Model,
     number: i32,
     outcome: &SendOutcome,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<attempt::Model, WebhooksError> {
     let attempt = attempt::Model {
         id: Uuid::now_v7(),
@@ -1540,7 +1540,7 @@ mod tests {
 
     #[test]
     fn bodies_carry_type_timestamp_and_data_in_order() {
-        let at = DateTime::from_timestamp(1_793_002_627, 0).unwrap();
+        let at = Timestamp::from_secs(1_793_002_627).unwrap();
         let body = render_body("deal.won", at, &json!({ "deal": { "id": 7 } })).unwrap();
         assert_eq!(
             body,

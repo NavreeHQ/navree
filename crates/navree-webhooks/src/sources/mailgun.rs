@@ -122,7 +122,7 @@ fn signed_fields(body: &[u8]) -> Option<Signed> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::DateTime;
+    use navree_datetime::Timestamp;
     use serde_json::json;
 
     use super::*;
@@ -131,8 +131,8 @@ mod tests {
     const TIMESTAMP: i64 = 1_792_000_000;
     const TOKEN: &str = "a8ce0edb2dd8301dee6c2405235584e45aa91d1e9f979f3de0";
 
-    fn at(secs: i64) -> DateTime<chrono::Utc> {
-        DateTime::from_timestamp(secs, 0).unwrap()
+    fn at(secs: i64) -> Timestamp {
+        Timestamp::from_secs(secs).unwrap()
     }
 
     fn event(signature: &str) -> Vec<u8> {

@@ -4,7 +4,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::{HeaderMap, StatusCode, Uri};
 use navree_kernel::AppContext;
 
@@ -35,7 +35,7 @@ pub struct IncomingRequest<'a> {
     headers: &'a HeaderMap,
     body: &'a [u8],
     url: String,
-    now: DateTime<Utc>,
+    now: Timestamp,
     tolerance: Option<Tolerance>,
     keys: Option<Arc<SenderKeys>>,
     app: Option<AppContext>,
@@ -50,7 +50,7 @@ impl<'a> IncomingRequest<'a> {
             headers,
             body,
             url: "http://localhost/".to_owned(),
-            now: Utc::now(),
+            now: Timestamp::now(),
             tolerance: None,
             keys: None,
             app: None,
@@ -67,7 +67,7 @@ impl<'a> IncomingRequest<'a> {
 
     /// The request arrived at `now` (a test clock's time).
     #[must_use]
-    pub fn at(mut self, now: DateTime<Utc>) -> Self {
+    pub fn at(mut self, now: Timestamp) -> Self {
         self.now = now;
         self
     }
@@ -127,7 +127,7 @@ impl<'a> IncomingRequest<'a> {
     }
 
     /// When the request arrived.
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         self.now
     }
 
