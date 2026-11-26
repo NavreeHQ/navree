@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::HeaderMap;
 use navree_kernel::BoxFuture;
 use serde::{Deserialize, Serialize};
@@ -209,13 +209,13 @@ pub struct ProviderSubscription {
     /// The prices.
     pub items: Vec<ProviderItem>,
     /// When the trial ends.
-    pub trial_ends_at: Option<DateTime<Utc>>,
+    pub trial_ends_at: Option<Timestamp>,
     /// The start of the current period.
-    pub current_period_start: Option<DateTime<Utc>>,
+    pub current_period_start: Option<Timestamp>,
     /// The end of the current period.
-    pub current_period_end: Option<DateTime<Utc>>,
+    pub current_period_end: Option<Timestamp>,
     /// When it ends, once canceled (now or at the period's end).
-    pub ends_at: Option<DateTime<Utc>>,
+    pub ends_at: Option<Timestamp>,
     /// The metadata (`billable_type`, `billable_id`, `plan`, ...).
     pub metadata: BTreeMap<String, String>,
 }
@@ -283,7 +283,7 @@ pub struct UsageReport {
     /// supports it.
     pub idempotency_key: String,
     /// When the usage happened (the latest recorded row).
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Timestamp,
 }
 
 /// A webhook endpoint created by `billing:webhook`. `Debug` never shows the
@@ -346,7 +346,7 @@ pub struct WebhookEvent {
     /// The provider's event type.
     pub event_type: String,
     /// When the provider created the event.
-    pub occurred_at: DateTime<Utc>,
+    pub occurred_at: Timestamp,
     /// What it means (empty for events Navree does not use).
     pub actions: Vec<WebhookAction>,
 }
@@ -559,7 +559,7 @@ pub trait BillingProvider: Send + Sync + 'static {
         &self,
         headers: &HeaderMap,
         body: &[u8],
-        now: DateTime<Utc>,
+        now: Timestamp,
         tolerance: Duration,
     ) -> Result<(), WebhookError>;
 

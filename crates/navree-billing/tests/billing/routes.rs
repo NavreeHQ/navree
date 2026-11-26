@@ -243,11 +243,11 @@ async fn the_webhook_route_is_public_and_verified() {
     let fake = world.fake().await;
     let body = json!({
         "id": "evt_route", "object": "event", "type": "customer.created",
-        "created": start().timestamp(), "data": { "object": { "id": "cus_x" } }
+        "created": start().as_secs(), "data": { "object": { "id": "cus_x" } }
     })
     .to_string();
     let signature =
-        sign_stripe_webhook(fake.webhook_secret(), start().timestamp(), body.as_bytes());
+        sign_stripe_webhook(fake.webhook_secret(), start().as_secs(), body.as_bytes());
     let client = world.app.client();
     client
         .post("/api/billing/webhook")
@@ -267,7 +267,7 @@ async fn the_webhook_route_is_public_and_verified() {
         .await
         .assert_status(200)
         .assert_json_path("duplicate", json!(true));
-    let forged = sign_stripe_webhook("whsec_forged", start().timestamp(), body.as_bytes());
+    let forged = sign_stripe_webhook("whsec_forged", start().as_secs(), body.as_bytes());
     client
         .post("/api/billing/webhook")
         .header(STRIPE_SIGNATURE_HEADER, forged.as_str())
@@ -367,7 +367,7 @@ async fn routes_can_be_turned_off_and_two_billables_need_a_choice() {
         .await
         .assert_status(404);
     let fake = world.fake().await;
-    let body = json!({ "id": "evt_x", "type": "x", "created": start().timestamp(), "data": { "object": {} } })
+    let body = json!({ "id": "evt_x", "type": "x", "created": start().as_secs(), "data": { "object": {} } })
         .to_string();
     world
         .app
@@ -375,7 +375,7 @@ async fn routes_can_be_turned_off_and_two_billables_need_a_choice() {
         .post("/api/billing/webhook")
         .header(
             STRIPE_SIGNATURE_HEADER,
-            sign_stripe_webhook(fake.webhook_secret(), start().timestamp(), body.as_bytes())
+            sign_stripe_webhook(fake.webhook_secret(), start().as_secs(), body.as_bytes())
                 .as_str(),
         )
         .body(body)

@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use hmac::{Hmac, KeyInit, Mac};
 use http::{HeaderMap, HeaderValue};
 use navree_billing::{
@@ -106,7 +106,7 @@ impl BillingProvider for AgraPay {
         &self,
         headers: &HeaderMap,
         body: &[u8],
-        _now: DateTime<Utc>,
+        _now: Timestamp,
         _tolerance: Duration,
     ) -> Result<(), WebhookError> {
         let secret = self.secret.as_ref().ok_or(WebhookError::NoSecret)?;
@@ -140,7 +140,7 @@ impl BillingProvider for AgraPay {
             // The body has no id; `webhook_event_id` reads the header.
             id: String::new(),
             event_type: event["event"].as_str().unwrap_or_default().to_owned(),
-            occurred_at: DateTime::from_timestamp(event["created_at"].as_i64().unwrap_or(0), 0)
+            occurred_at: Timestamp::from_secs(event["created_at"].as_i64().unwrap_or(0)).ok()
                 .ok_or_else(|| decode("bad created_at"))?,
             actions: vec![WebhookAction::Payment(ProviderPayment {
                 id: entity["order_id"].as_str().unwrap_or_default().to_owned(),
@@ -173,7 +173,7 @@ impl BillingProvider for Liar {
         &self,
         _: &HeaderMap,
         _: &[u8],
-        _: DateTime<Utc>,
+        _: Timestamp,
         _: Duration,
     ) -> Result<(), WebhookError> {
         Err(WebhookError::NoSecret)

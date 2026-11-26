@@ -251,8 +251,7 @@ pub mod paddle {
     use super::*;
 
     fn iso(secs: i64) -> String {
-        chrono::DateTime::from_timestamp(secs, 0)
-            .unwrap()
+        navree_datetime::Timestamp::from_secs(secs).unwrap()
             .format("%Y-%m-%dT%H:%M:%S%.6fZ")
             .to_string()
     }

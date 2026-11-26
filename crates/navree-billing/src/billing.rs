@@ -6,7 +6,7 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use http::HeaderMap;
 use http::request::Parts;
 use navree_contracts::{Clock, Dispatcher, JobEnvelope};
@@ -44,7 +44,7 @@ use crate::subscription::{Proration, Subscription, SubscriptionStatus};
 use crate::webhook::{ProcessBillingEvent, WebhookReceipt};
 
 /// Cached invoice lists: billable → (expiry, invoices).
-type InvoiceCache = HashMap<(String, Uuid), (DateTime<Utc>, Vec<Invoice>)>;
+type InvoiceCache = HashMap<(String, Uuid), (Timestamp, Vec<Invoice>)>;
 
 /// What `billing:report-usage` did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -206,7 +206,7 @@ impl Billing {
         self.return_url.as_deref()
     }
 
-    pub(crate) fn now(&self) -> DateTime<Utc> {
+    pub(crate) fn now(&self) -> Timestamp {
         self.clock.now()
     }
 
@@ -913,13 +913,13 @@ impl Billing {
         &self,
         billable: &impl AsBillable,
         days: u32,
-    ) -> Result<DateTime<Utc>, BillingError> {
+    ) -> Result<Timestamp, BillingError> {
         if days == 0 {
             return Err(BillingError::invalid("days", "days must be at least 1"));
         }
         let billable = billable.billable_ref();
         let now = self.now();
-        let ends = now + TimeDelta::days(i64::from(days));
+        let ends = now + Span::days(i64::from(days));
         self.work(|uow| async move {
             match self
                 .customer_row(&uow, &billable.billable_type, billable.billable_id)
@@ -980,7 +980,7 @@ impl Billing {
     pub async fn trial_ends_at(
         &self,
         billable: &impl AsBillable,
-    ) -> Result<Option<DateTime<Utc>>, BillingError> {
+    ) -> Result<Option<Timestamp>, BillingError> {
         let billable = billable.billable_ref();
         if let Some(sub) = self.subscription(&billable).await?
             && sub.on_trial()
@@ -1181,7 +1181,7 @@ impl Billing {
         if self.options.invoice_cache_secs > 0 {
             let secs = i64::try_from(self.options.invoice_cache_secs).unwrap_or(i64::MAX);
             self.cache()
-                .insert(key, (now + TimeDelta::seconds(secs), invoices.clone()));
+                .insert(key, (now + Span::seconds(secs), invoices.clone()));
         }
         Ok(invoices)
     }
@@ -1657,7 +1657,7 @@ impl Billing {
         &self,
         uow: &Uow,
         snapshot: &ProviderSubscription,
-        at: DateTime<Utc>,
+        at: Timestamp,
         pending: &mut Vec<Pending>,
     ) -> Result<Option<subscription::Model>, BillingError> {
         let provider = self.provider.name();
@@ -1834,7 +1834,7 @@ impl Billing {
 
     /// Deletes processed events older than `days` days; returns how many.
     pub async fn prune_events(&self, days: u32) -> Result<u64, BillingError> {
-        let before = self.now() - TimeDelta::days(i64::from(days));
+        let before = self.now() - Span::days(i64::from(days));
         let deleted = event::Model::query()
             .where_(event::Model::PROCESSED_AT.is_not_null())
             .where_(event::Model::PROCESSED_AT.lt(before))

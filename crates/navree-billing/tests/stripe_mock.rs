@@ -16,7 +16,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_billing::{
     BillingProvider, CheckoutRequest, Interval, Money, NewCustomer, PaymentCustomer,
     PaymentLinkRequest, PaymentMethod, PaymentRequest, Proration, ProviderError, RefundReason,
@@ -191,7 +191,7 @@ async fn stripe_accepts_every_request_the_client_sends() {
                 price_id: "price_ai_summaries".into(),
                 quantity: 12,
                 idempotency_key: "navree-usage-0123456789abcdef".into(),
-                timestamp: Utc::now(),
+                timestamp: Timestamp::now(),
             })
             .await,
     );
@@ -219,7 +219,7 @@ fn payment(reference: &str) -> PaymentRequest {
         methods: vec![PaymentMethod::Card],
         success_url: Some("https://app.acme.test/orders/42?paid=1".into()),
         cancel_url: Some("https://app.acme.test/orders/42".into()),
-        expires_at: Some(Utc::now() + chrono::TimeDelta::hours(2)),
+        expires_at: Some(Timestamp::now() + navree_datetime::Span::hours(2)),
         metadata: BTreeMap::from([("order".to_owned(), "42".to_owned())]),
         idempotency_key: format!("navree-pay-mock-{}", Uuid::now_v7().simple()),
     }

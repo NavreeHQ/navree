@@ -46,7 +46,7 @@ async fn a_completed_checkout_becomes_a_subscription_on_trial() {
     assert_eq!(sub.quantity, 1);
     assert_eq!(
         sub.trial_ends_at,
-        Some(crate::support::start() + chrono::TimeDelta::days(14))
+        Some(crate::support::start() + navree_datetime::Span::days(14))
     );
     assert!(billing.subscribed(&agra, "pro").await.unwrap());
     assert!(!billing.subscribed(&agra, "business").await.unwrap());
@@ -85,7 +85,7 @@ async fn a_redelivered_event_is_stored_and_processed_once() {
         "id": "evt_redelivered",
         "object": "event",
         "type": "invoice.paid",
-        "created": crate::support::start().timestamp(),
+        "created": crate::support::start().as_secs(),
         "data": { "object": {
             "id": "in_manual", "customer": billing.customer(&agra).await.unwrap().unwrap().provider_customer_id,
             "amount_paid": 2900, "currency": "usd", "status": "paid"
@@ -94,7 +94,7 @@ async fn a_redelivered_event_is_stored_and_processed_once() {
     .unwrap();
     let headers = signed(
         fake.webhook_secret(),
-        crate::support::start().timestamp(),
+        crate::support::start().as_secs(),
         &body,
     );
     let first = billing.receive_webhook(&headers, &body).await.unwrap();
@@ -129,7 +129,7 @@ async fn bad_signatures_and_payloads_are_refused() {
     let billing = world.billing().await;
     let fake = world.fake().await;
     let body = br#"{"id":"evt_1","type":"customer.created","created":1,"data":{"object":{}}}"#;
-    let now = crate::support::start().timestamp();
+    let now = crate::support::start().as_secs();
 
     let error = billing
         .receive_webhook(&signed("whsec_wrong", now, body), body)
@@ -191,7 +191,7 @@ async fn older_events_do_not_overwrite_newer_state() {
                 "current_period_start": 1_790_000_000, "current_period_end": 1_792_600_000 }] }
         })
     };
-    let now = crate::support::start().timestamp();
+    let now = crate::support::start().as_secs();
     let send = |created: i64, object: Value| {
         let body = serde_json::to_vec(&json!({
             "id": format!("evt_at_{created}"), "object": "event",
@@ -430,7 +430,7 @@ async fn the_tolerance_is_configurable() {
     let billing = world.billing().await;
     let fake = world.fake().await;
     let body = br#"{"id":"evt_t","type":"customer.created","created":1,"data":{"object":{}}}"#;
-    let now = crate::support::start().timestamp();
+    let now = crate::support::start().as_secs();
 
     let error = billing
         .receive_webhook(&signed(fake.webhook_secret(), now - 61, body), body)
@@ -447,11 +447,11 @@ async fn the_tolerance_is_configurable() {
 }
 
 trait ClockNow {
-    fn clock_now(&self) -> chrono::DateTime<chrono::Utc>;
+    fn clock_now(&self) -> navree_datetime::Timestamp;
 }
 
 impl ClockNow for World {
-    fn clock_now(&self) -> chrono::DateTime<chrono::Utc> {
+    fn clock_now(&self) -> navree_datetime::Timestamp {
         use navree_contracts::Clock;
         self.clock.now()
     }

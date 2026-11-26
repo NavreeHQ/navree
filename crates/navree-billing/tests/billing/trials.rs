@@ -1,6 +1,6 @@
 //! Trials with and without a subscription.
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_billing::{BillingError, SubscriptionStatus};
 
 use crate::support::{World, builder, start};
@@ -16,7 +16,7 @@ async fn a_trial_without_a_subscription_lasts_its_days() {
     assert!(billing.access(&agra).await.unwrap().is_none());
 
     let ends = billing.start_trial(&agra, 14).await.unwrap();
-    assert_eq!(ends, start() + TimeDelta::days(14));
+    assert_eq!(ends, start() + Span::days(14));
     assert!(billing.on_trial(&agra).await.unwrap());
     assert_eq!(billing.trial_ends_at(&agra).await.unwrap(), Some(ends));
     // It never reaches the provider: no customer id.

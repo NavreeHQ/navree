@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::{Timestamp, Zoned};
 use http::{HeaderMap, Method};
 use navree_contracts::Secret;
 use navree_http_client::HttpClient;
@@ -568,7 +568,7 @@ impl BillingProvider for PaddleProvider {
         &self,
         headers: &HeaderMap,
         body: &[u8],
-        now: DateTime<Utc>,
+        now: Timestamp,
         tolerance: Duration,
     ) -> Result<(), WebhookError> {
         let secret = self.webhook_secret.as_ref().ok_or(WebhookError::NoSecret)?;
@@ -589,11 +589,11 @@ fn string(value: &Value, key: &str) -> Result<String, ProviderError> {
         .ok_or_else(|| ProviderError::decode(NAME, format!("missing `{key}`")))
 }
 
-fn time(value: &Value) -> Option<DateTime<Utc>> {
+fn time(value: &Value) -> Option<Timestamp> {
     value
         .as_str()
-        .and_then(|text| DateTime::parse_from_rfc3339(text).ok())
-        .map(|time| time.with_timezone(&Utc))
+        .and_then(|text| Zoned::parse_rfc3339(text).ok())
+        .map(|time| time.timestamp())
 }
 
 fn custom_data(value: &Value) -> BTreeMap<String, String> {
@@ -695,7 +695,7 @@ pub(crate) fn parse_invoice(value: &Value) -> Result<Invoice, ProviderError> {
             .to_lowercase(),
         pdf_url: None,
         hosted_url: None,
-        created_at: time(&value["created_at"]).unwrap_or(DateTime::<Utc>::UNIX_EPOCH),
+        created_at: time(&value["created_at"]).unwrap_or(Timestamp::UNIX_EPOCH),
     })
 }
 

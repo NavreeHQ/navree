@@ -387,7 +387,7 @@ async fn the_documented_payment_methods(billing: &Billing, workspace: &Workspace
         .methods([PaymentMethod::Upi, PaymentMethod::Card])
         .success_url("https://app.acme.test/orders/42?paid=1")
         .cancel_url("https://app.acme.test/orders/42")
-        .expires_at(chrono::Utc::now())
+        .expires_at(navree_datetime::Timestamp::now())
         .metadata("order", "42")
         .idempotency_key("order-42-attempt-2")
         .create()
@@ -406,7 +406,7 @@ async fn the_documented_payment_methods(billing: &Billing, workspace: &Workspace
         .notify_by_sms()
         .notify_by_email()
         .return_url("https://app.acme.test/thanks")
-        .expires_at(chrono::Utc::now())
+        .expires_at(navree_datetime::Timestamp::now())
         .create()
         .await;
     let event = |e: &PaymentUpdated| {

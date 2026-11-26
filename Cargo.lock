@@ -4350,7 +4350,6 @@ name = "navree-billing"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "form_urlencoded",
  "hex",
  "hmac 0.13.0",
@@ -4360,6 +4359,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",

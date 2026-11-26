@@ -31,7 +31,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use http::Method;
 use navree_billing::{
     BillingProvider, CheckoutRequest, Interval, Money, NewCustomer, PADDLE_API_VERSION,
@@ -211,7 +211,7 @@ async fn stripe_test_mode_takes_what_the_client_sends() {
                 methods: methods.clone(),
                 success_url: Some("https://app.example.in/orders/42?paid=1".into()),
                 cancel_url: Some("https://app.example.in/orders/42".into()),
-                expires_at: Some(Utc::now() + chrono::TimeDelta::hours(2)),
+                expires_at: Some(Timestamp::now() + navree_datetime::Span::hours(2)),
                 metadata: BTreeMap::from([("order".to_owned(), "42".to_owned())]),
                 idempotency_key: fresh("payment"),
             })

@@ -14,7 +14,7 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::HeaderMap;
 use navree_webhooks::{Paddle, Stripe, Tolerance, VerifyError};
 
@@ -38,7 +38,7 @@ pub fn sign_paddle_webhook(secret: &str, timestamp: i64, body: &[u8]) -> String 
 }
 
 /// The window around `now` a signed timestamp must fall in.
-fn window(now: DateTime<Utc>, tolerance: Duration) -> Option<Tolerance> {
+fn window(now: Timestamp, tolerance: Duration) -> Option<Tolerance> {
     Some(Tolerance::at(now, tolerance.as_secs()))
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn verify_stripe(
     headers: &HeaderMap,
     body: &[u8],
     secret: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
     tolerance: Duration,
 ) -> Result<(), WebhookError> {
     Stripe::verify(secret, headers, body, window(now, tolerance))
@@ -72,7 +72,7 @@ pub(crate) fn verify_paddle(
     headers: &HeaderMap,
     body: &[u8],
     secret: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
     tolerance: Duration,
 ) -> Result<(), WebhookError> {
     Paddle::verify(secret, headers, body, window(now, tolerance))
@@ -82,7 +82,7 @@ pub(crate) fn verify_paddle(
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use navree_datetime::Timestamp;
     use http::HeaderValue;
     use sha2::{Digest, Sha256};
 
@@ -90,8 +90,8 @@ mod tests {
 
     const BODY: &[u8] = br#"{"id":"evt_1","type":"invoice.paid"}"#;
 
-    fn at(secs: i64) -> DateTime<Utc> {
-        Utc.timestamp_opt(secs, 0).unwrap()
+    fn at(secs: i64) -> Timestamp {
+        Timestamp::from_secs(secs).unwrap()
     }
 
     fn with(name: &'static str, value: &str) -> HeaderMap {

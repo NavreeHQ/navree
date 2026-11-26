@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use chrono::{DateTime, Months, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use http::{HeaderMap, HeaderValue};
 use navree_contracts::Clock;
 use navree_kernel::{BoxFuture, WeakAppContext};
@@ -85,7 +85,7 @@ pub struct FakePaymentLink {
     /// Your reference.
     pub reference: String,
     /// When it expires, if it does.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
     /// The metadata (with the billable, the reference and the kind).
     pub metadata: BTreeMap<String, String>,
 }
@@ -174,11 +174,11 @@ struct FakeSubscription {
     /// Stripe's status string.
     status: &'static str,
     interval: Interval,
-    trial_end: Option<DateTime<Utc>>,
-    period_start: DateTime<Utc>,
-    period_end: DateTime<Utc>,
+    trial_end: Option<Timestamp>,
+    period_start: Timestamp,
+    period_end: Timestamp,
     cancel_at_period_end: bool,
-    canceled_at: Option<DateTime<Utc>>,
+    canceled_at: Option<Timestamp>,
     paused: bool,
     metadata: BTreeMap<String, String>,
 }
@@ -281,7 +281,7 @@ impl BillingFake {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    fn now(&self) -> DateTime<Utc> {
+    fn now(&self) -> Timestamp {
         self.clock.now()
     }
 
@@ -379,7 +379,7 @@ impl BillingFake {
             }
             let trial_end = checkout
                 .trial_days
-                .map(|days| now + TimeDelta::days(i64::from(days)));
+                .map(|days| now + Span::days(i64::from(days)));
             let subscription = FakeSubscription {
                 id: state.id("sub"),
                 customer_id: customer_id.clone(),
@@ -688,7 +688,7 @@ impl BillingFake {
             "object": "event",
             "api_version": STRIPE_API_VERSION,
             "type": event_type,
-            "created": self.now().timestamp(),
+            "created": self.now().as_secs(),
             "data": { "object": object },
         })
     }
@@ -703,7 +703,7 @@ impl BillingFake {
 
     async fn deliver(&self, event: &Value) -> Result<WebhookReceipt, BillingError> {
         let body = serde_json::to_vec(event).expect("JSON values serialize");
-        let signature = sign_stripe_webhook(&self.secret, self.now().timestamp(), &body);
+        let signature = sign_stripe_webhook(&self.secret, self.now().as_secs(), &body);
         let mut headers = HeaderMap::new();
         headers.insert(
             STRIPE_SIGNATURE_HEADER,
@@ -727,7 +727,7 @@ impl BillingFake {
         subscription: &FakeSubscription,
         amount: i64,
         paid: bool,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Value {
         let id = state.id("in");
         let number = format!("FAKE-{:04}", state.next);
@@ -743,7 +743,7 @@ impl BillingFake {
             "currency": self.currency,
             "invoice_pdf": format!("https://billing.fake.test/invoices/{id}.pdf"),
             "hosted_invoice_url": format!("https://billing.fake.test/invoices/{id}"),
-            "created": now.timestamp(),
+            "created": now.as_secs(),
             "parent": { "subscription_details": { "subscription": subscription.id } },
         });
         state
@@ -761,7 +761,7 @@ impl BillingFake {
     fn with_subscription(
         &self,
         id: &str,
-        change: impl FnOnce(&mut FakeSubscription, &Plans, DateTime<Utc>),
+        change: impl FnOnce(&mut FakeSubscription, &Plans, Timestamp),
     ) -> Result<ProviderSubscription, ProviderError> {
         let now = self.now();
         let mut state = self.state();
@@ -785,12 +785,15 @@ fn not_found(message: String) -> ProviderError {
 }
 
 /// `start` plus one period.
-fn advance(start: DateTime<Utc>, interval: Interval) -> DateTime<Utc> {
+fn advance(start: Timestamp, interval: Interval) -> Timestamp {
     let months = match interval {
-        Interval::Monthly => Months::new(1),
-        Interval::Yearly => Months::new(12),
+        Interval::Monthly => 1,
+        Interval::Yearly => 12,
     };
-    start.checked_add_months(months).unwrap_or(start)
+    let utc = start.date_time_utc();
+    utc.date()
+        .add_months(months)
+        .map_or(start, |date| date.at(utc.time()).in_utc())
 }
 
 fn quantity_of(sub: &FakeSubscription) -> i64 {
@@ -854,8 +857,8 @@ fn subscription_json(sub: &FakeSubscription) -> Value {
                 "id": item.id,
                 "object": "subscription_item",
                 "price": { "id": item.price_id, "recurring": { "usage_type": usage } },
-                "current_period_start": sub.period_start.timestamp(),
-                "current_period_end": sub.period_end.timestamp(),
+                "current_period_start": sub.period_start.as_secs(),
+                "current_period_end": sub.period_end.as_secs(),
             });
             if let Some(quantity) = item.quantity {
                 value["quantity"] = json!(quantity);
@@ -868,11 +871,11 @@ fn subscription_json(sub: &FakeSubscription) -> Value {
         "object": "subscription",
         "customer": sub.customer_id,
         "status": sub.status,
-        "trial_end": sub.trial_end.map(|t| t.timestamp()),
+        "trial_end": sub.trial_end.map(|t| t.as_secs()),
         "cancel_at_period_end": sub.cancel_at_period_end,
-        "cancel_at": if sub.cancel_at_period_end { Some(sub.period_end.timestamp()) } else { None },
-        "canceled_at": sub.canceled_at.map(|t| t.timestamp()),
-        "ended_at": if sub.status == "canceled" { sub.canceled_at.map(|t| t.timestamp()) } else { None },
+        "cancel_at": if sub.cancel_at_period_end { Some(sub.period_end.as_secs()) } else { None },
+        "canceled_at": sub.canceled_at.map(|t| t.as_secs()),
+        "ended_at": if sub.status == "canceled" { sub.canceled_at.map(|t| t.as_secs()) } else { None },
         "pause_collection": if sub.paused { json!({ "behavior": "void" }) } else { Value::Null },
         "metadata": sub.metadata,
         "items": { "object": "list", "data": items },
@@ -1307,7 +1310,7 @@ impl BillingProvider for BillingFake {
         &self,
         headers: &HeaderMap,
         body: &[u8],
-        now: DateTime<Utc>,
+        now: Timestamp,
         tolerance: Duration,
     ) -> Result<(), WebhookError> {
         verify_stripe(headers, body, &self.secret, now, tolerance)

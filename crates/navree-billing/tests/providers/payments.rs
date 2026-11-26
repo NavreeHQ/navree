@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use navree_billing::{
     Billing, BillingModule, BillingProvider, Capability, Money, PADDLE_SIGNATURE_HEADER,
@@ -46,8 +46,8 @@ struct Case {
 /// What `pay` returns: the payment id refunds name.
 type Paid = std::pin::Pin<Box<dyn std::future::Future<Output = String> + Send>>;
 
-fn at(secs: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp(secs, 0).unwrap()
+fn at(secs: i64) -> Timestamp {
+    Timestamp::from_secs(secs).unwrap()
 }
 
 fn payment_request(key: &str) -> PaymentRequest {
@@ -449,7 +449,7 @@ impl BillingProvider for Minimal {
         &self,
         _headers: &HeaderMap,
         _body: &[u8],
-        _now: DateTime<Utc>,
+        _now: Timestamp,
         _tolerance: Duration,
     ) -> Result<(), WebhookError> {
         Err(WebhookError::NoSecret)

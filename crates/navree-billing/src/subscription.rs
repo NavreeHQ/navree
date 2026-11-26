@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -100,15 +100,15 @@ pub struct Subscription {
     /// Seats.
     pub quantity: u32,
     /// When the trial ends (UTC).
-    pub trial_ends_at: Option<DateTime<Utc>>,
+    pub trial_ends_at: Option<Timestamp>,
     /// When a canceled subscription ends (UTC); set once it is canceled.
-    pub ends_at: Option<DateTime<Utc>>,
+    pub ends_at: Option<Timestamp>,
     /// The start of the current period (UTC).
-    pub current_period_start: Option<DateTime<Utc>>,
+    pub current_period_start: Option<Timestamp>,
     /// The end of the current period (UTC).
-    pub current_period_end: Option<DateTime<Utc>>,
+    pub current_period_end: Option<Timestamp>,
     /// Since when it is past due.
-    pub past_due_since: Option<DateTime<Utc>>,
+    pub past_due_since: Option<Timestamp>,
     /// `stripe`, `paddle` or `fake`.
     pub provider: String,
     /// The provider's subscription id (none for a trial without a
@@ -117,9 +117,9 @@ pub struct Subscription {
     /// The provider's customer id.
     pub provider_customer_id: Option<String>,
     /// When the local copy was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     #[serde(skip)]
-    pub(crate) evaluated_at: DateTime<Utc>,
+    pub(crate) evaluated_at: Timestamp,
     #[serde(skip)]
     pub(crate) past_due_grace_days: u32,
 }
@@ -127,7 +127,7 @@ pub struct Subscription {
 impl Subscription {
     pub(crate) fn from_row(
         row: &subscription::Model,
-        now: DateTime<Utc>,
+        now: Timestamp,
         past_due_grace_days: u32,
     ) -> Subscription {
         Subscription {
@@ -154,7 +154,7 @@ impl Subscription {
     }
 
     /// The time the checks are evaluated at.
-    pub fn evaluated_at(&self) -> DateTime<Utc> {
+    pub fn evaluated_at(&self) -> Timestamp {
         self.evaluated_at
     }
 
@@ -217,7 +217,7 @@ impl Subscription {
             SubscriptionStatus::Active => true,
             SubscriptionStatus::PastDue => {
                 let since = self.past_due_since.unwrap_or(self.evaluated_at);
-                let grace = TimeDelta::days(i64::from(self.past_due_grace_days));
+                let grace = Span::days(i64::from(self.past_due_grace_days));
                 since + grace > self.evaluated_at
             }
             SubscriptionStatus::Paused
@@ -235,12 +235,12 @@ impl Subscription {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use navree_datetime::{Span, Timestamp};
 
     use super::*;
 
-    fn now() -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap()
+    fn now() -> Timestamp {
+        Timestamp::utc(2026, 10, 26, 9, 0, 0).unwrap()
     }
 
     fn sub(status: SubscriptionStatus) -> Subscription {
@@ -254,8 +254,8 @@ mod tests {
             quantity: 1,
             trial_ends_at: None,
             ends_at: None,
-            current_period_start: Some(now() - TimeDelta::days(3)),
-            current_period_end: Some(now() + TimeDelta::days(27)),
+            current_period_start: Some(now() - Span::days(3)),
+            current_period_end: Some(now() + Span::days(27)),
             past_due_since: None,
             provider: "fake".into(),
             provider_id: Some("sub_1".into()),
@@ -277,31 +277,31 @@ mod tests {
     #[test]
     fn trials_are_valid_until_they_end() {
         let mut s = sub(SubscriptionStatus::Trialing);
-        s.trial_ends_at = Some(now() + TimeDelta::days(14));
+        s.trial_ends_at = Some(now() + Span::days(14));
         assert!(s.on_trial() && s.valid());
-        s.trial_ends_at = Some(now() - TimeDelta::seconds(1));
+        s.trial_ends_at = Some(now() - Span::seconds(1));
         assert!(!s.on_trial() && !s.valid());
     }
 
     #[test]
     fn a_cancel_keeps_it_valid_until_ends_at() {
         let mut s = sub(SubscriptionStatus::Active);
-        s.ends_at = Some(now() + TimeDelta::days(10));
+        s.ends_at = Some(now() + Span::days(10));
         assert!(s.canceled() && s.on_grace_period() && s.valid() && !s.ended());
-        s.ends_at = Some(now() - TimeDelta::days(1));
+        s.ends_at = Some(now() - Span::days(1));
         assert!(s.canceled() && !s.on_grace_period() && !s.valid() && s.ended());
         let mut s = sub(SubscriptionStatus::Canceled);
         assert!(s.canceled() && !s.valid());
-        s.ends_at = Some(now() + TimeDelta::days(1));
+        s.ends_at = Some(now() + Span::days(1));
         assert!(s.valid(), "canceled at period end, period not over");
     }
 
     #[test]
     fn past_due_is_valid_for_the_grace_days() {
         let mut s = sub(SubscriptionStatus::PastDue);
-        s.past_due_since = Some(now() - TimeDelta::days(6));
+        s.past_due_since = Some(now() - Span::days(6));
         assert!(s.past_due() && s.valid());
-        s.past_due_since = Some(now() - TimeDelta::days(7));
+        s.past_due_since = Some(now() - Span::days(7));
         assert!(!s.valid());
         s.past_due_grace_days = 0;
         s.past_due_since = Some(now());
