@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use chrono::Utc;
 use http::StatusCode;
+use navree_datetime::Timestamp;
 use navree_kernel::{AppContext, BoxError};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
 use tokio::task::JoinSet;
@@ -511,7 +511,7 @@ pub(crate) fn dead_letter(
         payload: envelope.payload().clone(),
         attempts,
         error,
-        failed_at: Utc::now(),
+        failed_at: Timestamp::now(),
     }
 }
 

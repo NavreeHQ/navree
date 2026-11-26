@@ -361,7 +361,7 @@ async fn dead_letters_go_to_the_service_dead_topic() {
         payload: bytes::Bytes::from_static(b"{\"deal\":1}"),
         attempts: 5,
         error: "smtp refused\nthe message".into(),
-        failed_at: chrono::Utc::now(),
+        failed_at: navree_datetime::Timestamp::now(),
     };
     stats.dead_letter(letter).await.unwrap();
     let records = broker.records("stats.dead");

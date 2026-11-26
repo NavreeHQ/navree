@@ -267,7 +267,7 @@ async fn setup_has_nothing_to_declare_and_dead_letters_go_to_a_topic() {
         payload: bytes::Bytes::from_static(b"{}"),
         attempts: 5,
         error: "boom".into(),
-        failed_at: chrono::Utc::now(),
+        failed_at: navree_datetime::Timestamp::now(),
     };
     transport.dead_letter(letter).await.unwrap();
     assert_eq!(broker.published(), ["navree/dead/stats/deal/won"]);
