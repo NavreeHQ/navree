@@ -170,28 +170,14 @@ impl PersonalAccessTokens {
                 format!("scope `{bad}` is not available for personal access tokens"),
             ));
         }
-        let max_days = u64::from(self.core.options.personal_access_tokens.max_days);
-        let lifetime = match lifetime {
-            Some(lifetime) if lifetime.is_zero() => {
-                return Err(OAuthError::invalid(
-                    "expires_in_days",
-                    "expires_in_days must be at least 1",
-                ));
-            }
-            Some(lifetime) if max_days > 0 && lifetime.as_secs() > max_days * DAY_SECS => {
-                return Err(OAuthError::invalid(
-                    "expires_in_days",
-                    format!("expires_in_days must be at most {max_days}"),
-                ));
-            }
-            Some(lifetime) => Some(lifetime),
-            None if max_days > 0 => Some(Duration::from_secs(max_days * DAY_SECS)),
-            None => None,
-        };
+        let lifetime =
+            bounded_lifetime(lifetime, self.core.options.personal_access_tokens.max_days)?;
         let now = self.core.now();
+        let max = Timestamp::utc(9999, 12, 31, 23, 59, 59).expect("9999");
         let expires_at = lifetime.map(|lifetime| {
             let delta = Span::try_from(lifetime).unwrap_or(Span::MAX);
-            now.checked_add(delta).unwrap_or(Timestamp::MAX)
+            now.checked_add(delta)
+                .map_or(max, |instant| instant.min(max))
         });
         let token = new_token(PERSONAL_ACCESS_TOKEN_PREFIX);
         let record = PersonalAccessToken {
@@ -268,6 +254,35 @@ impl fmt::Debug for PersonalAccessTokens {
     }
 }
 
+/// Longest finite lifetime of a personal access token (100 years), keeping
+/// stored expiries within four-digit SQL years.
+const MAX_LIFETIME_DAYS: u64 = 36_500;
+
+fn bounded_lifetime(
+    lifetime: Option<Duration>,
+    configured_max_days: u32,
+) -> Result<Option<Duration>, OAuthError> {
+    let configured = u64::from(configured_max_days);
+    let max_days = if configured == 0 {
+        MAX_LIFETIME_DAYS
+    } else {
+        configured.min(MAX_LIFETIME_DAYS)
+    };
+    match lifetime {
+        Some(lifetime) if lifetime.is_zero() => Err(OAuthError::invalid(
+            "expires_in_days",
+            "expires_in_days must be at least 1",
+        )),
+        Some(lifetime) if lifetime.as_secs() > max_days * DAY_SECS => Err(OAuthError::invalid(
+            "expires_in_days",
+            format!("expires_in_days must be at most {max_days}"),
+        )),
+        Some(lifetime) => Ok(Some(lifetime)),
+        None if configured > 0 => Ok(Some(Duration::from_secs(max_days * DAY_SECS))),
+        None => Ok(None),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -288,6 +303,29 @@ mod tests {
         assert!(
             printed.contains("CI deploys") && printed.contains("[redacted]"),
             "{printed}"
+        );
+    }
+
+    #[test]
+    fn finite_lifetimes_are_capped_at_hundred_years() {
+        assert_eq!(bounded_lifetime(None, 0).unwrap(), None);
+        assert_eq!(
+            bounded_lifetime(Some(Duration::from_secs(MAX_LIFETIME_DAYS * DAY_SECS)), 0).unwrap(),
+            Some(Duration::from_secs(MAX_LIFETIME_DAYS * DAY_SECS))
+        );
+        assert!(matches!(
+            bounded_lifetime(
+                Some(Duration::from_secs((MAX_LIFETIME_DAYS + 1) * DAY_SECS)),
+                0
+            ),
+            Err(OAuthError::Invalid {
+                field: "expires_in_days",
+                ..
+            })
+        ));
+        assert_eq!(
+            bounded_lifetime(None, u32::MAX).unwrap(),
+            Some(Duration::from_secs(MAX_LIFETIME_DAYS * DAY_SECS))
         );
     }
 }

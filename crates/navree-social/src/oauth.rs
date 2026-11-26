@@ -139,7 +139,7 @@ fn client_secret(
         let claims = json!({
             "iss": entry.config.team_id,
             "iat": now,
-            "exp": now + APPLE_SECRET_TTL_SECS,
+            "exp": now.saturating_add(APPLE_SECRET_TTL_SECS),
             "aud": audience,
             "sub": client_id,
         });
@@ -284,7 +284,7 @@ pub(crate) fn parse_token(
         _ => None,
     };
     if let Some(secs) = expires_in.filter(|s| *s > 0) {
-        token.expires_at = now.checked_add(Span::seconds(secs));
+        token.expires_at = Span::try_seconds(secs).and_then(|span| now.checked_add(span));
     }
     match body.get("refresh_token").and_then(Value::as_str) {
         Some(refresh) if !refresh.is_empty() => token = token.refresh_token(refresh),
@@ -539,11 +539,11 @@ pub(crate) fn check_token(
 ) -> Result<(), SocialError> {
     check_issuer_and_audience(entry, issuer, claims, audiences)?;
     let exp = claims.get("exp").and_then(Value::as_i64).unwrap_or(0);
-    if exp + LEEWAY_SECS <= now {
+    if exp.saturating_add(LEEWAY_SECS) <= now {
         return Err(invalid_id_token(entry, "the token has expired"));
     }
     if let Some(nbf) = claims.get("nbf").and_then(Value::as_i64)
-        && nbf - LEEWAY_SECS > now
+        && nbf.saturating_sub(LEEWAY_SECS) > now
     {
         return Err(invalid_id_token(entry, "the token is not valid yet"));
     }
@@ -1052,5 +1052,44 @@ mod tests {
         assert_eq!(token.scopes, ["read:user", "user:email"]);
         assert_eq!(token.refresh_token.unwrap().expose(), "old-refresh");
         assert!(parse_token(&github, &json!({}), now, None).is_err());
+
+        for huge in [json!(i64::MAX), json!(i64::MAX.to_string())] {
+            let unexpiring = parse_token(
+                &github,
+                &json!({ "access_token": "a", "expires_in": huge }),
+                now,
+                None,
+            )
+            .unwrap();
+            assert_eq!(unexpiring.expires_at, None);
+        }
+    }
+
+    #[test]
+    fn token_claim_leeway_bounds_extreme_timestamps() {
+        let google = entry("google", |cfg| cfg.client_id = "cid".to_owned());
+        let issuer = Issuer::Exact(vec!["https://accounts.google.com".to_owned()]);
+        let ok = json!({
+            "iss": "https://accounts.google.com",
+            "aud": "cid",
+            "exp": i64::MAX,
+            "nbf": i64::MIN,
+        });
+        assert!(check_token(&google, &issuer, &ok, &["cid"], 1_700_000_000).is_ok());
+
+        let expired = json!({
+            "iss": "https://accounts.google.com",
+            "aud": "cid",
+            "exp": i64::MIN,
+        });
+        assert!(check_token(&google, &issuer, &expired, &["cid"], 0).is_err());
+
+        let future = json!({
+            "iss": "https://accounts.google.com",
+            "aud": "cid",
+            "exp": i64::MAX,
+            "nbf": i64::MAX,
+        });
+        assert!(check_token(&google, &issuer, &future, &["cid"], 1_700_000_000).is_err());
     }
 }

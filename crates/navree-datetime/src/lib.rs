@@ -101,7 +101,9 @@
 //! the last ([`Timestamp::MIN`] and [`Timestamp::MAX`]). That is the range
 //! of the chrono crate, which held Navree's dates from 1.0, so every value
 //! an app has stored still fits, the last instant among them: Navree stores
-//! [`Timestamp::MAX`] where a time is never to come.
+//! [`Timestamp::MAX`] as a sentinel where a time is never to come, while
+//! columns ordered as SQLite `TEXT` or stored in MySQL `DATETIME` keep
+//! expiries within four-digit years (`<= 9999-12-31T23:59:59Z`).
 //!
 //! ## Text
 //!

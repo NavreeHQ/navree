@@ -96,20 +96,70 @@ pub enum SamlError {
     Metadata(String),
 }
 
-/// Parses an `xs:dateTime` (UTC; a missing zone is read as UTC).
+/// Parses an `xs:dateTime` in UTC (`YYYY-MM-DDTHH:MM:SS`, optional fractional
+/// digits, optional trailing `Z`; a missing zone is read as UTC).
 pub(crate) fn parse_instant(value: &str) -> Result<Timestamp, SamlError> {
-    let value = value.trim();
-    if let Ok(instant) = Timestamp::parse_rfc3339(value) {
-        return Ok(instant);
+    if !has_saml_instant_shape(value) {
+        return Err(SamlError::Invalid(format!("invalid time `{value}`")));
+    }
+    if value.ends_with('Z') {
+        return Timestamp::parse_rfc3339(value)
+            .map_err(|_| SamlError::Invalid(format!("invalid time `{value}`")));
     }
     DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", value)
         .map(DateTime::in_utc)
         .map_err(|_| SamlError::Invalid(format!("invalid time `{value}`")))
 }
 
+fn has_saml_instant_shape(value: &str) -> bool {
+    let b = value.as_bytes();
+    if b.len() < 19 {
+        return false;
+    }
+    let fixed_ok = b[0..4].iter().all(u8::is_ascii_digit)
+        && b[4] == b'-'
+        && b[5..7].iter().all(u8::is_ascii_digit)
+        && b[7] == b'-'
+        && b[8..10].iter().all(u8::is_ascii_digit)
+        && b[10] == b'T'
+        && b[11..13].iter().all(u8::is_ascii_digit)
+        && b[13] == b':'
+        && b[14..16].iter().all(u8::is_ascii_digit)
+        && b[16] == b':'
+        && b[17..19].iter().all(u8::is_ascii_digit)
+        && &b[17..19] != b"60";
+    if !fixed_ok {
+        return false;
+    }
+    let rest = &b[19..];
+    let rest = rest.strip_suffix(b"Z").unwrap_or(rest);
+    match rest.strip_prefix(b".") {
+        Some(frac) => !frac.is_empty() && frac.iter().all(u8::is_ascii_digit),
+        None => rest.is_empty(),
+    }
+}
+
 /// Formats an instant as SAML writes it (`2026-10-27T12:00:00Z`).
 pub(crate) fn format_instant(instant: Timestamp) -> String {
     instant.format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
+
+/// Cache lifetime for a consumed assertion id: covers `not_on_or_after + skew`
+/// plus two whole seconds so subsecond truncation never drops the entry early.
+pub(crate) fn assertion_replay_ttl(
+    not_on_or_after: Timestamp,
+    now: Timestamp,
+    skew: std::time::Duration,
+) -> std::time::Duration {
+    let remaining = not_on_or_after
+        .duration_since(now)
+        .checked_add(navree_datetime::Span::try_from(skew).unwrap_or(navree_datetime::Span::ZERO))
+        .unwrap_or(navree_datetime::Span::MAX);
+    std::time::Duration::from_secs(
+        u64::try_from(remaining.as_seconds())
+            .unwrap_or(0)
+            .saturating_add(2),
+    )
 }
 
 /// A fresh message id: `_` and 32 random letters and digits (an XML
@@ -129,11 +179,43 @@ mod tests {
         assert_eq!(parse_instant("2026-10-27T12:00:00.000Z").unwrap(), expected);
         assert_eq!(parse_instant("2026-10-27T12:00:00").unwrap(), expected);
         assert_eq!(
-            parse_instant("2026-10-27T14:00:00+02:00").unwrap(),
-            expected
+            parse_instant("2026-10-27T12:00:00.456").unwrap(),
+            Timestamp::parse_rfc3339("2026-10-27T12:00:00.456Z").unwrap()
         );
-        assert!(parse_instant("yesterday").is_err());
+        for invalid in [
+            "yesterday",
+            "2026-10-27T14:00:00+02:00",
+            "2026-10-27T12:00:00+00:00",
+            "2026-10-27T12:00:00-00:00",
+            " 2026-10-27T12:00:00Z",
+            "2026-10-27T12:00:00Z ",
+            "2026-10-27 12:00:00Z",
+            "2026-10-27t12:00:00Z",
+            "2026-10-27T12:00:00z",
+            "+02026-10-27T12:00:00Z",
+            "-2026-10-27T12:00:00Z",
+            "2026-10-27T12:00:00.",
+            "2026-10-27T12:00:00.Z",
+            "2026-10-27T23:59:60Z",
+        ] {
+            assert!(parse_instant(invalid).is_err(), "{invalid}");
+        }
         assert_eq!(format_instant(expected), "2026-10-27T12:00:00Z");
+    }
+
+    #[test]
+    fn assertion_replay_ttl_covers_subsecond_remainder() {
+        let until = parse_instant("2026-10-27T12:05:00.900Z").unwrap();
+        let now = parse_instant("2026-10-27T12:05:00.100Z").unwrap();
+        assert_eq!(
+            assertion_replay_ttl(until, now, std::time::Duration::ZERO),
+            std::time::Duration::from_secs(2)
+        );
+        let past_until = parse_instant("2026-10-27T12:04:00.900Z").unwrap();
+        assert_eq!(
+            assertion_replay_ttl(past_until, now, std::time::Duration::from_secs(60)),
+            std::time::Duration::from_secs(2)
+        );
     }
 
     #[test]

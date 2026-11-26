@@ -63,8 +63,9 @@ impl Timestamp {
     };
 
     /// The last instant: the last nanosecond of 31 December of the year
-    /// 262,142 in UTC. Navree stores it where a time is never to come, such
-    /// as an expiry that never arrives.
+    /// 262,142 in UTC. Navree stores it as a sentinel where a time is never to
+    /// come; columns that order instants as SQLite `TEXT` or store them in
+    /// MySQL `DATETIME` need four-digit years (`<= 9999-12-31T23:59:59Z`).
     pub const MAX: Timestamp = Timestamp {
         secs: MAX_SECS,
         nanos: NANOS_PER_SEC - 1,

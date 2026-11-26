@@ -5,13 +5,13 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_datetime::{Span, Timestamp};
 use navree_cache::Cache;
 use navree_contracts::{
     BoxFuture, CallTickets, Clock, IssuedTicket, RedeemedTicket, TicketCheck, TicketError,
     TicketHolder, TicketRequest,
 };
 use navree_crypto::{AppKey, CryptoError, Encrypter, random_token, sha256_hex};
+use navree_datetime::{Span, Timestamp};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -111,13 +111,13 @@ impl SealedTickets {
         {
             return Err(TicketError::WrongRoute);
         }
-        let left = u64::try_from(sealed.e - now.as_secs()).unwrap_or(1);
+        let left = u64::try_from(sealed.e.saturating_sub(now.as_secs())).unwrap_or(1);
         let first = self
             .cache
             .add(
                 &format!("navree-auth:ticket:{}", sha256_hex(sealed.n.as_bytes())),
                 &true,
-                Duration::from_secs(left + 1),
+                Duration::from_secs(left.saturating_add(2)),
             )
             .await
             .map_err(|error| TicketError::Unavailable(error.to_string()))?;
@@ -153,7 +153,8 @@ impl CallTickets for SealedTickets {
         let ttl = request
             .ttl
             .clamp(Duration::from_secs(1), TicketRequest::MAX_TTL);
-        let expires_at = now + Span::try_from(ttl).unwrap_or_else(|_| Span::seconds(300));
+        let delta = Span::try_from(ttl).unwrap_or_else(|_| Span::seconds(300));
+        let expires_at = now.checked_add(delta).unwrap_or(Timestamp::MAX);
         let sealed = Sealed {
             v: VERSION.to_owned(),
             n: random_token(22),
@@ -314,5 +315,21 @@ mod tests {
         // instance redeems what this one issued.
         let other = SealedTickets::new(general, Cache::memory(), clock);
         assert!(other.redeem(&issued.ticket, &check).await.is_ok());
+    }
+
+    #[test]
+    fn issuing_at_maximum_timestamp_saturates_expiry() {
+        let general = Arc::new(Encrypter::new(AppKey::generate()));
+        let clock = Arc::new(FixedClock::new(Timestamp::MAX));
+        let tickets = SealedTickets::new(general, Cache::memory(), clock);
+        let issued = tickets
+            .issue(&TicketRequest::new(
+                TicketHolder::guest(),
+                "share",
+                "POST",
+                "/s",
+            ))
+            .unwrap();
+        assert_eq!(issued.expires_at.as_secs(), Timestamp::MAX.as_secs());
     }
 }

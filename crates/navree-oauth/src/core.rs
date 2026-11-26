@@ -75,13 +75,9 @@ impl Core {
         self.clock.now()
     }
 
-    /// `now` plus `secs` seconds.
+    /// `now` plus `secs` seconds, clamped to four-digit SQL years.
     pub(crate) fn after(&self, secs: u64) -> Timestamp {
-        let delta = i64::try_from(secs)
-            .ok()
-            .and_then(Span::try_seconds)
-            .unwrap_or(Span::MAX);
-        self.now().checked_add(delta).unwrap_or(Timestamp::MAX)
+        after_clamped(self.now(), secs)
     }
 
     /// The absolute URL of protocol endpoint `name` (`token` →
@@ -141,5 +137,32 @@ async fn record(sink: Arc<dyn AuditSink>, entry: AuditEntry) {
     let action = entry.action.clone();
     if let Err(error) = sink.record(entry).await {
         tracing::warn!(target: "navree::audit", %error, action, "could not write an OAuth audit entry");
+    }
+}
+
+fn after_clamped(at: Timestamp, secs: u64) -> Timestamp {
+    let max = Timestamp::utc(9999, 12, 31, 23, 59, 59).expect("9999");
+    let delta = i64::try_from(secs)
+        .ok()
+        .and_then(Span::try_seconds)
+        .unwrap_or(Span::MAX);
+    at.checked_add(delta)
+        .map_or(max, |instant| instant.min(max))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn after_clamps_to_four_digit_sql_year() {
+        let at = Timestamp::utc(2026, 11, 26, 12, 0, 0).unwrap();
+        let max_sql = Timestamp::utc(9999, 12, 31, 23, 59, 59).unwrap();
+        assert_eq!(
+            after_clamped(at, 90),
+            Timestamp::utc(2026, 11, 26, 12, 1, 30).unwrap()
+        );
+        assert_eq!(after_clamped(at, 500_000_000_000), max_sql);
+        assert_eq!(after_clamped(at, u64::MAX), max_sql);
     }
 }

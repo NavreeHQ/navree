@@ -5,10 +5,10 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_datetime::{Span, Timestamp};
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_crypto::{CryptoError, Encrypter, Hasher, constant_time_eq, random_token};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{Db, Uow};
 use navree_http::HttpOptions;
 use navree_kernel::{
@@ -1186,11 +1186,12 @@ pub(crate) fn session_claims(session: &SessionState) -> SessionClaims {
     }
 }
 
-/// `at` plus `secs` seconds (saturating).
+/// `at` plus `secs` seconds, clamped to four-digit SQL years.
 pub(crate) fn after_secs(at: Timestamp, secs: u64) -> Timestamp {
+    let max = Timestamp::utc(9999, 12, 31, 23, 59, 59).expect("9999");
     let secs = i64::try_from(secs).unwrap_or(i64::MAX);
     at.checked_add(Span::try_seconds(secs).unwrap_or(Span::MAX))
-        .unwrap_or(Timestamp::MAX)
+        .map_or(max, |instant| instant.min(max))
 }
 
 /// Records `entry`, adding the impersonator of the task's unit of work

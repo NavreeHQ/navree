@@ -212,8 +212,7 @@ impl AuthService {
         let Some(user) = self.find_by_email(email).await? else {
             return Ok(Err(refuse(named, "unknown user")));
         };
-        let remaining = exp.saturating_add(LEEWAY_SECS).saturating_sub(now).max(1);
-        let ttl = Duration::from_secs(u64::try_from(remaining).unwrap_or(1));
+        let ttl = exchange_replay_ttl(exp, now);
         let seen = format!("navree-auth:exchange:{name}:{jti}");
         if !self.cache.add(&seen, &true, ttl).await? {
             return Ok(Err(refuse(named, "replayed")));
@@ -268,5 +267,33 @@ impl AuthService {
             .and_then(|response| response.json())
             .map_err(|error| format!("fetching the key set failed: {error}"))?;
         Ok(keys_from_jwks(&set))
+    }
+}
+
+fn exchange_replay_ttl(exp: i64, now: i64) -> Duration {
+    let remaining =
+        (exp.saturating_add(LEEWAY_SECS).saturating_sub(now).max(1) as u64).saturating_add(2);
+    Duration::from_secs(remaining)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn replay_ttl_covers_leeway_and_whole_second_rounding() {
+        let now = 1_700_000_000_i64;
+        assert_eq!(
+            exchange_replay_ttl(now - LEEWAY_SECS, now),
+            Duration::from_secs(3)
+        );
+        assert_eq!(
+            exchange_replay_ttl(now + 10, now),
+            Duration::from_secs((10 + LEEWAY_SECS + 2) as u64)
+        );
+        assert_eq!(
+            exchange_replay_ttl(i64::MAX, i64::MIN),
+            Duration::from_secs((i64::MAX as u64).saturating_add(2))
+        );
     }
 }

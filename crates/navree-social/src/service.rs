@@ -493,9 +493,11 @@ impl Social {
             return Err(no_token());
         }
         let access = account.access_token.as_deref().ok_or_else(no_token)?;
-        let fresh = account
-            .token_expires_at
-            .is_none_or(|at| at > rt.now() + navree_datetime::Span::seconds(60));
+        let horizon = rt
+            .now()
+            .checked_add(navree_datetime::Span::seconds(60))
+            .unwrap_or(navree_datetime::Timestamp::MAX);
+        let fresh = account.token_expires_at.is_none_or(|at| at > horizon);
         if fresh {
             return Ok(Secret::new(rt.encrypter.decrypt_string(access)?));
         }

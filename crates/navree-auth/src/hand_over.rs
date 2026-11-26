@@ -548,7 +548,13 @@ impl AuthService {
             self.hand_over_refused(None, &error, meta).await;
             return Err(error);
         };
-        if self.clock.now().as_secs() - pending.started_at > PENDING_TTL_SECS {
+        if self
+            .clock
+            .now()
+            .as_secs()
+            .saturating_sub(pending.started_at)
+            > PENDING_TTL_SECS
+        {
             return Err(self
                 .end_hand_over(
                     session,
@@ -915,7 +921,9 @@ impl AuthService {
                     platform: pending.platform.clone(),
                     app: pending.app.clone(),
                     challenge: pending.challenge.clone(),
-                    expires_at: now.as_secs() + i64::try_from(APP_CODE_TTL_SECS).unwrap_or(60),
+                    expires_at: now
+                        .as_secs()
+                        .saturating_add(i64::try_from(APP_CODE_TTL_SECS).unwrap_or(60)),
                     auth_time: Some(signed_in.auth_time),
                     finished: Some(source.finished),
                     session_id: Some(signed_in.session_id),

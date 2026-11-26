@@ -3,10 +3,10 @@
 
 use std::sync::Arc;
 
-use navree_datetime::{Span, Timestamp};
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_crypto::{CryptoError, constant_time_eq, random_token, sha256_hex};
+use navree_datetime::{Span, Timestamp};
 use navree_db::Uow;
 use navree_http::{HttpOptions, UrlSigner};
 use navree_mail::{Mailable, Mailer};
@@ -638,11 +638,12 @@ fn join_path(parts: &[&str]) -> String {
     out
 }
 
-/// `at` plus `secs` seconds (saturating).
+/// `at` plus `secs` seconds, clamped to four-digit SQL years.
 pub(crate) fn after(at: Timestamp, secs: u64) -> Timestamp {
+    let max = Timestamp::utc(9999, 12, 31, 23, 59, 59).expect("9999");
     let secs = i64::try_from(secs).unwrap_or(i64::MAX);
     at.checked_add(Span::try_seconds(secs).unwrap_or(Span::MAX))
-        .unwrap_or(Timestamp::MAX)
+        .map_or(max, |instant| instant.min(max))
 }
 
 #[cfg(test)]
@@ -664,10 +665,14 @@ mod tests {
     #[test]
     fn after_adds_seconds_and_saturates() {
         let at = Timestamp::utc(2026, 10, 25, 12, 0, 0).unwrap();
+        let max_sql = Timestamp::utc(9999, 12, 31, 23, 59, 59).unwrap();
         assert_eq!(
             after(at, 90),
             Timestamp::utc(2026, 10, 25, 12, 1, 30).unwrap()
         );
-        assert_eq!(after(at, u64::MAX), Timestamp::MAX);
+        assert_eq!(after(at, 500_000_000_000), max_sql);
+        assert_eq!(after(at, u64::MAX), max_sql);
+        assert_eq!(crate::service::after_secs(at, 500_000_000_000), max_sql);
+        assert_eq!(crate::service::after_secs(at, u64::MAX), max_sql);
     }
 }
