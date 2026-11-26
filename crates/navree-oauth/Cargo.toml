@@ -39,7 +39,6 @@ testing = ["dep:navree-testing"]
 
 [dependencies]
 base64 = { workspace = true }
-chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
 navree-access = { workspace = true }
@@ -49,6 +48,7 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 # Token digests, and `jose`: Ed25519 (EdDSA) ID tokens and the JWKS.
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }

@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use navree_contracts::{AuditEntry, AuditKind};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_openapi::ToSchema;
 use navree_orm::{Executor, Model as _, Record};
@@ -70,7 +70,7 @@ pub struct AuthorizationRequestView {
     /// the client is trusted): the page may approve at once.
     pub already_approved: bool,
     /// When the request expires.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 /// A device authorization as the device page reads it
@@ -86,7 +86,7 @@ pub struct DeviceRequestView {
     /// Whether the user already approved these scopes for this client.
     pub already_approved: bool,
     /// When the code expires.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 /// Where the browser goes after a decision.
@@ -131,9 +131,9 @@ pub struct AuthorizationView {
     /// The approved scopes.
     pub scopes: Vec<ScopeInfo>,
     /// When the user first approved it.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the approval last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// The parameters of `GET /oauth/authorize`.

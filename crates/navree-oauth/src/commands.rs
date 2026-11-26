@@ -3,8 +3,8 @@
 
 use std::fmt::Write as _;
 
-use chrono::TimeDelta;
 use navree_auth::AuthService;
+use navree_datetime::Span;
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, BoxError, CommandSpec};
 use navree_orm::Model as _;
@@ -323,7 +323,7 @@ pub(crate) async fn prune(ctx: &AppContext, args: &[String]) -> Result<String, B
         None => 7,
     };
     let core = ctx.get::<Core>().await?;
-    let cutoff = core.now() - TimeDelta::days(days);
+    let cutoff = core.now() - Span::days(days);
     let deleted = in_uow(ctx, |uow| async move {
         let mut total = 0;
         total += authorization_request::Model::query()

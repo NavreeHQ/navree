@@ -5557,7 +5557,6 @@ name = "navree-oauth"
 version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
- "chrono",
  "form_urlencoded",
  "http",
  "http-body-util",
@@ -5568,6 +5567,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",

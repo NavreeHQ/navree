@@ -6,13 +6,13 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use http::header::{AUTHORIZATION, WWW_AUTHENTICATE};
 use http::request::Parts;
 use http::{HeaderValue, StatusCode};
 use navree_access::{ALL, Ability, AbilityFactory, MANAGE, Rules};
 use navree_auth::Strategy;
 use navree_contracts::{AuthVia, BoxFuture, Principal};
+use navree_datetime::Timestamp;
 use navree_http::extract::Request;
 use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
 use navree_http::middleware::{Next, from_fn};
@@ -64,7 +64,7 @@ pub struct OAuthToken {
     pub workspace_id: Option<Uuid>,
     /// When it expires; `None` for a personal access token that never
     /// does.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
 }
 
 impl OAuthToken {
@@ -223,7 +223,7 @@ impl Strategy for OAuthStrategy {
                 let now = core.now();
                 let stale = found
                     .last_used_at
-                    .is_none_or(|last| (now - last).num_seconds() >= TOUCH_EVERY_SECS);
+                    .is_none_or(|last| (now - last).as_seconds() >= TOUCH_EVERY_SECS);
                 if stale {
                     let pats = crate::PersonalAccessTokens::new(core.clone());
                     let id = found.token_id;
