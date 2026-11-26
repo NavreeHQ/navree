@@ -57,7 +57,7 @@ pub(crate) fn build(
         #[cfg(feature = "gcs")]
         DiskConfig::Gcs(config) => cloud::gcs(name, config, &cloud::process_env())?,
         #[cfg(feature = "azure")]
-        DiskConfig::Azure(config) => cloud::azure(name, config)?,
+        DiskConfig::Azure(config) => cloud::azure(name, config, &cloud::process_env())?,
         #[allow(unreachable_patterns)]
         other => {
             // Validation rejects a driver that is not compiled in first.
@@ -100,7 +100,6 @@ pub(crate) fn not_built_in(name: &str, disk: &RegisteredDisk) -> StorageError {
 mod cloud {
     //! S3, Google Cloud Storage and Azure stores.
 
-    #[cfg(any(feature = "s3", feature = "gcs"))]
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
@@ -113,37 +112,10 @@ mod cloud {
     #[cfg(feature = "gcs")]
     use crate::options::GcsConfig;
     use crate::provider::{Provider, ProviderKind};
-    #[cfg(feature = "azure")]
-    use crate::store::cloud::Cloud;
 
     /// The process environment, for the cloud drivers' fallbacks.
-    #[cfg(any(feature = "s3", feature = "gcs"))]
     pub(super) fn process_env() -> BTreeMap<String, String> {
         std::env::vars().collect()
-    }
-
-    /// The cloud drivers use reqwest with rustls but no default crypto
-    /// provider: install ring. An error only means a process-wide provider
-    /// is already installed.
-    #[cfg(feature = "azure")]
-    fn install_crypto_provider() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    }
-
-    /// A backend error while building the store of disk `name`.
-    #[cfg(feature = "azure")]
-    fn build_error(name: &str, source: object_store::Error) -> StorageError {
-        StorageError::Backend {
-            disk: name.to_owned(),
-            source: Box::new(source),
-        }
-    }
-
-    /// Client options allowing plain HTTP for an `http://` endpoint.
-    #[cfg(feature = "azure")]
-    fn client_options(endpoint: Option<&str>) -> object_store::ClientOptions {
-        object_store::ClientOptions::new()
-            .with_allow_http(endpoint.is_some_and(|url| url.starts_with("http://")))
     }
 
     /// Where an s3 disk's requests go.
@@ -246,48 +218,22 @@ mod cloud {
 
     /// An Azure Blob Storage store.
     #[cfg(feature = "azure")]
-    pub(super) fn azure(name: &str, config: &AzureConfig) -> Result<Backend, StorageError> {
-        use object_store::azure::{AzureConfigKey, MicrosoftAzureBuilder};
+    pub(super) fn azure(
+        name: &str,
+        config: &AzureConfig,
+        env: &BTreeMap<String, String>,
+    ) -> Result<Backend, StorageError> {
+        // Keeps `store::cloud::Cloud` live under `--no-default-features --features azure`
+        // until `object_store` is removed across all three drivers.
+        const _: fn(Arc<dyn object_store::ObjectStore>) -> crate::store::cloud::Cloud =
+            crate::store::cloud::Cloud::new;
 
-        use crate::azure_sas::SharedKeySas;
-
-        install_crypto_provider();
-        let mut builder = MicrosoftAzureBuilder::from_env()
-            .with_container_name(&config.container)
-            .with_client_options(client_options(config.endpoint.as_deref()));
-        if let Some(account) = &config.account {
-            builder = builder.with_account(account);
-        }
-        if let Some(access_key) = &config.access_key {
-            builder = builder.with_access_key(access_key.expose());
-        }
-        if let Some(endpoint) = &config.endpoint {
-            builder = builder.with_endpoint(endpoint.trim_end_matches('/').to_owned());
-        }
-        // Links are signed here with the account key when there is one
-        // (object_store signs the encoded name, Azure the decoded one; see
-        // `azure_sas`). Without a key (a managed identity, say) object_store
-        // signs them with a user delegation key.
-        let shared_key = match (
-            builder.get_config_value(&AzureConfigKey::AccountName),
-            builder.get_config_value(&AzureConfigKey::AccessKey),
-        ) {
-            (Some(account), Some(key)) => {
-                Some(SharedKeySas::new(&account, &key).map_err(|error| {
-                    StorageError::InvalidOptions(format!(
-                        "storage.disks.{name}.access_key is not a base64 account key: {error}"
-                    ))
-                })?)
-            }
-            _ => None,
-        };
-        let store = Arc::new(builder.build().map_err(|error| build_error(name, error))?);
-        let mut provider = Provider::new(ProviderKind::Azure, store.clone());
-        if let Some(shared_key) = shared_key {
-            provider = provider.with_shared_key(shared_key);
-        }
+        let store = Arc::new(crate::cloud::azure::AzureStore::build_for_disk(
+            name, config, env,
+        )?);
+        let provider = Provider::from_store(ProviderKind::Azure, store.clone());
         Ok(Backend {
-            store: Arc::new(Cloud::new(store)),
+            store,
             provider: Some(provider),
         })
     }

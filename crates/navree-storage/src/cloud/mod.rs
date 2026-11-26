@@ -50,6 +50,8 @@
 //! }
 //! ```
 
+#[cfg(feature = "azure")]
+pub mod azure;
 pub mod credentials;
 #[cfg(feature = "gcs")]
 pub mod gcs;
