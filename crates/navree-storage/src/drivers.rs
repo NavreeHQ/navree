@@ -113,6 +113,7 @@ mod cloud {
     #[cfg(feature = "gcs")]
     use crate::options::GcsConfig;
     use crate::provider::{Provider, ProviderKind};
+    #[cfg(any(feature = "gcs", feature = "azure"))]
     use crate::store::cloud::Cloud;
 
     /// The process environment, for the cloud drivers' fallbacks.
@@ -124,11 +125,13 @@ mod cloud {
     /// The cloud drivers use reqwest with rustls but no default crypto
     /// provider: install ring. An error only means a process-wide provider
     /// is already installed.
+    #[cfg(any(feature = "gcs", feature = "azure"))]
     fn install_crypto_provider() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
 
     /// A backend error while building the store of disk `name`.
+    #[cfg(any(feature = "gcs", feature = "azure"))]
     fn build_error(name: &str, source: object_store::Error) -> StorageError {
         StorageError::Backend {
             disk: name.to_owned(),
@@ -137,38 +140,21 @@ mod cloud {
     }
 
     /// Client options allowing plain HTTP for an `http://` endpoint.
+    #[cfg(any(feature = "gcs", feature = "azure"))]
     fn client_options(endpoint: Option<&str>) -> object_store::ClientOptions {
         object_store::ClientOptions::new()
             .with_allow_http(endpoint.is_some_and(|url| url.starts_with("http://")))
     }
 
-    /// AWS environment variables an s3 disk reads, with whether each one is
-    /// a credential (ignored when the disk sets `access_key`).
-    #[cfg(feature = "s3")]
-    const AWS_CREDENTIAL_ENV: [&str; 12] = [
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-        "AWS_WEB_IDENTITY_TOKEN_FILE",
-        "AWS_ROLE_ARN",
-        "AWS_ROLE_SESSION_NAME",
-        "AWS_ENDPOINT_URL_STS",
-        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
-        "AWS_CONTAINER_CREDENTIALS_FULL_URI",
-        "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
-        "AWS_METADATA_ENDPOINT",
-        "AWS_IMDSV1_FALLBACK",
-    ];
-
     /// Where an s3 disk's requests go.
-    #[cfg(feature = "s3")]
+    #[cfg(all(test, feature = "s3"))]
     #[derive(Debug, PartialEq, Eq)]
     pub(crate) struct S3Address {
         /// The region requests are signed for.
         pub(crate) region: String,
-        /// The endpoint given to object_store (with the bucket as a
-        /// subdomain for virtual-hosted-style requests to a custom
-        /// endpoint), or `None` for AWS's own.
+        /// The endpoint (with the bucket as a subdomain for
+        /// virtual-hosted-style requests to a custom endpoint), or `None`
+        /// for AWS's own.
         pub(crate) endpoint: Option<String>,
         /// Virtual-hosted-style requests.
         pub(crate) virtual_hosted: bool,
@@ -177,7 +163,7 @@ mod cloud {
     /// Resolves the region and endpoint of an s3 disk: the disk's settings,
     /// then `AWS_REGION` / `AWS_DEFAULT_REGION` and `AWS_ENDPOINT_URL_S3` /
     /// `AWS_ENDPOINT_URL` / `AWS_ENDPOINT`.
-    #[cfg(feature = "s3")]
+    #[cfg(all(test, feature = "s3"))]
     pub(crate) fn s3_address(config: &S3Config, env: &BTreeMap<String, String>) -> S3Address {
         let from_env = |keys: &[&str]| {
             keys.iter()
@@ -206,7 +192,7 @@ mod cloud {
     }
 
     /// `https://host` → `https://bucket.host`.
-    #[cfg(feature = "s3")]
+    #[cfg(all(test, feature = "s3"))]
     fn bucket_subdomain(endpoint: &str, bucket: &str) -> String {
         let endpoint = endpoint.trim_end_matches('/');
         match endpoint.split_once("://") {
@@ -222,42 +208,20 @@ mod cloud {
         config: &S3Config,
         env: &BTreeMap<String, String>,
     ) -> Result<Backend, StorageError> {
-        use object_store::aws::{AmazonS3Builder, AmazonS3ConfigKey};
+        const _: fn(Arc<dyn object_store::ObjectStore>) -> crate::store::cloud::Cloud =
+            crate::store::cloud::Cloud::new;
 
-        install_crypto_provider();
-        let address = s3_address(config, env);
-        let mut builder = AmazonS3Builder::new()
-            .with_bucket_name(&config.bucket)
-            .with_region(&address.region)
-            .with_virtual_hosted_style_request(address.virtual_hosted)
-            .with_client_options(client_options(address.endpoint.as_deref()));
-        if let Some(endpoint) = &address.endpoint {
-            builder = builder.with_endpoint(endpoint);
-        }
-        match (&config.access_key, &config.secret_key) {
-            (Some(access_key), Some(secret_key)) => {
-                builder = builder
-                    .with_access_key_id(access_key)
-                    .with_secret_access_key(secret_key.expose());
-                if let Some(token) = &config.session_token {
-                    builder = builder.with_token(token.expose());
+        let store = Arc::new(
+            crate::cloud::s3::S3Store::with_env(config, env).map_err(|error| {
+                StorageError::Backend {
+                    disk: name.to_owned(),
+                    source: Box::new(error),
                 }
-            }
-            _ => {
-                for key in AWS_CREDENTIAL_ENV {
-                    if let Some(value) = env.get(key)
-                        && let Ok(config_key) =
-                            key.to_ascii_lowercase().parse::<AmazonS3ConfigKey>()
-                    {
-                        builder = builder.with_config(config_key, value);
-                    }
-                }
-            }
-        }
-        let store = Arc::new(builder.build().map_err(|error| build_error(name, error))?);
+            })?,
+        );
         Ok(Backend {
-            store: Arc::new(Cloud::new(store.clone())),
-            provider: Some(Provider::new(ProviderKind::S3, store)),
+            store: store.clone(),
+            provider: Some(Provider::from_store(ProviderKind::S3, store)),
         })
     }
 

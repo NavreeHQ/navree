@@ -54,6 +54,8 @@ pub mod credentials;
 pub mod http;
 pub mod keys;
 pub mod retry;
+#[cfg(feature = "s3")]
+pub mod s3;
 pub mod xml;
 
 use std::borrow::Cow;
