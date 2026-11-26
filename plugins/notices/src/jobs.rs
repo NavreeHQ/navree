@@ -1,7 +1,7 @@
 //! Background job and CLI command that remove expired notices.
 
-use chrono::{TimeDelta, Utc};
 use navree::contracts::{Clock, Job, JobContext};
+use navree::datetime::{Span, Timestamp};
 use navree::db::Db;
 use navree::kernel::{AppContext, BoxError, CommandSpec};
 use navree::orm::Model as _;
@@ -32,9 +32,9 @@ pub async fn expire_notices(app: &AppContext) -> Result<u64, BoxError> {
     }
     let now = match app.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
-        None => Utc::now(),
+        None => Timestamp::now(),
     };
-    let cutoff = now - TimeDelta::days(i64::from(settings.keep_days));
+    let cutoff = now - Span::days(i64::from(settings.keep_days));
     let db = app.get::<Db>().await?;
     let uow = db.uow(None, None).await;
     let removed = notice::Model::query()
