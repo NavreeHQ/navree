@@ -7,12 +7,12 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use chrono::{DateTime, TimeZone, Utc};
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules, field};
 use navree_ai::{AiModule, AiOptions, ModelConfig, ProviderConfig};
 use navree_auth::{AuthModule, AuthService};
 use navree_contracts::{Clock, FixedClock, Secret};
 use navree_crypto::CryptoModule;
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt};
 use navree_kernel::{Module, ModuleBuilder};
@@ -23,8 +23,8 @@ use uuid::Uuid;
 use wiremock::{Request, Respond, ResponseTemplate};
 
 /// When the test clock starts.
-pub fn start() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap()
+pub fn start() -> Timestamp {
+    Timestamp::utc(2026, 10, 26, 9, 0, 0).unwrap()
 }
 
 /// Options with one model `name` of provider `driver` at `url` (fast

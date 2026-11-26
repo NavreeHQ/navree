@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_http_client::{HttpClient, HttpClientError, HttpClientOptions, SsrfPolicy};
 use serde::Deserialize;
 use tokio::sync::Mutex;
@@ -26,7 +26,7 @@ const IMDS_ENDPOINT: &str = "http://169.254.169.254";
 const IMDS_TOKEN_TTL: &str = "21600";
 
 /// Credentials are refreshed this long before they expire.
-const REFRESH_BEFORE: chrono::TimeDelta = chrono::TimeDelta::minutes(5);
+const REFRESH_BEFORE: Span = Span::minutes(5);
 
 /// How long a missing metadata service is remembered.
 const MISSING_FOR: Duration = Duration::from_secs(60);
@@ -119,7 +119,7 @@ struct Document {
 /// What the cache holds.
 #[derive(Default)]
 struct State {
-    credentials: Option<(Credentials, Option<DateTime<Utc>>)>,
+    credentials: Option<(Credentials, Option<Timestamp>)>,
     /// The metadata service did not answer; don't ask again before then.
     missing_until: Option<Instant>,
 }
@@ -159,10 +159,7 @@ impl RoleCredentials {
     /// Valid credentials at `now`: cached, or fetched. `Ok(None)` when the
     /// platform offers none (no container endpoint, no metadata service or
     /// no role on the instance).
-    pub(crate) async fn get(
-        &self,
-        now: DateTime<Utc>,
-    ) -> Result<Option<Credentials>, ProviderError> {
+    pub(crate) async fn get(&self, now: Timestamp) -> Result<Option<Credentials>, ProviderError> {
         let Some(http) = &self.http else {
             return Ok(None);
         };
@@ -204,7 +201,7 @@ impl RoleCredentials {
     }
 }
 
-type Fetched = (Credentials, Option<DateTime<Utc>>);
+type Fetched = (Credentials, Option<Timestamp>);
 
 /// The container endpoint: configured, so a failure is an error.
 async fn container(
@@ -300,8 +297,7 @@ fn document(body: &str) -> Result<Fetched, ProviderError> {
     let expires = document
         .expiration
         .as_deref()
-        .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
-        .map(|at| at.with_timezone(&Utc));
+        .and_then(|at| Timestamp::parse_rfc3339(at).ok());
     Ok((
         Credentials::new(document.access_key_id, document.secret_access_key)
             .with_session_token(document.token),
@@ -311,7 +307,6 @@ fn document(body: &str) -> Result<Fetched, ProviderError> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
     use serde_json::json;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -327,8 +322,8 @@ mod tests {
         }
     }
 
-    fn now() -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 10, 27, 12, 0, 0).unwrap()
+    fn now() -> Timestamp {
+        Timestamp::utc(2026, 10, 27, 12, 0, 0).unwrap()
     }
 
     fn document_json(key: &str, expiration: &str) -> serde_json::Value {
@@ -477,7 +472,7 @@ mod tests {
             role.get(now()).await.unwrap().unwrap().access_key_id,
             "ASIA1"
         );
-        let later = Utc.with_ymd_and_hms(2026, 10, 27, 12, 5, 0).unwrap();
+        let later = Timestamp::utc(2026, 10, 27, 12, 5, 0).unwrap();
         assert!(matches!(
             role.get(later).await,
             Err(ProviderError::Unavailable { .. })

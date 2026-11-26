@@ -178,7 +178,7 @@ struct FollowUpEmail {
     #[validate(length(min = 1, max = 2000))]
     body: String,
     #[validate(skip)]
-    send_on: Option<chrono::NaiveDate>,
+    send_on: Option<navree_datetime::Date>,
 }
 
 #[tokio::test]
@@ -284,7 +284,7 @@ async fn validated_checks_the_validation_rules_and_repairs() {
         .unwrap();
 
     assert_eq!(email.subject, "Next steps");
-    assert_eq!(email.send_on, chrono::NaiveDate::from_ymd_opt(2026, 10, 30));
+    assert_eq!(email.send_on, navree_datetime::Date::new(2026, 10, 30).ok());
     let repair = fake.requests()[1].last_user_message();
     assert!(
         repair.contains("subject must be shorter than or equal to 80 characters"),

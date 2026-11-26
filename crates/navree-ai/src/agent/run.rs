@@ -4,12 +4,12 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use navree_access::{
     Ability, Accessible, ActionMarker, Authorized, PrincipalAccess, Subject, SubjectRecords,
 };
 use navree_auth::User;
 use navree_contracts::Clock;
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::AppContext;
@@ -93,7 +93,7 @@ impl AgentRun {
     }
 
     /// The time from the app's `dyn Clock`.
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         self.shared.clock.now()
     }
 

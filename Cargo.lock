@@ -4214,7 +4214,6 @@ version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
- "chrono",
  "futures-util",
  "hex",
  "http",
@@ -4228,6 +4227,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-http-client",

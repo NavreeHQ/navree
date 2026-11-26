@@ -40,7 +40,6 @@ ui = ["dep:navree-ui", "dep:navree-realtime", "dep:navree-session"]
 [dependencies]
 base64 = { workspace = true }
 bytes = { workspace = true }
-chrono = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
@@ -53,6 +52,7 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 # Bedrock requests are signed with its SigV4 signer.
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }

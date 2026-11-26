@@ -3,17 +3,17 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
 use navree_ai::{Ai, AiError, AiModule, FakeReply};
 use navree_cache::CacheModule;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_testing::TestApp;
 use uuid::Uuid;
 
 #[tokio::test]
 async fn a_user_who_spent_their_tokens_waits_until_midnight_utc() {
     let clock = Arc::new(FixedClock::new(
-        Utc.with_ymd_and_hms(2026, 10, 26, 23, 0, 0).unwrap(),
+        Timestamp::utc(2026, 10, 26, 23, 0, 0).unwrap(),
     ));
     let app = TestApp::builder()
         .config("ai.fake", true)

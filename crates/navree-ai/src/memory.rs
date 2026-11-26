@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::navree_schema::{
     Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
 };
@@ -22,7 +22,7 @@ pub const AI_MIGRATIONS: &str = "ai";
 
 /// `ai_conversations`: one row per conversation.
 pub(crate) mod conversation {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     navree_db::record! {
@@ -37,15 +37,15 @@ pub(crate) mod conversation {
             pub(crate) summarized_count: i32,
             /// A [`Pending`](super::Pending) as JSON.
             pub(crate) pending: Option<String>,
-            pub(crate) created_at: DateTime<Utc>,
-            pub(crate) updated_at: DateTime<Utc>,
+            pub(crate) created_at: Timestamp,
+            pub(crate) updated_at: Timestamp,
         }
     }
 }
 
 /// `ai_messages`: the messages of a conversation, in order.
 pub(crate) mod message {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     navree_db::record! {
@@ -57,7 +57,7 @@ pub(crate) mod message {
             pub(crate) role: String,
             /// The [`Part`](crate::Part)s as JSON.
             pub(crate) content: String,
-            pub(crate) created_at: DateTime<Utc>,
+            pub(crate) created_at: Timestamp,
         }
     }
 }
@@ -155,9 +155,9 @@ pub struct ConversationSummary {
     /// [`Conversations::rename`] set.
     pub title: Option<String>,
     /// When it started.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// A stored message of a conversation.
@@ -172,7 +172,7 @@ pub struct StoredMessage {
     /// Its parts: text, tool calls and tool results.
     pub parts: Vec<Part>,
     /// When it was written.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// A tool call waiting for the user's decision, with the results of the
@@ -311,7 +311,7 @@ impl Conversations {
         let row = self.owned(user_id, conversation_id).await?;
         let changed = conversation::Model::update_where(Filter::all().eq("id", row.id))
             .set("title", Some(title.into()))
-            .set("updated_at", Utc::now())
+            .set("updated_at", Timestamp::now())
             .execute(self.db()?)
             .await
             .map_err(db_error)?;
@@ -329,8 +329,8 @@ impl Conversations {
 
     /// Deletes conversations untouched for `days` days (what `ai:prune`
     /// runs); returns how many.
-    pub async fn prune(&self, days: u64, now: DateTime<Utc>) -> Result<u64, AiError> {
-        let cutoff = now - ChronoDuration::days(days.min(365_000) as i64);
+    pub async fn prune(&self, days: u64, now: Timestamp) -> Result<u64, AiError> {
+        let cutoff = now - Span::days(days.min(365_000) as i64);
         let ids: Vec<Uuid> = conversation::Model::select()
             .filter(Filter::all().compare("updated_at", Compare::Lt, cutoff))
             .all(self.db()?)
@@ -413,7 +413,7 @@ impl Conversations {
         agent: &str,
         first_message: &str,
     ) -> Result<conversation::Model, AiError> {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let row = conversation::Model {
             id: Uuid::now_v7(),
             user_id,
@@ -443,7 +443,7 @@ impl Conversations {
                 },
                 content: serde_json::to_string(&stored_parts(message))
                     .unwrap_or_else(|_| "[]".to_owned()),
-                created_at: Utc::now(),
+                created_at: Timestamp::now(),
             };
             record::insert(db, &row).await.map_err(db_error)?;
         }
@@ -467,7 +467,7 @@ impl Conversations {
                 .set("summarized_count", count);
         }
         changes
-            .set("updated_at", Utc::now())
+            .set("updated_at", Timestamp::now())
             .execute(self.db()?)
             .await
             .map_err(db_error)?;

@@ -10,8 +10,8 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Duration, Utc};
 use http::Uri;
+use navree_datetime::{Span, Timestamp};
 use navree_http::{AppError, UrlSigner};
 use serde_json::Value;
 use url::form_urlencoded;
@@ -53,7 +53,7 @@ pub(crate) fn action_url(
     signer: &UrlSigner,
     base: &str,
     claim: &ActionClaim,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Option<String> {
     let input = claim.input.to_string();
     if input.len() > MAX_INPUT {
@@ -70,7 +70,7 @@ pub(crate) fn action_url(
         enc(&claim.nonce),
         enc(&input),
     );
-    Some(signer.sign(&path, now + Duration::hours(BUTTON_HOURS)))
+    Some(signer.sign(&path, now + Span::hours(BUTTON_HOURS)))
 }
 
 fn refused() -> AppError {
@@ -98,7 +98,7 @@ pub(crate) fn read_action(
     signer: &UrlSigner,
     base: &str,
     uri: &Uri,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<ActionClaim, AppError> {
     if uri.path() != format!("{base}/act") || !signer.verify(uri, now) {
         return Err(refused());
@@ -132,11 +132,11 @@ pub(crate) fn context_ref(
     user: Uuid,
     kind: &str,
     key: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> String {
     signer.sign(
         &format!("{base}/context?k={}&id={}&u={user}", enc(kind), enc(key)),
-        now + Duration::hours(CONTEXT_HOURS),
+        now + Span::hours(CONTEXT_HOURS),
     )
 }
 
@@ -147,7 +147,7 @@ pub(crate) fn read_context(
     base: &str,
     text: &str,
     user: Uuid,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<ContextClaim, AppError> {
     let wrong = || {
         AppError::forbidden()
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn a_signed_button_reads_back_whole() {
         let signer = UrlSigner::new(b"test key");
-        let now = Utc::now();
+        let now = Timestamp::now();
         let claim = claim();
         let url = action_url(&signer, "/assistant", &claim, now).unwrap();
         let read = read_action(&signer, "/assistant", &url.parse().unwrap(), now).unwrap();
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn a_changed_moved_or_old_button_is_refused() {
         let signer = UrlSigner::new(b"test key");
-        let now = Utc::now();
+        let now = Timestamp::now();
         let claim = claim();
         let url = action_url(&signer, "/assistant", &claim, now).unwrap();
         let other = Uuid::now_v7().to_string();
@@ -220,7 +220,7 @@ mod tests {
                 "{forged}"
             );
         }
-        let later = now + Duration::hours(BUTTON_HOURS) + Duration::seconds(1);
+        let later = now + Span::hours(BUTTON_HOURS) + Span::seconds(1);
         assert!(read_action(&signer, "/assistant", &url.parse().unwrap(), later).is_err());
         let stranger = UrlSigner::new(b"another key");
         assert!(read_action(&stranger, "/assistant", &url.parse().unwrap(), now).is_err());
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn a_context_is_one_readers_and_unchanged() {
         let signer = UrlSigner::new(b"test key");
-        let now = Utc::now();
+        let now = Timestamp::now();
         let user = Uuid::now_v7();
         let signed = context_ref(&signer, "/assistant", user, "order", "1042", now);
         assert_eq!(

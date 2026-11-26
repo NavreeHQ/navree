@@ -6,10 +6,10 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Days, Utc};
 use futures_util::StreamExt;
 use navree_cache::{Cache, Ttl};
 use navree_contracts::{Clock, SystemClock};
+use navree_datetime::{Time, Timestamp};
 use navree_http_client::{HttpClient, HttpClientOptions, SsrfPolicy};
 use navree_kernel::{AppContext, BoxFuture, WeakAppContext};
 use serde_json::Value;
@@ -901,17 +901,17 @@ fn backoff(base_ms: u64, retry: u32) -> Duration {
     Duration::from_millis(base_ms.saturating_mul(factor)).min(MAX_BACKOFF)
 }
 
-fn budget_key(user: Uuid, now: DateTime<Utc>) -> String {
+fn budget_key(user: Uuid, now: Timestamp) -> String {
     format!("ai:budget:{user}:{}", now.format("%Y-%m-%d"))
 }
 
 /// The time to the next midnight UTC (at least a second).
-pub(crate) fn until_midnight(now: DateTime<Utc>) -> Duration {
+pub(crate) fn until_midnight(now: Timestamp) -> Duration {
     let midnight = now
-        .date_naive()
-        .checked_add_days(Days::new(1))
-        .and_then(|day| day.and_hms_opt(0, 0, 0))
-        .map(|naive| naive.and_utc())
+        .date_time_utc()
+        .date()
+        .tomorrow()
+        .map(|day| day.at(Time::MIDNIGHT).in_utc())
         .unwrap_or(now);
     (midnight - now)
         .to_std()
@@ -952,8 +952,6 @@ pub(crate) fn extract_json(text: &str) -> Result<Value, String> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
-
     use super::*;
 
     #[test]
@@ -966,7 +964,7 @@ mod tests {
 
     #[test]
     fn midnight_utc() {
-        let now = Utc.with_ymd_and_hms(2026, 10, 26, 23, 0, 0).unwrap();
+        let now = Timestamp::utc(2026, 10, 26, 23, 0, 0).unwrap();
         assert_eq!(until_midnight(now), Duration::from_secs(3600));
     }
 
