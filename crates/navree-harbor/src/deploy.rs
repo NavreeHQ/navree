@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 
 use crate::config::{HarborConfig, Role};
 use crate::env::{frontend_env, server_env, slot_env};
@@ -37,7 +37,7 @@ pub struct ReleaseMeta {
 
 impl ReleaseMeta {
     /// The release built at `now` from `commit` (hash and subject).
-    pub fn new(now: DateTime<Utc>, commit: Option<(String, String)>) -> ReleaseMeta {
+    pub fn new(now: Timestamp, commit: Option<(String, String)>) -> ReleaseMeta {
         let stamp = now.format("%Y%m%d-%H%M%S").to_string();
         match commit {
             Some((hash, subject)) => {
