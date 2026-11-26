@@ -27,7 +27,7 @@ workspace = true
 ## S3 and S3-compatible disks: AWS, MinIO, Cloudflare R2, DigitalOcean Spaces.
 s3 = ["object_store/aws-base", "__cloud"]
 ## Google Cloud Storage disks.
-gcs = ["object_store/gcp-base", "__cloud"]
+gcs = ["object_store/gcp-base", "__cloud", "dep:base64", "dep:ring"]
 ## Azure Blob Storage disks.
 azure = ["object_store/azure-base", "__cloud", "dep:base64"]
 # Shared by the cloud drivers: HTTPS on reqwest with rustls and ring (never
@@ -67,6 +67,7 @@ percent-encoding = { workspace = true }
 quick-xml = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
+ring = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 serde = { workspace = true }
 # The table of a disk whose driver a module registers, kept as its settings.
