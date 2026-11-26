@@ -51,6 +51,8 @@
 //! ```
 
 pub mod credentials;
+#[cfg(feature = "gcs")]
+pub mod gcs;
 pub mod http;
 pub mod keys;
 pub mod retry;
