@@ -803,7 +803,7 @@ fn parse_format(input: syn::parse::ParseStream<'_>) -> syn::Result<String> {
         "Byte" => "byte",
         "Binary" => "binary",
         "Date" => "date",
-        "DateTime" => "date-time",
+        "Timestamp" | "Zoned" | "DateTime" => "date-time",
         "Duration" => "duration",
         "Password" => "password",
         "Uuid" => "uuid",
@@ -1244,7 +1244,7 @@ fn is_component(ty: &Type) -> bool {
             match name.as_str() {
                 "String" | "str" | "char" | "bool" | "usize" | "u8" | "u16" | "u32" | "u64"
                 | "u128" | "isize" | "i8" | "i16" | "i32" | "i64" | "i128" | "f32" | "f64"
-                | "Uuid" | "DateTime" | "NaiveDate" | "NaiveDateTime" | "NaiveTime" | "Value"
+                | "Uuid" | "Timestamp" | "Zoned" | "Date" | "DateTime" | "Time" | "Value"
                 | "Vec" | "BTreeMap" | "HashMap" | "Map" | "IndexMap" | "HashSet" | "BTreeSet"
                 | "Object" => false,
                 "Option" | "Box" | "Arc" | "Rc" | "Cow" => argument.is_some_and(is_component),
@@ -1372,5 +1372,33 @@ mod tests {
         let field = data.fields.iter().next().unwrap();
         let error = FieldArgs::parse(&field.attrs).err().map(|e| e.to_string());
         assert!(error.unwrap().contains("takes `value_type`"));
+    }
+
+    #[test]
+    fn datetime_formats_and_leaf_types_match_navree_datetime() {
+        use syn::parse::Parser as _;
+
+        for (input, expected) in [
+            ("Timestamp", "date-time"),
+            ("Zoned", "date-time"),
+            ("DateTime", "date-time"),
+            ("Date", "date"),
+        ] {
+            let parsed = syn::parse_str::<Ident>(input).unwrap();
+            let got = parse_format.parse2(parsed.to_token_stream()).unwrap();
+            assert_eq!(got, expected, "{input}");
+        }
+        for leaf in [
+            "Timestamp",
+            "Zoned",
+            "Date",
+            "DateTime",
+            "Time",
+            "navree::datetime::Timestamp",
+            "Option<Timestamp>",
+        ] {
+            let ty: Type = syn::parse_str(leaf).unwrap();
+            assert!(!is_component(&ty), "{leaf} should be a leaf type");
+        }
     }
 }
