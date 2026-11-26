@@ -2,7 +2,7 @@
 //! with lakh and crore grouping (`₹1,00,000`), phone numbers with spaces
 //! (`+91 98765 43210`) and days as `5 Nov 2026`.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 
 /// `n` with Indian grouping: the last three digits, then pairs (`12,34,567`).
 pub fn grouped(n: u64) -> String {
@@ -63,7 +63,7 @@ pub fn e164(typed: &str) -> String {
 }
 
 /// A day as `5 Nov 2026`.
-pub fn day(date: NaiveDate) -> String {
+pub fn day(date: Date) -> String {
     date.format("%-d %b %Y").to_string()
 }
 
@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn days_read_like_a_calendar() {
-        let day_one = NaiveDate::from_ymd_opt(2026, 11, 5).unwrap_or_default();
+        let day_one = Date::new(2026, 11, 5).expect("a valid date");
         assert_eq!(day(day_one), "5 Nov 2026");
     }
 }

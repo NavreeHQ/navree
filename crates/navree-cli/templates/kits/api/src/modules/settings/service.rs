@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use chrono::Utc;
+use navree::datetime::Timestamp;
 use navree::db::Uow;
 use navree::http::AppError;
 use navree::injectable;
@@ -51,7 +51,7 @@ impl SettingsService {
                 return Err(AppError::not_found());
             };
             record.slug = slug;
-            record.updated_at = Utc::now();
+            record.updated_at = Timestamp::now();
             record.save(uow).await?;
             workspace = record.model().clone();
         }

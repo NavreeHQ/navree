@@ -1056,7 +1056,7 @@ fn ui_navree_counts_today_in_the_apps_time_zone() {
         "{pages}"
     );
     assert!(pages.contains("zone.today().date()"), "{pages}");
-    for fixed in ["TimeDelta", "minutes(", "330"] {
+    for fixed in ["Span", "minutes(", "330"] {
         assert!(!pages.contains(fixed), "a fixed offset: {fixed}\n{pages}");
     }
 }
@@ -1113,7 +1113,7 @@ fn ui_navree_has_the_features_and_crates_its_pages_need() {
         "the default features carry the ones the pages use"
     );
     assert_eq!(navree_features(&root), ["postgres"]);
-    for dependency in ["chrono", "futures-util", "http", "serde", "tokio", "uuid"] {
+    for dependency in ["futures-util", "http", "serde", "tokio", "uuid"] {
         assert!(
             manifest["dependencies"].get(dependency).is_some(),
             "{dependency}"

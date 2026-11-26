@@ -1,7 +1,7 @@
 //! The {{ plural_words }} table of the {{ module_words }} module: sort, filter, search and pages
 //! in the URL, all from one definition.
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 {% if model_path %}
 use navree::db::Uow;
 use navree::http::Result;
@@ -29,7 +29,7 @@ pub struct {{ type_name }} {
     pub name: String,
     /// Created
     #[col(sortable, filter = date)]
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     // More columns to copy:
     //
     // A badge in a tone chosen by `fn stage_tone(stage: &String) -> BadgeVariant`,

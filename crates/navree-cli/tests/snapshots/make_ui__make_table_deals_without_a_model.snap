@@ -6,7 +6,7 @@ expression: files.to_string()
 //! The deals table of the deals module: sort, filter, search and pages
 //! in the URL, all from one definition.
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::ui::{DataTable, Empty, TablePage, TableQuery, TableRow, icons};
 use uuid::Uuid;
 
@@ -23,7 +23,7 @@ pub struct DealRow {
     pub name: String,
     /// Created
     #[col(sortable, filter = date)]
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     // More columns to copy:
     //
     // A badge in a tone chosen by `fn stage_tone(stage: &String) -> BadgeVariant`,

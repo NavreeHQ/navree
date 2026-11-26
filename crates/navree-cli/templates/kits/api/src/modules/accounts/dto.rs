@@ -1,6 +1,6 @@
 //! Response bodies of `/api/v1/account`.
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::openapi::ToSchema;
 use serde::Serialize;
 use uuid::Uuid;
@@ -16,9 +16,9 @@ pub struct AccountSession {
     /// The client's user agent.
     pub user_agent: Option<String>,
     /// When its tokens were last refreshed.
-    pub last_active_at: DateTime<Utc>,
+    pub last_active_at: Timestamp,
     /// When it ends unless it is refreshed again.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 /// `{data: [AccountSession]}`.
