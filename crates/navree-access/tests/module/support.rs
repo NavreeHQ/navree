@@ -5,7 +5,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::Method;
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, Accessible, Authorized, DELETE, READ,
@@ -34,7 +34,7 @@ navree_db::record! {
         pub title: String,
         pub status: String,
         pub published: bool,
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
@@ -340,6 +340,6 @@ pub async fn insert_post(
 }
 
 /// Parses an RFC 3339 timestamp.
-pub fn timestamp(s: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
+pub fn timestamp(s: &str) -> Timestamp {
+    Timestamp::parse_rfc3339(s).unwrap()
 }

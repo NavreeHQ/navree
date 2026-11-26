@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_access::{Authorized, Rules, Update, field};
 use uuid::Uuid;
 
@@ -15,7 +15,7 @@ fn post(author: Uuid) -> Post {
         title: "Hello".into(),
         status: "draft".into(),
         published: false,
-        created_at: Utc::now(),
+        created_at: Timestamp::now(),
     }
 }
 

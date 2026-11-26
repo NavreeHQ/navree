@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthVia, Principal};
 use navree_db::record::{self, Filter};
 use navree_db::{Db, DbError, ErrorKind, Executor, Record as _, Uow};
@@ -31,7 +31,7 @@ pub struct RoleInfo {
     /// The permissions the role grants, sorted.
     pub permissions: Vec<String>,
     /// When the role was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// Manages roles, permissions and role assignments. Provided and exported
@@ -79,7 +79,7 @@ impl AccessService {
                 id: Uuid::now_v7(),
                 name: name.to_owned(),
                 description: description.map(str::to_owned),
-                created_at: Utc::now(),
+                created_at: Timestamp::now(),
             },
         )
         .await?;

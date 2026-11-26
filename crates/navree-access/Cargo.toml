@@ -32,11 +32,11 @@ test-mysql = ["navree-db/mysql"]
 # migration), services, the route authorizer, extractors, endpoints and
 # commands.
 [dependencies]
-chrono = { workspace = true }
 http = { workspace = true }
 navree-bounded = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }

@@ -227,13 +227,13 @@ pub fn typed_value(kind: Kind, value: &Value) -> Option<SqlValue> {
     let text = value.as_str()?;
     match kind {
         Kind::Uuid => uuid::Uuid::parse_str(text).ok().map(SqlValue::from),
-        Kind::Timestamp | Kind::TimestampTz => chrono::DateTime::parse_from_rfc3339(text)
+        Kind::Timestamp | Kind::TimestampTz => navree_datetime::Zoned::parse_rfc3339(text)
             .ok()
-            .map(|at| SqlValue::from(at.with_timezone(&chrono::Utc))),
-        Kind::DateTime => chrono::DateTime::parse_from_rfc3339(text)
+            .map(|at| SqlValue::from(at.timestamp())),
+        Kind::DateTime => navree_datetime::Zoned::parse_rfc3339(text)
             .ok()
-            .map(|at| SqlValue::from(at.with_timezone(&chrono::Utc).naive_utc())),
-        Kind::Date => chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d")
+            .map(|at| SqlValue::from(at.timestamp().date_time_utc())),
+        Kind::Date => navree_datetime::Date::parse("%Y-%m-%d", text)
             .ok()
             .map(SqlValue::from),
         _ => None,
@@ -295,15 +295,15 @@ pub fn sql_value(value: &Value) -> SqlValue {
 /// `YYYY-MM-DD`, times as `HH:MM:SS[.f]`, decimals as numbers, bytes as
 /// `null` (they have no condition form), anything else as its JSON.
 pub fn value_json(value: &SqlValue) -> Value {
-    use chrono::{SecondsFormat, Utc};
+    use navree_datetime::Precision;
     let micros =
-        |at: chrono::DateTime<Utc>| Value::String(at.to_rfc3339_opts(SecondsFormat::Micros, true));
+        |at: navree_datetime::Timestamp| Value::String(at.to_rfc3339_with(Precision::Micros, true));
     match value {
         SqlValue::Null(_) => Value::Null,
         SqlValue::Uuid(uuid) => Value::String(uuid.hyphenated().to_string()),
         SqlValue::Timestamp(at) => micros(*at),
-        SqlValue::TimestampTz(at) => micros(at.with_timezone(&Utc)),
-        SqlValue::DateTime(at) => micros(at.and_utc()),
+        SqlValue::TimestampTz(at) => micros(at.timestamp()),
+        SqlValue::DateTime(at) => micros(at.in_utc()),
         SqlValue::Date(date) => Value::String(date.format("%Y-%m-%d").to_string()),
         SqlValue::Time(time) => Value::String(time.format("%H:%M:%S%.f").to_string()),
         SqlValue::Bytes(_) => Value::Null,
