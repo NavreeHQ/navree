@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree_datetime::{Date, Timestamp};
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_kernel::{BoxError, BoxFuture, Module, ModuleBuilder};
@@ -44,10 +44,10 @@ pub struct Contact {
     #[searchable(filter, sort)]
     pub score: i64,
     #[searchable(sort)]
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     #[searchable(embed)]
     pub notes: Option<String>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<Timestamp>,
 }
 
 /// `companies`: derived and workspace-scoped (the derive finds the
@@ -75,7 +75,7 @@ pub struct Deal {
     pub company_id: Option<Uuid>,
     pub stage: String,
     pub amount_cents: i64,
-    pub closes_on: Option<NaiveDate>,
+    pub closes_on: Option<Date>,
     pub archived: bool,
 }
 
@@ -227,7 +227,7 @@ pub async fn app(engine: &str, sync: &str) -> TestApp {
     builder(engine, sync).build().await
 }
 
-pub fn now() -> DateTime<Utc> {
+pub fn now() -> Timestamp {
     "2026-10-26T12:00:00Z".parse().unwrap()
 }
 

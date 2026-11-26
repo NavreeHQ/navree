@@ -11,8 +11,8 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use chrono::{DateTime, Duration, Utc};
 use navree_access::{Ability, Accessible, Cond, Conditions, Read, Rule};
+use navree_datetime::{Precision, Span, Timestamp};
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, PageQuery};
 use navree_kernel::{Module, ModuleBuilder};
@@ -28,7 +28,7 @@ use uuid::Uuid;
 use crate::servers::Server;
 
 mod item {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use navree_orm::Model;
     use navree_search::Searchable;
     use serde::Serialize;
@@ -85,9 +85,9 @@ mod item {
         #[searchable(filter)]
         pub flag: bool,
         #[searchable(filter, sort)]
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         #[searchable(filter)]
-        pub due_at: Option<DateTime<Utc>>,
+        pub due_at: Option<Timestamp>,
         pub note: Option<String>,
     }
 }
@@ -133,24 +133,22 @@ impl Module for ItemsModule {
 /// The values records and conditions draw from, so they often meet.
 struct Pools {
     owners: [Uuid; 3],
-    times: [DateTime<Utc>; 5],
+    times: [Timestamp; 5],
 }
 
 impl Pools {
     fn new() -> Self {
-        let base = DateTime::parse_from_rfc3339("2026-10-25T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let base = Timestamp::parse_rfc3339("2026-10-25T12:00:00Z").unwrap();
         let mut owners = [Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7()];
         owners.sort();
         Pools {
             owners,
             times: [
                 base,
-                base + Duration::microseconds(250_000),
-                base + Duration::microseconds(250_001),
-                base + Duration::milliseconds(500),
-                base + Duration::seconds(1),
+                base + Span::micros(250_000),
+                base + Span::micros(250_001),
+                base + Span::millis(500),
+                base + Span::seconds(1),
             ],
         }
     }
@@ -160,9 +158,7 @@ impl Pools {
     }
 
     fn time(&self, seed: u8) -> Value {
-        json!(
-            self.times[usize::from(seed) % 5].to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
-        )
+        json!(self.times[usize::from(seed) % 5].to_rfc3339_with(Precision::Micros, true))
     }
 }
 

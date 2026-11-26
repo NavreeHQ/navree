@@ -243,7 +243,7 @@ async fn date_ranges_and_sorts_compare_dates() {
     let app = support::app(support::database_engine(), "inline").await;
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
-    let date = |s: &str| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    let date = |s: &str| navree_datetime::Date::parse("%Y-%m-%d", s).unwrap();
     let deals = insert(
         &db,
         [

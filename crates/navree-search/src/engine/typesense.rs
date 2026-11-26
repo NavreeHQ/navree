@@ -98,7 +98,7 @@ impl TypesenseEngine {
         index: &str,
         settings: &IndexSettings,
     ) -> Result<String, SearchError> {
-        let name = format!("{index}_{}", chrono::Utc::now().timestamp_millis());
+        let name = format!("{index}_{}", navree_datetime::Timestamp::now().as_millis());
         self.api
             .json(
                 Method::POST,
