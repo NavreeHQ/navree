@@ -43,7 +43,6 @@ fuzzing = []
 bytes = { workspace = true }
 # A guess at the encoding of a legacy CSV upload (Windows-1256, Shift_JIS, ...).
 chardetng = { workspace = true }
-chrono = { workspace = true }
 csv = { workspace = true }
 encoding_rs = { workspace = true }
 futures-util = { workspace = true }
@@ -51,6 +50,7 @@ hex = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-i18n = { workspace = true, optional = true }

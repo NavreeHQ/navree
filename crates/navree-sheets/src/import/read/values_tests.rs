@@ -2,7 +2,7 @@
 //! of a cell format, times to the millisecond, the largest double, and the
 //! text of a cell that has shapes in it.
 
-use chrono::NaiveDate;
+use navree_datetime::Date;
 
 use super::opening_tests::{
     ONE_SHEET, cells_of, ods, ods_text_cell, sheet_rel, text, xlsx_sheet, xlsx_with,
@@ -55,17 +55,19 @@ fn a_number_format_given_a_built_in_id_is_that_format_in_every_format() {
 
 // Times.
 
-fn at(day: u32, hour: u32, minute: u32, second: u32, milli: u32) -> Cell {
+fn at(day: u8, hour: u8, minute: u8, second: u8, milli: u32) -> Cell {
     Cell::DateTime(
-        NaiveDate::from_ymd_opt(2026, 3, day)
-            .unwrap()
-            .and_hms_milli_opt(hour, minute, second, milli)
-            .unwrap(),
+        Date::new(2026, 3, day).unwrap().at(
+            navree_datetime::Time::new(hour, minute, second)
+                .unwrap()
+                .with_nanos(milli * 1_000_000)
+                .unwrap(),
+        ),
     )
 }
 
-fn date(day: u32) -> Cell {
-    Cell::Date(NaiveDate::from_ymd_opt(2026, 3, day).unwrap())
+fn date(day: u8) -> Cell {
+    Cell::Date(Date::new(2026, 3, day).unwrap())
 }
 
 #[test]

@@ -6,7 +6,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
+use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -38,9 +38,9 @@ pub enum Cell {
     /// `true` or `false`.
     Bool(bool),
     /// A calendar date.
-    Date(NaiveDate),
+    Date(Date),
     /// A date and time (UTC for values that had a zone).
-    DateTime(NaiveDateTime),
+    DateTime(DateTime),
 }
 
 impl Cell {
@@ -113,8 +113,8 @@ pub(crate) fn float_text(n: f64) -> String {
 }
 
 /// `2026-10-27 14:30:00`, with the fraction of a second when there is one.
-fn datetime_text(at: &NaiveDateTime) -> String {
-    if at.and_utc().timestamp_subsec_nanos() == 0 {
+fn datetime_text(at: &DateTime) -> String {
+    if at.time().nanosecond() == 0 {
         at.format("%Y-%m-%d %H:%M:%S").to_string()
     } else {
         at.format("%Y-%m-%d %H:%M:%S%.3f").to_string()
@@ -122,7 +122,7 @@ fn datetime_text(at: &NaiveDateTime) -> String {
 }
 
 /// Turns a value into a [`Cell`]: what `#[derive(Exportable)]` calls on
-/// every field. Implemented for text, numbers, booleans, `chrono` dates and
+/// every field. Implemented for text, numbers, booleans, dates and
 /// times, `Uuid`, `serde_json::Value`, `Option<T>` (`None` is empty) and
 /// references; implement it for your own types, or point a field at a
 /// function with `#[export(with = "path")]`.
@@ -239,27 +239,33 @@ impl IntoCell for f64 {
     }
 }
 
-impl IntoCell for NaiveDate {
+impl IntoCell for Date {
     fn to_cell(&self) -> Cell {
         Cell::Date(*self)
     }
 }
 
-impl IntoCell for NaiveDateTime {
+impl IntoCell for DateTime {
     fn to_cell(&self) -> Cell {
         Cell::DateTime(*self)
     }
 }
 
-impl IntoCell for NaiveTime {
+impl IntoCell for Time {
     fn to_cell(&self) -> Cell {
         Cell::Text(self.format("%H:%M:%S").to_string())
     }
 }
 
-impl<Tz: TimeZone> IntoCell for DateTime<Tz> {
+impl IntoCell for Timestamp {
     fn to_cell(&self) -> Cell {
-        Cell::DateTime(self.naive_utc())
+        Cell::DateTime(self.date_time_utc())
+    }
+}
+
+impl IntoCell for Zoned {
+    fn to_cell(&self) -> Cell {
+        Cell::DateTime(self.timestamp().date_time_utc())
     }
 }
 
@@ -287,7 +293,7 @@ impl IntoCell for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
+    use navree_datetime::{Date, Time, Timestamp};
     use serde_json::json;
 
     #[test]
@@ -301,10 +307,14 @@ mod tests {
         assert_eq!(true.to_cell(), Cell::Bool(true));
         assert_eq!(None::<String>.to_cell(), Cell::Empty);
         assert_eq!(Some(3u8).to_cell(), Cell::Int(3));
-        let date = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
+        let date = Date::new(2026, 10, 27).unwrap();
         assert_eq!(date.to_cell(), Cell::Date(date));
-        let at = Utc.with_ymd_and_hms(2026, 10, 27, 14, 30, 0).unwrap();
-        assert_eq!(at.to_cell(), Cell::DateTime(at.naive_utc()));
+        let at = Timestamp::utc(2026, 10, 27, 14, 30, 0).unwrap();
+        assert_eq!(at.to_cell(), Cell::DateTime(at.date_time_utc()));
+        assert_eq!(
+            at.in_zone(navree_datetime::Zone::UTC).to_cell(),
+            Cell::DateTime(at.date_time_utc())
+        );
         assert_eq!(json!(5).to_cell(), Cell::Int(5));
         assert_eq!(json!(null).to_cell(), Cell::Empty);
         assert_eq!(json!(["a"]).to_cell(), Cell::Text("[\"a\"]".into()));
@@ -315,10 +325,7 @@ mod tests {
         assert_eq!(Cell::Float(3.0).to_text(), "3");
         assert_eq!(Cell::Float(2.25).to_text(), "2.25");
         assert_eq!(Cell::Bool(false).to_text(), "false");
-        let at = NaiveDate::from_ymd_opt(2026, 1, 2)
-            .unwrap()
-            .and_hms_opt(3, 4, 5)
-            .unwrap();
+        let at = Date::new(2026, 1, 2).unwrap().at(Time::new(3, 4, 5).unwrap());
         assert_eq!(Cell::DateTime(at).to_text(), "2026-01-02 03:04:05");
         assert_eq!(Cell::Date(at.date()).to_text(), "2026-01-02");
         assert_eq!(Cell::Empty.to_text(), "");
@@ -335,7 +342,7 @@ mod tests {
         ] {
             assert_eq!(Cell::from_json(&cell.to_json()), cell);
         }
-        let date = NaiveDate::from_ymd_opt(2026, 1, 2).unwrap();
+        let date = Date::new(2026, 1, 2).unwrap();
         assert_eq!(
             Cell::from_json(&Cell::Date(date).to_json()),
             Cell::Text("2026-01-02".into())

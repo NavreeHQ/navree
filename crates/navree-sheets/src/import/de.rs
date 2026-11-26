@@ -555,7 +555,7 @@ impl<'de> IntoDeserializer<'de, ReadError> for CellDeserializer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
+    use navree_datetime::Date;
     use serde::Deserialize;
     use uuid::Uuid;
 
@@ -577,7 +577,7 @@ mod tests {
         #[validate(skip)]
         active: bool,
         #[validate(skip)]
-        joined: Option<NaiveDate>,
+        joined: Option<Date>,
         #[validate(skip)]
         status: Status,
         #[validate(skip)]
@@ -606,7 +606,7 @@ mod tests {
             ("active", text("Yes")),
             (
                 "joined",
-                Cell::Date(NaiveDate::from_ymd_opt(2026, 1, 2).unwrap()),
+                Cell::Date(Date::new(2026, 1, 2).unwrap()),
             ),
             ("status", text("Customer")),
             ("tags", text("vip; new |  ")),
@@ -624,7 +624,7 @@ mod tests {
                 age: Some(36),
                 score: 3.5,
                 active: true,
-                joined: NaiveDate::from_ymd_opt(2026, 1, 2),
+                joined: Date::new(2026, 1, 2).ok(),
                 status: Status::Customer,
                 tags: vec!["vip".into(), "new".into()],
                 id: None,

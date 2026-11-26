@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::future::Future;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::BoxError;
 use navree_db::Uow;
 use navree_kernel::AppContext;
@@ -501,11 +501,11 @@ pub struct ImportRecord {
     /// The workspace it belongs to.
     pub workspace_id: Option<Uuid>,
     /// When it was uploaded.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// When it was applied.
-    pub finished_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<Timestamp>,
     /// The disk the upload and the error file are on.
     #[serde(skip)]
     pub(crate) disk: String,

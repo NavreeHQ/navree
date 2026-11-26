@@ -944,7 +944,7 @@ async fn imports_run_from_code() {
 
 #[tokio::test]
 async fn prune_deletes_old_imports_with_their_files() {
-    let clock = Arc::new(FixedClock::new(chrono::Utc::now()));
+    let clock = Arc::new(FixedClock::new(navree_datetime::Timestamp::now()));
     let app = support::builder()
         .override_value::<dyn Clock>(clock.clone())
         .build()

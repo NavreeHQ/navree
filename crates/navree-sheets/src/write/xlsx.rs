@@ -1,7 +1,8 @@
 //! XLSX writing on rust_xlsxwriter: a bold, frozen and filtered header
 //! row, typed cells, date formats and fitted column widths.
 
-use rust_xlsxwriter::{Format, FormatBorder, Workbook, XlsxError};
+use navree_datetime::{Date, DateTime};
+use rust_xlsxwriter::{ExcelDateTime, Format, FormatBorder, Workbook, XlsxError};
 
 use crate::cell::MAX_SAFE_INTEGER;
 use crate::{Cell, Column, SheetsError};
@@ -10,8 +11,11 @@ use crate::{Cell, Column, SheetsError};
 /// header row).
 pub const XLSX_MAX_ROWS: u64 = 1_048_575;
 
-/// The longest text a cell holds; longer text is cut.
-const MAX_TEXT_CHARS: usize = 32_767;
+/// The longest text a cell holds, in UTF-16 code units; longer text is cut.
+const MAX_TEXT_UTF16_UNITS: usize = 32_767;
+
+/// The longest name a sheet may have, in UTF-16 code units.
+const MAX_SHEET_NAME_UTF16_UNITS: usize = 31;
 
 /// The widest a fitted column gets, in characters.
 const MAX_FITTED_WIDTH: f64 = 60.0;
@@ -28,14 +32,38 @@ impl From<XlsxError> for SheetsError {
     }
 }
 
-/// A sheet name Excel accepts: without `[ ] : * ? / \`, at most 31
-/// characters, not empty.
+fn excel_date(date: Date) -> Result<ExcelDateTime, XlsxError> {
+    let year = u16::try_from(date.year()).unwrap_or(0);
+    ExcelDateTime::from_ymd(year, date.month_number(), date.day())
+}
+
+fn excel_datetime(at: DateTime) -> Result<ExcelDateTime, XlsxError> {
+    let time = at.time();
+    let milli = (time.nanosecond() / 1_000_000) as u16;
+    excel_date(at.date())?.and_hms_milli(
+        u16::from(time.hour()),
+        time.minute(),
+        time.second(),
+        milli,
+    )
+}
+
+/// A sheet name Excel accepts: without `[ ] : * ? / \`, at most 31 UTF-16
+/// code units, not empty.
 pub(crate) fn sheet_name(name: &str) -> String {
-    let cleaned: String = name
+    let mut cleaned = String::new();
+    let mut units = 0;
+    for ch in name
         .chars()
         .filter(|c| !matches!(c, '[' | ']' | ':' | '*' | '?' | '/' | '\\') && !c.is_control())
-        .take(31)
-        .collect();
+    {
+        let next = units + ch.len_utf16();
+        if next > MAX_SHEET_NAME_UTF16_UNITS {
+            break;
+        }
+        units = next;
+        cleaned.push(ch);
+    }
     let cleaned = cleaned.trim().trim_matches('\'').trim().to_owned();
     if cleaned.is_empty() {
         "Sheet1".to_owned()
@@ -196,13 +224,15 @@ impl XlsxBuilder {
                         worksheet.write_boolean(at, col, *b)?;
                     }
                     Cell::Date(date) => {
-                        worksheet.write_datetime_with_format(at, col, date, &formats.date)?;
+                        let value = excel_date(*date)?;
+                        worksheet.write_datetime_with_format(at, col, &value, &formats.date)?;
                     }
                     Cell::DateTime(at_time) => {
+                        let value = excel_datetime(*at_time)?;
                         worksheet.write_datetime_with_format(
                             at,
                             col,
-                            at_time,
+                            &value,
                             &formats.datetime,
                         )?;
                     }
@@ -227,12 +257,22 @@ impl XlsxBuilder {
     }
 }
 
-/// `text`, cut to what a cell holds.
-fn truncate(text: &str) -> &str {
-    match text.char_indices().nth(MAX_TEXT_CHARS) {
-        Some((end, _)) => &text[..end],
-        None => text,
+/// Longest prefix of `text` within `max_units` UTF-16 code units.
+fn truncate_utf16(text: &str, max_units: usize) -> &str {
+    let mut units = 0;
+    for (index, ch) in text.char_indices() {
+        let next = units + ch.len_utf16();
+        if next > max_units {
+            return &text[..index];
+        }
+        units = next;
     }
+    text
+}
+
+/// `text`, cut to what a cell holds in UTF-16 code units.
+fn truncate(text: &str) -> &str {
+    truncate_utf16(text, MAX_TEXT_UTF16_UNITS)
 }
 
 /// The width a cell's text needs, in characters, plus padding.
@@ -281,6 +321,8 @@ pub fn write_xlsx(
 
 #[cfg(test)]
 mod tests {
+    use navree_datetime::Time;
+
     use super::*;
 
     #[test]
@@ -292,10 +334,58 @@ mod tests {
     }
 
     #[test]
+    fn sheet_names_count_utf16_units_across_surrogate_pairs() {
+        let twenty_emoji = "📊".repeat(20);
+        let cut = sheet_name(&twenty_emoji);
+        assert_eq!(cut, "📊".repeat(15));
+        assert_eq!(cut.encode_utf16().count(), 30);
+
+        let exact_thirty_one = format!("a{}", "📊".repeat(15));
+        let kept = sheet_name(&exact_thirty_one);
+        assert_eq!(kept, exact_thirty_one);
+        assert_eq!(kept.encode_utf16().count(), MAX_SHEET_NAME_UTF16_UNITS);
+
+        let past_thirty_one = format!("a{}", "📊".repeat(16));
+        let trimmed = sheet_name(&past_thirty_one);
+        assert_eq!(trimmed, exact_thirty_one);
+        assert_eq!(trimmed.encode_utf16().count(), MAX_SHEET_NAME_UTF16_UNITS);
+    }
+
+    #[test]
     fn long_text_is_cut_to_what_a_cell_holds() {
-        let long = "é".repeat(MAX_TEXT_CHARS + 10);
-        assert_eq!(truncate(&long).chars().count(), MAX_TEXT_CHARS);
+        let long = "é".repeat(MAX_TEXT_UTF16_UNITS + 10);
+        assert_eq!(truncate(&long).chars().count(), MAX_TEXT_UTF16_UNITS);
+        assert_eq!(truncate(&long).encode_utf16().count(), MAX_TEXT_UTF16_UNITS);
         assert_eq!(truncate("short"), "short");
+    }
+
+    #[test]
+    fn long_text_counts_utf16_units_across_surrogate_pairs() {
+        let emoji = "🚀".repeat(20_000);
+        let cut = truncate(&emoji);
+        assert_eq!(cut.chars().count(), 16_383);
+        assert_eq!(cut.encode_utf16().count(), 32_766);
+
+        let odd = format!("x{}", "🚀".repeat(20_000));
+        let odd_cut = truncate(&odd);
+        assert_eq!(odd_cut.chars().count(), 1 + 16_383);
+        assert_eq!(odd_cut.encode_utf16().count(), MAX_TEXT_UTF16_UNITS);
+
+        let bytes = write_xlsx(
+            &"📊".repeat(20),
+            &[Column::new("note", "Note"), Column::new("at", "At")],
+            &["Note".to_owned(), "At".to_owned()],
+            &[vec![
+                Cell::Text(emoji),
+                Cell::DateTime(
+                    Date::new(2026, 11, 25)
+                        .unwrap()
+                        .at(Time::new(14, 30, 5).unwrap().with_nanos(250_000_000).unwrap()),
+                ),
+            ]],
+        )
+        .unwrap();
+        assert!(bytes.starts_with(b"PK"));
     }
 
     #[test]

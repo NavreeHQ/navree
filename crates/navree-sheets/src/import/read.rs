@@ -937,7 +937,7 @@ mod tests {
 
     #[test]
     fn a_workbook_is_read_with_typed_cells() {
-        let date = chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap();
+        let date = navree_datetime::Date::new(2026, 3, 1).unwrap();
         let file = crate::write_xlsx(
             "People",
             &[],

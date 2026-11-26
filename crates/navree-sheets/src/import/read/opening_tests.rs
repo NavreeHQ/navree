@@ -57,8 +57,8 @@ pub(super) fn text(value: &str) -> Cell {
     Cell::Text(value.into())
 }
 
-fn date(year: i32, month: u32, day: u32) -> Cell {
-    Cell::Date(chrono::NaiveDate::from_ymd_opt(year, month, day).unwrap())
+fn date(year: i32, month: u8, day: u8) -> Cell {
+    Cell::Date(navree_datetime::Date::new(year, month, day).unwrap())
 }
 
 pub(super) fn refused_with(result: &Result<Table, SheetsError>, what: &str) -> bool {
@@ -700,16 +700,11 @@ fn an_xlsx_iso_date_is_a_date() {
     let cells = r#"<row r="1"><c r="A1" t="inlineStr"><is><t>h</t></is></c><c r="B1" t="inlineStr"><is><t>i</t></is></c><c r="C1" t="inlineStr"><is><t>j</t></is></c><c r="D1" t="inlineStr"><is><t>k</t></is></c></row><row r="2"><c r="A2" t="d"><v>2026-03-01T00:00:00</v></c><c r="B2" t="d"><v>2026-03-01T12:30:00Z</v></c><c r="C2" t="d"><v>06:00:00</v></c><c r="D2" t="d"><v>soon</v></c></row>"#;
     let file = xlsx_sheet("s.xml", "xl/s.xml", cells);
     let got = cells_of(&file, "x.xlsx").unwrap();
-    let at = |day: u32, hour: u32, minute: u32| {
+    let at = |day: u8, hour: u8, minute: u8| {
         Cell::DateTime(
-            chrono::NaiveDate::from_ymd_opt(
-                if day == 31 { 1899 } else { 2026 },
+            navree_datetime::Date::new(if day == 31 { 1899 } else { 2026 },
                 if day == 31 { 12 } else { 3 },
-                day,
-            )
-            .unwrap()
-            .and_hms_opt(hour, minute, 0)
-            .unwrap(),
+                day).unwrap().at(navree_datetime::Time::new(hour, minute, 0).unwrap()),
         )
     };
     assert_eq!(
