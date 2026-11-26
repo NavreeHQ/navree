@@ -176,8 +176,10 @@ const HIERARCHY: &[Rule] = &[
     // `CurrentZone` extractor reads the request (navree-http) and collects
     // zone sources (navree-contracts) from workspaces and apps. Its local-time
     // SQL are navree-db `Statement` fragments (a same-layer edge, like
-    // navree-mail -> navree-db; the database never depends on time).
-    rule("navree-time", 3, &["navree-openapi", "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
+    // navree-mail -> navree-db; the database never depends on time). Its
+    // zones stand on navree-datetime's: the compiled IANA tables and the one
+    // algorithm that reads them.
+    rule("navree-time", 3, &["navree-openapi", "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-datetime"]),
     // L4
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db", "navree-glob"]),
     // Its derive comes from navree-validation-macros; `Validate` for
@@ -1741,9 +1743,10 @@ fn proof_plugin_manifests_inherit_nothing_from_the_workspace_and_name_the_worksp
     }
 }
 
-/// Navree carries its own compiled time zone tables in `navree-time`: no crate
-/// of the workspace or of the fuzz suite declares `chrono-tz`, and it is in
-/// neither `Cargo.lock` nor `fuzz/Cargo.lock`.
+/// Navree carries its own compiled time zone tables in `navree-datetime`,
+/// which `navree-time` stands on: no crate of the workspace or of the fuzz
+/// suite declares `chrono-tz`, and it is in neither `Cargo.lock` nor
+/// `fuzz/Cargo.lock`.
 #[test]
 fn no_crate_of_the_workspace_depends_on_chrono_tz() {
     for rel in ["../../Cargo.lock", "../../fuzz/Cargo.lock"] {

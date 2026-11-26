@@ -6,11 +6,34 @@ use std::time::Duration;
 
 use chrono::{DateTime, NaiveTime, Utc, Weekday};
 
-use crate::tables::WEEKENDS;
 use crate::{Holidays, LocalDay, Zone};
 
 /// How far ahead [`SendWindow::next_slot`] looks for an open day.
 const HORIZON_DAYS: i64 = 3 * 366;
+
+/// Countries whose weekend is not Saturday and Sunday, with their weekend
+/// days (ISO numbers: 1 is Monday, 7 is Sunday), sorted by code. From the
+/// Unicode CLDR week data.
+const WEEKENDS: &[(&str, &[u8])] = &[
+    ("AF", &[4, 5]),
+    ("BH", &[5, 6]),
+    ("DZ", &[5, 6]),
+    ("EG", &[5, 6]),
+    ("IL", &[5, 6]),
+    ("IN", &[7]),
+    ("IQ", &[5, 6]),
+    ("IR", &[5]),
+    ("JO", &[5, 6]),
+    ("KW", &[5, 6]),
+    ("LY", &[5, 6]),
+    ("OM", &[5, 6]),
+    ("QA", &[5, 6]),
+    ("SA", &[5, 6]),
+    ("SD", &[5, 6]),
+    ("SY", &[5, 6]),
+    ("UG", &[7]),
+    ("YE", &[5, 6]),
+];
 
 /// When people-facing work (a digest, a reminder, a campaign mail) may
 /// reach someone: on some days of the week, between two local times,

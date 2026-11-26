@@ -12,6 +12,8 @@
 //! | [`Time`] | a time of day, to the nanosecond |
 //! | [`DateTime`] | a day and a time of day with no zone: what a wall shows, somewhere |
 //! | [`Offset`] | a fixed distance from UTC, in seconds |
+//! | [`Zone`] | a time zone: a zone of the IANA database by its name, or one offset that never changes |
+//! | [`Zoned`] | an instant seen in a zone: the day and the time of day its calendar and clocks show |
 //! | [`Span`] | an exact, signed length of time, to the nanosecond |
 //! | [`Weekday`], [`Month`] | the days of the week and the months of the year |
 //!
@@ -45,6 +47,45 @@
 //! is not a fixed length of time: [`Date::add_days`], [`Date::add_months`]
 //! and [`Date::add_years`]. A month after 31 January is the last day of
 //! February, and a year after 29 February is 28 February.
+//!
+//! ## Zones
+//!
+//! A [`Zone`] says which offset from UTC the clocks of a place keep at each
+//! instant. The IANA time zone database is compiled into the crate, legacy
+//! names and all ([`Zone::named`] reads `Asia/Calcutta` as `Asia/Kolkata`),
+//! so no file of the system is read. [`Timestamp::in_zone`] gives a
+//! [`Zoned`]: the instant, with the day and the time of day the zone shows
+//! at it.
+//!
+//! The other way, from a day and a time on a zone's clocks to the instant,
+//! has two hard cases: a time the clocks skip where they go forward, and a
+//! time they show twice where they go back. [`Zone::to_timestamp`] takes a
+//! [`Disambiguation`] that says what to make of them.
+//!
+//! ```
+//! use navree_datetime::{Date, Disambiguation, Span, Time, Timestamp, Zone};
+//!
+//! # fn main() -> navree_datetime::Result<()> {
+//! let kolkata = Zone::named("Asia/Kolkata")?;
+//! let opens = Date::new(2026, 11, 25)?.at(Time::new(9, 30, 0)?);
+//! let instant = kolkata.to_timestamp(opens, Disambiguation::Compatible)?;
+//! assert_eq!(instant, Timestamp::utc(2026, 11, 25, 4, 0, 0)?);
+//! assert_eq!(instant.in_zone(kolkata).date_time(), opens);
+//!
+//! // Exact time and calendar time stay apart on a zoned value too.
+//! let new_york = Zone::named("America/New_York")?;
+//! let evening = Timestamp::utc(2026, 3, 8, 1, 0, 0)?.in_zone(new_york);
+//! assert_eq!(evening.time(), Time::new(20, 0, 0)?);
+//! assert_eq!((evening + Span::days(1)).time(), Time::new(21, 0, 0)?);
+//! assert_eq!(evening.add_days(1)?.time(), Time::new(20, 0, 0)?);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! `zoned + Span::days(1)` is 24 hours later. [`Zoned::add_days`] and
+//! [`Zoned::add_months`] are steps of the zone's calendar: the clock shows
+//! the same time on the day reached, which is 23 or 25 hours away where the
+//! clocks change in between.
 //!
 //! ## The calendar and the range
 //!
@@ -86,6 +127,7 @@ mod span;
 mod time;
 mod timestamp;
 mod weekday;
+mod zone;
 
 pub use date::Date;
 pub use date_time::DateTime;
@@ -96,3 +138,13 @@ pub use span::Span;
 pub use time::Time;
 pub use timestamp::Timestamp;
 pub use weekday::Weekday;
+pub use zone::{Disambiguation, Zone, Zoned};
+
+/// Items Navree's own crates use; not public API.
+#[doc(hidden)]
+pub mod __private {
+    // The IANA database as it is compiled: every zone and link under its
+    // own name, and the offset each keeps over each stretch of time.
+    // navree-time's `Tz`, a time zone for chrono, stands on them.
+    pub use crate::zone::{Entry, LocalPeriods, Period, PeriodSpan};
+}

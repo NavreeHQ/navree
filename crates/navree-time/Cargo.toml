@@ -33,6 +33,8 @@ chrono = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+# The compiled IANA tables and the zone algorithm.
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
