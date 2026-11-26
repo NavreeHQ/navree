@@ -4758,7 +4758,6 @@ dependencies = [
 name = "navree-fleet"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "memory-stats",
  "metrics",
@@ -4768,6 +4767,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",

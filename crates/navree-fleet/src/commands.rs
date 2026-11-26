@@ -222,7 +222,7 @@ async fn forget_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxErr
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
+    use navree_datetime::Timestamp;
     use navree_queue::QueueOptions;
 
     use super::*;
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn the_status_text_has_a_master_and_a_queue_table() {
-        let started = Utc.with_ymd_and_hms(2026, 10, 26, 9, 15, 12).unwrap();
+        let started = Timestamp::utc(2026, 10, 26, 9, 15, 12).unwrap();
         let master = MasterReport {
             id: "m1".into(),
             name: "worker-1".into(),
