@@ -58,7 +58,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Duration, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::Db;
 use navree_kernel::BoxFuture;
 
@@ -86,7 +86,7 @@ use self::sources::{Recycle, ResolveParent};
 /// relationships builders can name ([`relationships`](ModelFactory::relationships)).
 ///
 /// ```
-/// use chrono::{DateTime, Utc};
+/// use navree_datetime::Timestamp;
 /// use navree_orm::factory::{Factory, FactoryContext, ModelFactory};
 /// use navree_orm::prelude::*;
 ///
@@ -96,8 +96,8 @@ use self::sources::{Recycle, ResolveParent};
 ///     id: i64,
 ///     title: String,
 ///     done: bool,
-///     created_at: DateTime<Utc>,
-///     updated_at: DateTime<Utc>,
+///     created_at: Timestamp,
+///     updated_at: Timestamp,
 /// }
 ///
 /// #[derive(Default)]
@@ -425,11 +425,11 @@ impl<F: ModelFactory> Factory<F> {
     }
 
     /// Soft-deleted records, deleted at `at`.
-    pub fn trashed_at(self, at: DateTime<Utc>) -> Self {
+    pub fn trashed_at(self, at: Timestamp) -> Self {
         self.trashed_with(Some(at))
     }
 
-    fn trashed_with(self, at: Option<DateTime<Utc>>) -> Self {
+    fn trashed_with(self, at: Option<Timestamp>) -> Self {
         let meta = F::Model::meta();
         let Some(column) = meta.deleted_at() else {
             let name = meta.name();
@@ -438,7 +438,7 @@ impl<F: ModelFactory> Factory<F> {
             ));
         };
         self.push_state(move |model, ctx| {
-            let at = at.unwrap_or_else(|| ctx.now() - Duration::days(1));
+            let at = at.unwrap_or_else(|| ctx.now() - Span::days(1));
             model.touch_timestamp(column, at)
         })
     }
@@ -670,7 +670,7 @@ impl<F: ModelFactory> Factory<F> {
     /// parents known without the database (stored or recycled records),
     /// then the after-making hooks.
     pub fn make(self) -> Result<Collection<F::Model>> {
-        let now = truncate_to_micros(Utc::now());
+        let now = truncate_to_micros(Timestamp::now());
         let mut faker = self.faker(FactoryOptions::default());
         let parent_values = self.known_parent_values(&mut faker)?;
         let count = self.count.unwrap_or(1);
@@ -988,7 +988,7 @@ impl<F: ModelFactory> Factory<F> {
         &self,
         index: usize,
         count: usize,
-        now: DateTime<Utc>,
+        now: Timestamp,
         faker: &mut Faker,
         parent_values: &[(Cow<'static, str>, Value)],
     ) -> Result<(F::Model, Vec<PendingParent>)> {

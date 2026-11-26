@@ -1,13 +1,13 @@
 //! [`Model`]: what `#[derive(Model)]` implements, the metadata it writes
 //! ([`ModelMeta`], [`ColumnMeta`]), keys ([`PrimaryKey`], [`KeyKind`]) and
-//! timestamps ([`Timestamp`]).
+//! timestamps ([`HasTimestamps`]).
 
 use std::borrow::Cow;
 use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
 
-use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
+use navree_datetime::{DateTime, Offset, Timestamp, Zone, Zoned};
 use navree_kernel::BoxFuture;
 use serde::Serialize;
 use uuid::Uuid;
@@ -166,17 +166,17 @@ impl PrimaryKey for String {
 /// The Rust type of a timestamp column (`created_at`, `updated_at`,
 /// `deleted_at`).
 ///
-/// Implemented for `DateTime<Utc>`, `DateTime<FixedOffset>`,
-/// `NaiveDateTime` (UTC), `i64` (Unix seconds) and `Option` of each. A
-/// timestamp is "empty" when it is `None` or the type's zero value (the
-/// Unix epoch): a new record's empty timestamps are set when it is saved.
+/// Implemented for [`Timestamp`], [`Zoned`], [`DateTime`] (UTC), `i64`
+/// (Unix seconds) and `Option` of each. A timestamp is "empty" when it is
+/// `None` or the type's zero value (the Unix epoch): a new record's empty
+/// timestamps are set when it is saved.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be a timestamp column",
-    note = "use `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime`, `i64` or an `Option` of one"
+    note = "use `Timestamp`, `Zoned`, `DateTime`, `i64` or an `Option` of one"
 )]
-pub trait Timestamp: Field {
+pub trait HasTimestamps: Field {
     /// The timestamp for `now`.
-    fn from_now(now: DateTime<Utc>) -> Self;
+    fn from_now(now: Timestamp) -> Self;
 
     /// Whether the timestamp is unset.
     fn is_empty(&self) -> bool;
@@ -185,51 +185,51 @@ pub trait Timestamp: Field {
     fn empty() -> Self;
 }
 
-impl Timestamp for DateTime<Utc> {
-    fn from_now(now: DateTime<Utc>) -> Self {
+impl HasTimestamps for Timestamp {
+    fn from_now(now: Timestamp) -> Self {
         now
     }
 
     fn is_empty(&self) -> bool {
-        *self == DateTime::<Utc>::UNIX_EPOCH
+        *self == Timestamp::UNIX_EPOCH
     }
 
     fn empty() -> Self {
-        DateTime::<Utc>::UNIX_EPOCH
+        Timestamp::UNIX_EPOCH
     }
 }
 
-impl Timestamp for DateTime<FixedOffset> {
-    fn from_now(now: DateTime<Utc>) -> Self {
-        now.fixed_offset()
+impl HasTimestamps for Zoned {
+    fn from_now(now: Timestamp) -> Self {
+        now.in_zone(Zone::fixed(Offset::UTC))
     }
 
     fn is_empty(&self) -> bool {
-        *self == DateTime::<Utc>::UNIX_EPOCH
+        self.timestamp() == Timestamp::UNIX_EPOCH
     }
 
     fn empty() -> Self {
-        DateTime::<Utc>::UNIX_EPOCH.fixed_offset()
+        Timestamp::UNIX_EPOCH.in_zone(Zone::fixed(Offset::UTC))
     }
 }
 
-impl Timestamp for NaiveDateTime {
-    fn from_now(now: DateTime<Utc>) -> Self {
-        now.naive_utc()
+impl HasTimestamps for DateTime {
+    fn from_now(now: Timestamp) -> Self {
+        now.date_time_utc()
     }
 
     fn is_empty(&self) -> bool {
-        *self == DateTime::<Utc>::UNIX_EPOCH.naive_utc()
+        *self == Timestamp::UNIX_EPOCH.date_time_utc()
     }
 
     fn empty() -> Self {
-        DateTime::<Utc>::UNIX_EPOCH.naive_utc()
+        Timestamp::UNIX_EPOCH.date_time_utc()
     }
 }
 
-impl Timestamp for i64 {
-    fn from_now(now: DateTime<Utc>) -> Self {
-        now.timestamp()
+impl HasTimestamps for i64 {
+    fn from_now(now: Timestamp) -> Self {
+        now.as_secs()
     }
 
     fn is_empty(&self) -> bool {
@@ -241,8 +241,8 @@ impl Timestamp for i64 {
     }
 }
 
-impl<T: Timestamp> Timestamp for Option<T> {
-    fn from_now(now: DateTime<Utc>) -> Self {
+impl<T: HasTimestamps> HasTimestamps for Option<T> {
+    fn from_now(now: Timestamp) -> Self {
         Some(T::from_now(now))
     }
 
@@ -510,9 +510,9 @@ pub struct ModelMeta {
 
 /// How a model writes its date-times in serialized records
 /// (`#[model(serialize_dates_with = path)]`): the instant, with the offset
-/// the field had (UTC for `DateTime<Utc>` and `NaiveDateTime` fields), to
+/// the field had (UTC for [`Timestamp`] and [`DateTime`] fields), to
 /// any JSON value.
-pub type DateSerializer = fn(&DateTime<FixedOffset>) -> serde_json::Value;
+pub type DateSerializer = fn(&Zoned) -> serde_json::Value;
 
 impl ModelMeta {
     /// Model `name` stored in `table`, keyed by an auto-incrementing `id`,
@@ -1105,7 +1105,7 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     fn set_value(&mut self, column: &str, value: Value) -> Result<()>;
 
     /// Sets timestamp column `column` to `now`.
-    fn touch_timestamp(&mut self, column: &str, now: DateTime<Utc>) -> Result<()>;
+    fn touch_timestamp(&mut self, column: &str, now: Timestamp) -> Result<()>;
 
     /// Whether timestamp column `column` is unset.
     fn timestamp_is_empty(&self, column: &str) -> bool;
@@ -1114,7 +1114,7 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     fn clear_timestamp(&mut self, column: &str);
 
     /// The stored value of timestamp column `column` at `now`.
-    fn timestamp_value(column: &str, now: DateTime<Utc>) -> Option<Value>;
+    fn timestamp_value(column: &str, now: Timestamp) -> Option<Value>;
 
     /// The global scopes applied to every query of the model
     /// (`#[model(global_scopes(..))]`).

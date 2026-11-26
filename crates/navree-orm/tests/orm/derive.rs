@@ -1,7 +1,7 @@
 //! What `#[derive(Model)]` writes: metadata, column constants, and reading
 //! and writing columns.
 
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::{KeyKind, Kind, Model, OrmError, Row, Ulid, Value};
 use uuid::Uuid;
 
@@ -48,7 +48,7 @@ fn metadata_names_the_table_key_columns_and_timestamps() {
     assert_eq!(stage.rust_type(), "Stage");
     let closed_at = meta.column("closed_at").unwrap();
     assert!(closed_at.is_nullable());
-    assert_eq!(closed_at.rust_type(), "Option<DateTime<Utc>>");
+    assert_eq!(closed_at.rust_type(), "Option<Timestamp>");
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn typed_columns_encode_values_as_their_fields_are_stored() {
 }
 
 fn deal_row(stage: &str) -> Row {
-    let at = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap();
+    let at = Timestamp::utc(2026, 1, 2, 3, 4, 5).unwrap();
     Row::from_values(vec![
         ("id".into(), Value::Uuid(Uuid::nil())),
         ("company_id".into(), Value::Null(Kind::I64)),
@@ -206,12 +206,12 @@ fn keys_and_timestamps_are_reachable_by_column() {
     event.set_key(id);
     assert_eq!(event.id, id);
     assert!(
-        event.touch_timestamp("occurred_at", Utc::now()).is_err(),
+        event.touch_timestamp("occurred_at", Timestamp::now()).is_err(),
         "not a timestamp column"
     );
 
     let mut deal = Deal::default();
-    let now = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
+    let now = Timestamp::utc(2026, 10, 27, 8, 0, 0).unwrap();
     assert!(deal.timestamp_is_empty("created_at"));
     deal.touch_timestamp("created_at", now).unwrap();
     assert_eq!(deal.created_at, now);
@@ -282,8 +282,8 @@ impl navree_orm::PrimaryKey for ObjectId {
 struct AuditEvent {
     id: ObjectId,
     action: String,
-    created_at: chrono::DateTime<Utc>,
-    updated_at: chrono::DateTime<Utc>,
+    created_at: navree_datetime::Timestamp,
+    updated_at: navree_datetime::Timestamp,
 }
 
 /// On MongoDB a key named otherwise keeps its column when `primary_key`

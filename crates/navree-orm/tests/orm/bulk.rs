@@ -523,7 +523,7 @@ async fn models_insert_as_they_are_or_filled_like_save() {
     assert_eq!(Deal::fill_and_insert(&t.db, deals).await.unwrap(), 3);
     let stored = Deal::query().get(&t.db).await.unwrap();
     assert!(stored.iter().all(|deal| !deal.id.is_nil()));
-    assert!(stored.iter().all(|deal| deal.created_at.timestamp() > 0));
+    assert!(stored.iter().all(|deal| deal.created_at.as_secs() > 0));
 
     let filled = Event::query()
         .fill_for_insert(&t.db, [Event::default()])
@@ -615,7 +615,7 @@ async fn model_upserts_update_chosen_columns_and_the_update_timestamp() {
     assert_eq!(theme.value, "dark");
     assert_eq!(
         theme.updated_at,
-        crate::support::epoch() + chrono::Duration::minutes(5),
+        crate::support::epoch() + navree_datetime::Span::minutes(5),
         "the update timestamp moved"
     );
     assert_eq!(Setting::query().count(&*db).await.unwrap(), 2);

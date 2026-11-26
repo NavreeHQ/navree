@@ -2,7 +2,7 @@
 //! subject with a policy). Not API: hidden from the docs, and it may change
 //! at any time.
 
-pub use chrono::{DateTime, Utc};
+pub use navree_datetime::Timestamp;
 pub use navree_db::{Db, Uow};
 pub use uuid::Uuid;
 
@@ -24,9 +24,9 @@ pub struct Ticket {
     /// `open` or `closed`.
     pub status: String,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// Signed-in users read every ticket and update their own.

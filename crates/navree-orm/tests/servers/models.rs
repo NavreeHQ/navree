@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree_datetime::{Date, Timestamp};
 use navree_orm::{Decimal, Model, Ulid};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -123,8 +123,8 @@ pub struct Company {
     pub country: Option<String>,
     pub active: bool,
     pub employees: i32,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,11 +191,11 @@ pub struct Deal {
     pub tags: Vec<String>,
     pub probability: f64,
     pub value: Decimal,
-    pub closes_on: Option<NaiveDate>,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub closes_on: Option<Date>,
+    pub closed_at: Option<Timestamp>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 impl Deal {
@@ -219,7 +219,7 @@ pub struct Tag {
 pub struct Event {
     pub id: Ulid,
     pub name: String,
-    pub occurred_at: DateTime<Utc>,
+    pub occurred_at: Timestamp,
     pub payload: Option<serde_json::Value>,
 }
 

@@ -4,7 +4,7 @@
 
 use std::sync::Mutex;
 
-use chrono::{DateTime, Duration, TimeZone, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::Db;
 use navree_db::Executor as _;
 use navree_orm::hooks::{Flow, ModelEvent};
@@ -44,8 +44,8 @@ fn heard(server: Server) -> Vec<String> {
     mine
 }
 
-fn cutoff() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()
+fn cutoff() -> Timestamp {
+    Timestamp::utc(2026, 1, 1, 0, 0, 0).unwrap()
 }
 
 /// A memo: UUID-keyed, soft-deleting, observed, prunable.
@@ -56,9 +56,9 @@ struct Memo {
     body: String,
     hits: i64,
     likes: i64,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    deleted_at: Option<DateTime<Utc>>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
+    deleted_at: Option<Timestamp>,
 }
 
 impl Prunable for Memo {
@@ -117,7 +117,7 @@ impl Observer<Memo> for MemoObserver {
 #[model(mass_prunable)]
 struct Beat {
     id: i64,
-    recorded_at: DateTime<Utc>,
+    recorded_at: Timestamp,
 }
 
 impl MassPrunable for Beat {
@@ -232,7 +232,7 @@ pub async fn scenario(db: Db, server: Server) {
         let mut old = Memo::create(
             &db,
             Memo {
-                created_at: cutoff() - Duration::days(1 + n),
+                created_at: cutoff() - Span::days(1 + n),
                 ..memo(server, &format!("old {n}"))
             },
         )
@@ -249,7 +249,7 @@ pub async fn scenario(db: Db, server: Server) {
         Beat::create(
             &db,
             Beat {
-                recorded_at: cutoff() - Duration::hours(n + 1),
+                recorded_at: cutoff() - Span::hours(n + 1),
                 ..Beat::default()
             },
         )
@@ -259,7 +259,7 @@ pub async fn scenario(db: Db, server: Server) {
     Beat::create(
         &db,
         Beat {
-            recorded_at: cutoff() + Duration::hours(1),
+            recorded_at: cutoff() + Span::hours(1),
             ..Beat::default()
         },
     )

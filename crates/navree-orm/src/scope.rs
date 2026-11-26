@@ -89,14 +89,14 @@ impl<M: Model> GlobalScope<M> for SoftDeletes {
 /// `Scoped<M>`.
 ///
 /// ```
-/// use chrono::{DateTime, Utc};
+/// use navree_datetime::Timestamp;
 /// use navree_orm::prelude::*;
 ///
 /// #[derive(Model, Clone, Debug, Default, serde::Serialize)]
 /// pub struct Deal {
 ///     id: i64,
 ///     owner_id: Option<i64>,
-///     closed_at: Option<DateTime<Utc>>,
+///     closed_at: Option<Timestamp>,
 /// }
 ///
 /// #[scopes]

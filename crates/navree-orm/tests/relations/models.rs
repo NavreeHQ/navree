@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::ir::AggregateFunction;
 use navree_orm::prelude::*;
 use navree_orm::relations::{
@@ -170,7 +170,7 @@ pub struct User {
     pub id: i64,
     pub team_id: Option<i64>,
     pub name: String,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<Timestamp>,
 }
 
 #[relations]
@@ -209,8 +209,8 @@ pub struct Company {
     /// The company's code in the accounting system.
     pub code: Option<String>,
     pub active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 impl Company {
@@ -327,9 +327,9 @@ pub struct Deal {
     pub title: String,
     pub amount_cents: i64,
     pub stage: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 impl Deal {
@@ -482,8 +482,8 @@ pub struct Activity {
     pub deal_id: Option<i64>,
     pub kind: String,
     pub minutes: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 impl Activity {
@@ -511,7 +511,7 @@ impl Activity {
 pub struct Tag {
     pub id: i64,
     pub name: String,
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl Tag {
@@ -553,8 +553,8 @@ pub struct DealTag {
     pub deal_id: i64,
     pub tag_id: i64,
     pub role: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: Option<Timestamp>,
+    pub updated_at: Option<Timestamp>,
 }
 
 /// A rep watching a deal: a typed pivot model with an id and timestamps.
@@ -569,8 +569,8 @@ pub struct DealWatcher {
     pub deal_id: i64,
     pub user_id: i64,
     pub level: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// A note about a deal or a company: its `notable` is resolved through the
@@ -706,8 +706,8 @@ pub struct Account {
     pub owner_id: Option<i64>,
     pub name: String,
     pub active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 #[relations]

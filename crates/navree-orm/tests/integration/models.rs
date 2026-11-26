@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::factory::{FactoryContext, ModelFactory, Pivot, Relationships};
 use navree_orm::{Model, Ulid};
 use serde::{Deserialize, Serialize};
@@ -93,9 +93,9 @@ pub struct Company {
     pub employees: i32,
     pub verified: bool,
     pub profile: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 /// Companies with fake names and sizes.
@@ -147,9 +147,9 @@ pub struct Deal {
     #[model(cast = "string_enum")]
     pub stage: Stage,
     pub amount_cents: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 /// Deals of a new company each.
@@ -253,7 +253,7 @@ impl ModelFactory for TagFactory {
 pub struct Note {
     pub id: Ulid,
     pub body: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// A project: scoped to workspaces.
@@ -264,8 +264,8 @@ pub struct Project {
     pub workspace_id: Uuid,
     pub name: String,
     pub budget: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Projects with fake names.
@@ -318,9 +318,9 @@ pub struct Ticket {
     pub title: String,
     pub status: String,
     pub priority: i32,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub closed_at: Option<Timestamp>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Signed-in users read every ticket and update their own open ones.

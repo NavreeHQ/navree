@@ -3,7 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use chrono::{Duration, TimeZone, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_events::{EventsModule, Listener, ModuleBuilderEventsExt};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
@@ -17,12 +17,12 @@ use super::models::{LogEntry, Metric, create_tables, prune_cutoff, pruned_with_p
 use crate::models::Company;
 use crate::support::{app, count_rows};
 
-fn old() -> chrono::DateTime<Utc> {
-    prune_cutoff() - Duration::days(30)
+fn old() -> navree_datetime::Timestamp {
+    prune_cutoff() - Span::days(30)
 }
 
-fn recent() -> chrono::DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap()
+fn recent() -> navree_datetime::Timestamp {
+    Timestamp::utc(2026, 6, 1, 0, 0, 0).unwrap()
 }
 
 /// What the pruning events said, in order.
@@ -109,7 +109,7 @@ impl Module for Pruning {
     }
 }
 
-async fn log(db: &navree_db::Db, message: &str, at: chrono::DateTime<Utc>) -> Record<LogEntry> {
+async fn log(db: &navree_db::Db, message: &str, at: navree_datetime::Timestamp) -> Record<LogEntry> {
     LogEntry::create(
         db,
         LogEntry {
@@ -122,7 +122,7 @@ async fn log(db: &navree_db::Db, message: &str, at: chrono::DateTime<Utc>) -> Re
     .unwrap()
 }
 
-async fn metric(db: &navree_db::Db, name: &str, at: chrono::DateTime<Utc>) {
+async fn metric(db: &navree_db::Db, name: &str, at: navree_datetime::Timestamp) {
     Metric::create(
         db,
         Metric {

@@ -7,7 +7,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use chrono::{TimeZone, Timelike, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
 use navree_db::{ChangeEvent, ChangeOp, Uow};
 use navree_kernel::{AppContext, BoxFuture};
@@ -636,8 +636,8 @@ async fn documents_stream_through_cursors_and_pages() {
 /// agree.
 #[tokio::test]
 async fn timestamps_keep_the_precision_of_the_store() {
-    let at = Utc.with_ymd_and_hms(2026, 10, 27, 9, 30, 0).unwrap()
-        + chrono::Duration::nanoseconds(123_456_789);
+    let at = Timestamp::utc(2026, 10, 27, 9, 30, 0).unwrap()
+        + navree_datetime::Span::nanos(123_456_789);
     let app = TestApp::builder()
         .override_value::<dyn Clock>(Arc::new(FixedClock::new(at)))
         .build()
@@ -656,7 +656,7 @@ async fn timestamps_keep_the_precision_of_the_store() {
     )
     .await
     .unwrap();
-    assert_eq!(agra.created_at.nanosecond(), 123_000_000);
+    assert_eq!(agra.created_at.subsec_nanos(), 123_000_000);
     let stored = Company::find_or_fail(&store, agra.id).await.unwrap();
     assert_eq!(stored.created_at, agra.created_at);
     let target = store.target(Access::Read).await.unwrap();
@@ -666,7 +666,7 @@ async fn timestamps_keep_the_precision_of_the_store() {
     let mut store = MemoryStore::new(Memory::default());
     store.app = Some(app.ctx().clone());
     let gulati = Company::create(&store, Company::default()).await.unwrap();
-    assert_eq!(gulati.created_at.nanosecond(), 123_456_000);
+    assert_eq!(gulati.created_at.subsec_nanos(), 123_456_000);
 }
 
 /// Writes through a document target record their change events where the
@@ -748,8 +748,8 @@ async fn drivers_turn_native_rows_into_records() {
         ("country".to_owned(), Value::Null(Kind::String)),
         ("active".to_owned(), Value::from(true)),
         ("employees".to_owned(), Value::from(15_i32)),
-        ("created_at".to_owned(), Value::from(Utc::now())),
-        ("updated_at".to_owned(), Value::from(Utc::now())),
+        ("created_at".to_owned(), Value::from(Timestamp::now())),
+        ("updated_at".to_owned(), Value::from(Timestamp::now())),
         ("score".to_owned(), Value::from(0.5_f64)),
     ])];
     let records = target.records::<Company>(&rows).await.unwrap();

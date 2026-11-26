@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Serialize, Serializer};
 
 use crate::column::{Column, ColumnName};
@@ -50,7 +50,7 @@ use crate::value::{Field, Value, ValueFor, to_json};
 pub struct FactoryContext<'a, M: Model> {
     index: usize,
     count: usize,
-    now: DateTime<Utc>,
+    now: Timestamp,
     faker: &'a mut Faker,
     parents: &'a mut Vec<PendingParent>,
     _model: PhantomData<fn() -> M>,
@@ -60,7 +60,7 @@ impl<'a, M: Model> FactoryContext<'a, M> {
     pub(crate) fn new(
         index: usize,
         count: usize,
-        now: DateTime<Utc>,
+        now: Timestamp,
         faker: &'a mut Faker,
         parents: &'a mut Vec<PendingParent>,
     ) -> Self {
@@ -93,7 +93,7 @@ impl<'a, M: Model> FactoryContext<'a, M> {
     /// The current time: the app's clock when the records are created
     /// through an executor of an app (tests freeze it with a fixed clock),
     /// else the system clock; whole microseconds.
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         self.now
     }
 

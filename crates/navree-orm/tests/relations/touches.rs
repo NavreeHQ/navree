@@ -3,7 +3,7 @@
 //! many-to-many writes touch the parent when the related model touches the
 //! relation.
 
-use chrono::Duration;
+use navree_datetime::Span;
 use navree_contracts::FixedClock;
 use navree_db::Db;
 use navree_orm::prelude::*;
@@ -14,10 +14,10 @@ use crate::models::{Activity, Company, Deal, Tag};
 use crate::support::{app, epoch};
 
 fn advance(clock: &FixedClock, minutes: i64) {
-    clock.advance(Duration::minutes(minutes).to_std().expect("forward"));
+    clock.advance(Span::minutes(minutes));
 }
 
-async fn updated_at(db: &Db, deal: i64) -> chrono::DateTime<chrono::Utc> {
+async fn updated_at(db: &Db, deal: i64) -> navree_datetime::Timestamp {
     Deal::query()
         .with_trashed()
         .find_or_fail(db, deal)
@@ -38,12 +38,12 @@ async fn saving_or_deleting_a_child_touches_its_parents() {
     let mut activity = crm.renewal.activities().first(db).await.unwrap().unwrap();
     activity.minutes = 31;
     activity.save(db).await.unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(5));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(5));
 
     // A save that changes nothing touches nothing.
     advance(&clock, 5);
     activity.save(db).await.unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(5));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(5));
 
     // Creating through the relation, and deleting, touch.
     advance(&clock, 5);
@@ -53,10 +53,10 @@ async fn saving_or_deleting_a_child_touches_its_parents() {
         .create(db, Activity::new("note", 1))
         .await
         .unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(15));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(15));
     advance(&clock, 5);
     created.delete(db).await.unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(20));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(20));
     assert_eq!(Activity::touched_relations(), ["deal"]);
 }
 
@@ -88,14 +88,14 @@ async fn touching_is_suspended_inside_a_scope() {
         activity.save(db).await.unwrap();
     })
     .await;
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(5));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(5));
     advance(&clock, 5);
     without_touching_on::<(Deal, Tag), _>(async {
         activity.minutes = 3;
         activity.save(db).await.unwrap();
     })
     .await;
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(5));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(5));
 }
 
 #[tokio::test]
@@ -109,26 +109,26 @@ async fn many_to_many_writes_touch_the_parent_when_the_relation_is_touched() {
     // `Tag` touches `deals`: attaching tags to a deal touches the deal.
     advance(&clock, 1);
     tags().attach(db, [crm.vip.id]).await.unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(1));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(1));
     advance(&clock, 1);
     tags()
         .update_existing_pivot(db, crm.vip.id, [col("role").set("owner")])
         .await
         .unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(2));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(2));
     advance(&clock, 1);
     tags().sync(db, [crm.vip.id, crm.q1.id]).await.unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(3));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(3));
     // A sync that changes nothing touches nothing.
     advance(&clock, 1);
     tags().sync(db, [crm.vip.id, crm.q1.id]).await.unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(3));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(3));
     advance(&clock, 1);
     tags().toggle(db, [crm.q1.id]).await.unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(5));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(5));
     advance(&clock, 1);
     tags().detach(db, [crm.vip.id]).await.unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(6));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(6));
 
     // And a tag's own save touches the deals it is attached to.
     tags().attach(db, [crm.hot.id]).await.unwrap();
@@ -136,7 +136,7 @@ async fn many_to_many_writes_touch_the_parent_when_the_relation_is_touched() {
     let mut hot = Tag::find_or_fail(db, crm.hot.id).await.unwrap();
     hot.name = "HOT".into();
     hot.save(db).await.unwrap();
-    assert_eq!(updated_at(db, deal).await, epoch() + Duration::minutes(16));
+    assert_eq!(updated_at(db, deal).await, epoch() + Span::minutes(16));
     assert_eq!(
         updated_at(db, crm.renewal.id).await,
         epoch(),

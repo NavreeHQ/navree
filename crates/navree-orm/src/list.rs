@@ -45,7 +45,7 @@
 //! A date-and-time field takes a plain date as the whole day in UTC:
 //! `filter[created_at][lte]=2026-11-05` includes everything on the 5th.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree_datetime::{Date, Timestamp, Zoned};
 use uuid::Uuid;
 
 use crate::column::{Filter, col, col_as};
@@ -188,8 +188,8 @@ fn bind(field: &Field, text: &str) -> Result<Value> {
             _ => return Err(invalid(field, text, "true or false")),
         },
         Kind::Date => Value::Date(date(field, text)?),
-        Kind::DateTime => match DateTime::parse_from_rfc3339(text) {
-            Ok(at) => Value::Timestamp(at.with_timezone(&Utc)),
+        Kind::DateTime => match Zoned::parse_rfc3339(text) {
+            Ok(at) => Value::Timestamp(at.timestamp()),
             Err(_) => Value::Timestamp(start_of(date(field, text)?)),
         },
         Kind::Uuid => {
@@ -204,18 +204,18 @@ fn bind(field: &Field, text: &str) -> Result<Value> {
     })
 }
 
-fn date(field: &Field, text: &str) -> Result<NaiveDate> {
-    NaiveDate::parse_from_str(text, "%Y-%m-%d").map_err(|_| invalid(field, text, "a date"))
+fn date(field: &Field, text: &str) -> Result<Date> {
+    Date::parse("%Y-%m-%d", text).map_err(|_| invalid(field, text, "a date"))
 }
 
 /// Midnight UTC at the start of `day`.
-fn start_of(day: NaiveDate) -> DateTime<Utc> {
-    day.and_time(chrono::NaiveTime::MIN).and_utc()
+fn start_of(day: Date) -> Timestamp {
+    day.at(navree_datetime::Time::MIDNIGHT).in_utc()
 }
 
 /// Whether `text` is a plain date where a date-and-time is expected.
 fn is_whole_day(field: &Field, text: &str) -> bool {
-    field.kind == Kind::DateTime && DateTime::parse_from_rfc3339(text).is_err()
+    field.kind == Kind::DateTime && Zoned::parse_rfc3339(text).is_err()
 }
 
 /// The filter of one condition.
@@ -226,7 +226,7 @@ fn filter_of(field: &Field, condition: &Condition) -> Result<Filter> {
         if is_whole_day(field, text) {
             // A date stands for its whole day.
             let start = start_of(date(field, text)?);
-            let next = start + chrono::Duration::days(1);
+            let next = start + navree_datetime::Span::days(1);
             let (start, next) = (Value::Timestamp(start), Value::Timestamp(next));
             return Ok(match op {
                 Op::Eq => Filter::all([source.gte(start), source.lt(next)]),

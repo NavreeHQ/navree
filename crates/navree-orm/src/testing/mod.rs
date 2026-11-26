@@ -41,7 +41,7 @@ mod queries;
 use std::borrow::Cow;
 use std::fmt::Write as _;
 
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned};
 use uuid::Uuid;
 
 #[cfg(feature = "testing")]
@@ -587,9 +587,9 @@ fn decode_as(row: &Row, column: &str, kind: Kind) -> Option<Value> {
         Kind::Decimal => get::<Decimal>(row, column),
         Kind::Text => get::<String>(row, column),
         Kind::Uuid => get::<Uuid>(row, column),
-        Kind::DateTime => get::<DateTime<Utc>>(row, column),
-        Kind::Date => get::<NaiveDate>(row, column),
-        Kind::Time => get::<NaiveTime>(row, column),
+        Kind::DateTime => get::<Timestamp>(row, column),
+        Kind::Date => get::<Date>(row, column),
+        Kind::Time => get::<Time>(row, column),
         Kind::Json => get::<serde_json::Value>(row, column),
     }
 }
@@ -642,10 +642,10 @@ fn normalize(value: Value, kind: Kind) -> Value {
         Kind::Integer => convert::<i64>(value),
         Kind::Float => convert::<f64>(value),
         Kind::DateTime => match value {
-            Value::DateTime(naive) => Value::from(naive.and_utc()),
-            other => match DateTime::<FixedOffset>::from_value(other.clone()) {
-                Ok(at) => Value::from(at.with_timezone(&Utc)),
-                Err(_) => convert::<NaiveDateTime>(other),
+            Value::DateTime(naive) => Value::from(naive.in_utc()),
+            other => match Zoned::from_value(other.clone()) {
+                Ok(at) => Value::from(at.timestamp()),
+                Err(_) => convert::<DateTime>(other),
             },
         },
         _ => value,
@@ -715,7 +715,7 @@ mod tests {
             "meta",
             &json_value(serde_json::json!({"a": 1}))
         ));
-        let at = DateTime::parse_from_rfc3339("2026-10-27T11:30:00+02:00").unwrap();
+        let at = Zoned::parse_rfc3339("2026-10-27T11:30:00+02:00").unwrap();
         assert!(column_matches(&stored, "at", &Value::from(at)));
         assert!(column_matches(
             &stored,

@@ -192,10 +192,10 @@ impl CastContext {
 
     /// The current time: the app's clock when it registers one, else the
     /// system clock.
-    pub fn now(&self) -> chrono::DateTime<chrono::Utc> {
+    pub fn now(&self) -> navree_datetime::Timestamp {
         self.clock
             .as_ref()
-            .map_or_else(chrono::Utc::now, |clock| clock.now())
+            .map_or_else(navree_datetime::Timestamp::now, |clock| clock.now())
     }
 
     /// The app's configuration, when the context comes from an app with

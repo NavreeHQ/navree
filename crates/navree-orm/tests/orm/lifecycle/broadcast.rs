@@ -92,7 +92,7 @@ async fn changes_go_out_on_the_records_channel_after_the_commit() {
     assert_eq!(parts[..2], ["private-room.1", "room.created"]);
     // Records serialize their date-times as RFC 3339 in UTC with
     // microseconds (the attribute layer's format).
-    let at = epoch().to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
+    let at = epoch().to_rfc3339_with(navree_datetime::Precision::Micros, true);
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(parts[2]).unwrap(),
         json!({"room": {"id": 1, "name": "general", "created_at": at, "updated_at": at, "deleted_at": null}})

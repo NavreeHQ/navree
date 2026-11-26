@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use chrono::{Duration, TimeZone, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_orm::factory::{Factory, HasFactory, ModelFactory, Sequence};
 use navree_orm::{Model, OrmError, Record, Value};
 
@@ -23,7 +23,7 @@ fn make_one_builds_an_unsaved_record_from_the_definition() {
         "the database assigns the key when it is saved"
     );
     assert!(
-        company.created_at == chrono::DateTime::<Utc>::UNIX_EPOCH,
+        company.created_at == navree_datetime::Timestamp::UNIX_EPOCH,
         "timestamps wait for the save"
     );
 }
@@ -255,16 +255,16 @@ fn configure_gives_every_builder_its_defaults() {
 
 #[test]
 fn trashed_sets_the_soft_delete_column() {
-    let at = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap();
+    let at = Timestamp::utc(2026, 1, 2, 3, 4, 5).unwrap();
     let company = Company::factory().trashed_at(at).make_one().unwrap();
     assert_eq!(company.deleted_at, Some(at));
     assert!(company.trashed());
 
     let recent = Company::factory().trashed().make_one().unwrap();
     let deleted = recent.deleted_at.expect("deleted");
-    let age = Utc::now() - deleted;
+    let age = Timestamp::now() - deleted;
     assert!(
-        age > Duration::hours(23) && age < Duration::hours(25),
+        age > Span::hours(23) && age < Span::hours(25),
         "a day ago: {age}"
     );
 }

@@ -49,7 +49,6 @@ phone = ["dep:navree-phone", "navree-validation?/phone"]
 # PHC-string parsing for hashed attributes (hashing itself is navree-crypto's).
 argon2 = { workspace = true }
 base64 = { workspace = true }
-chrono = { workspace = true }
 # Streams (`lazy`, `cursor`) and the channel their generator hands rows over.
 futures = { workspace = true }
 heck = { workspace = true }
@@ -84,6 +83,7 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 # OpenAPI schemas of models and pages.
 uuid = { workspace = true }
+navree-datetime = { workspace = true }
 
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).

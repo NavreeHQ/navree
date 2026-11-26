@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn the_default_origin_is_a_monday_at_midnight() {
-        let origin = chrono::DateTime::from_timestamp(ORIGIN_UNIX_SECONDS, 0).unwrap();
+        let origin = navree_datetime::Timestamp::from_secs(ORIGIN_UNIX_SECONDS).unwrap();
         assert_eq!(origin.to_rfc3339(), "2000-01-03T00:00:00+00:00");
     }
 }

@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::hash::{BuildHasher, Hash};
 use std::ops::RangeInclusive;
 
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use navree_datetime::{Date, Span, Timestamp};
 use uuid::Uuid;
 
 use crate::ulid::Ulid;
@@ -504,43 +504,43 @@ impl Faker {
 
     /// A moment between `start` and `end` (whole microseconds, the
     /// precision databases store).
-    pub fn date_time_between(&mut self, start: DateTime<Utc>, end: DateTime<Utc>) -> DateTime<Utc> {
+    pub fn date_time_between(&mut self, start: Timestamp, end: Timestamp) -> Timestamp {
         let (low, high) = if start <= end {
             (start, end)
         } else {
             (end, start)
         };
-        let span = (high - low).num_microseconds().unwrap_or(i64::MAX).max(0);
+        let span = (high - low).as_micros().unwrap_or(i64::MAX).max(0);
         let offset = self.number(0..=span);
-        low + Duration::microseconds(offset)
+        low + Span::micros(offset)
     }
 
     /// A moment within `within` before now.
-    pub fn past(&mut self, within: Duration) -> DateTime<Utc> {
+    pub fn past(&mut self, within: Span) -> Timestamp {
         let now = now_micros();
         self.date_time_between(now - within, now)
     }
 
     /// A moment within `within` after now.
-    pub fn future(&mut self, within: Duration) -> DateTime<Utc> {
+    pub fn future(&mut self, within: Span) -> Timestamp {
         let now = now_micros();
         self.date_time_between(now, now + within)
     }
 
     /// A moment in the last year.
-    pub fn recent(&mut self) -> DateTime<Utc> {
-        self.past(Duration::days(365))
+    pub fn recent(&mut self) -> Timestamp {
+        self.past(Span::days(365))
     }
 
     /// A date between `start` and `end` (both included).
-    pub fn date_between(&mut self, start: NaiveDate, end: NaiveDate) -> NaiveDate {
+    pub fn date_between(&mut self, start: Date, end: Date) -> Date {
         let (low, high) = if start <= end {
             (start, end)
         } else {
             (end, start)
         };
-        let days = (high - low).num_days();
-        low + Duration::days(self.number(0..=days))
+        let days = low.days_until(high);
+        low.add_days(self.number(0..=days)).unwrap_or(high)
     }
 
     // ---------------------------------------------------------------------
@@ -556,15 +556,15 @@ impl Faker {
     /// A ULID for a moment in the last year, drawn from this faker's
     /// stream.
     pub fn ulid(&mut self) -> Ulid {
-        let millis = self.recent().timestamp_millis().max(0) as u64;
+        let millis = self.recent().as_millis().max(0) as u64;
         let random = (u128::from(self.next_u64()) << 64) | u128::from(self.next_u64());
         Ulid::from_parts(millis, random)
     }
 }
 
 /// The current time, whole microseconds.
-fn now_micros() -> DateTime<Utc> {
-    crate::exec::truncate_to_micros(Utc::now())
+fn now_micros() -> Timestamp {
+    crate::exec::truncate_to_micros(Timestamp::now())
 }
 
 /// `word` with its first letter in upper case.
@@ -910,20 +910,20 @@ mod tests {
     #[test]
     fn dates_fall_inside_their_window() {
         let mut fake = Faker::seeded(2);
-        let start = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
-        let end = start + Duration::days(30);
+        let start = Timestamp::from_secs(1_700_000_000).unwrap();
+        let end = start + Span::days(30);
         for _ in 0..100 {
             let at = fake.date_time_between(start, end);
             assert!(at >= start && at <= end);
             assert_eq!(
-                at.timestamp_subsec_nanos() % 1_000,
+                at.subsec_nanos() % 1_000,
                 0,
                 "microsecond precision"
             );
         }
         let day = fake.date_between(
-            NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
-            NaiveDate::from_ymd_opt(2026, 1, 3).unwrap(),
+            Date::new(2026, 1, 1).unwrap(),
+            Date::new(2026, 1, 3).unwrap(),
         );
         assert!(day.to_string().starts_with("2026-01-0"));
     }

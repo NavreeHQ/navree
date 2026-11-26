@@ -1,7 +1,7 @@
 //! The query builder against SQLite: every where variant, selects, joins,
 //! groups, orders, limits, unions, aggregates, values and plucks.
 
-use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
+use navree_datetime::{Date, Time, Timestamp};
 use navree_orm::{Collection, Expr, Model, Value, col, col_as, table};
 
 use crate::models::{Company, Deal, DealMeta, Stage};
@@ -29,7 +29,7 @@ async fn seeded() -> TestDb {
         .await
         .unwrap();
     }
-    let day = |d: u32| Utc.with_ymd_and_hms(2026, 3, d, 14, 30, 0).unwrap();
+    let day = |d: u8| Timestamp::utc(2026, 3, d, 14, 30, 0).unwrap();
     for (title, company, cents, stage, tags, closes, closed) in [
         (
             "Alpha",
@@ -75,7 +75,7 @@ async fn seeded() -> TestDb {
                 company_id: company,
                 stage,
                 tags: tags.into_iter().map(Into::into).collect(),
-                closes_on: closes.map(|d| NaiveDate::from_ymd_opt(2026, 3, d).unwrap()),
+                closes_on: closes.map(|d| Date::new(2026, 3, d).unwrap()),
                 closed_at: closed,
                 meta: DealMeta {
                     source: if cents > 20_000 {
@@ -236,7 +236,7 @@ async fn lists_nulls_ranges_and_columns() {
 async fn dates_and_times() {
     let t = seeded().await;
     let db = &t.db;
-    let day = NaiveDate::from_ymd_opt(2026, 3, 20).unwrap();
+    let day = Date::new(2026, 3, 20).unwrap();
     let closed_that_day = Deal::query()
         .where_date(Deal::CLOSED_AT, "=", day)
         .get(db)
@@ -275,7 +275,7 @@ async fn dates_and_times() {
             .unwrap(),
         2
     );
-    let afternoon = NaiveTime::from_hms_opt(14, 30, 0).unwrap();
+    let afternoon = Time::new(14, 30, 0).unwrap();
     assert_eq!(
         Deal::query()
             .where_time(Deal::CLOSED_AT, "=", afternoon)
@@ -286,7 +286,7 @@ async fn dates_and_times() {
     );
     assert_eq!(
         Deal::query()
-            .where_(Deal::CLOSES_ON.gt(NaiveDate::from_ymd_opt(2026, 3, 10).unwrap()))
+            .where_(Deal::CLOSES_ON.gt(Date::new(2026, 3, 10).unwrap()))
             .count(db)
             .await
             .unwrap(),
@@ -831,13 +831,13 @@ async fn keys_select_and_exclude_records() {
 #[tokio::test]
 async fn time_buckets_run_on_sqlite() {
     let t = sqlite().await;
-    let base = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
+    let base = Timestamp::utc(2026, 10, 27, 8, 0, 0).unwrap();
     for minutes in [0, 10, 20, 70, 75, 130] {
         crate::models::Event::create(
             &t.db,
             crate::models::Event {
                 name: "tick".into(),
-                occurred_at: base + chrono::Duration::minutes(minutes),
+                occurred_at: base + navree_datetime::Span::minutes(minutes),
                 ..Default::default()
             },
         )

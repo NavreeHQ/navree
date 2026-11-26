@@ -417,7 +417,7 @@ async fn toggling_and_updating_pivot_rows() {
     );
     let stamp = |pivot: &navree_orm::relations::Pivot| {
         pivot
-            .value::<chrono::DateTime<chrono::Utc>>("updated_at")
+            .value::<navree_datetime::Timestamp>("updated_at")
             .unwrap()
             .unwrap()
     };

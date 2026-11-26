@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use chrono::{Duration, TimeZone, Utc};
+use navree_datetime::{Span, Timestamp};
 use http::Method;
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, Accessible, Authorized, READ, Read, Rules,
@@ -189,7 +189,7 @@ proptest! {
         runtime.block_on(async {
             let test = sqlite().await;
             let users = [Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7()];
-            let base = Utc.with_ymd_and_hms(2026, 10, 1, 12, 0, 0).unwrap();
+            let base = Timestamp::utc(2026, 10, 1, 12, 0, 0).unwrap();
             let mut built = Rules::new();
             for (allow, conditions) in &rules {
                 let mut all = navree_access::Conditions::new();
@@ -208,7 +208,7 @@ proptest! {
                         Condition::PriorityLte(n) => field("priority").lte(*n),
                         Condition::OwnerEq(i) => field("owner_id").eq(users[*i]),
                         Condition::OwnerNe(i) => field("owner_id").ne(users[*i]),
-                        Condition::ClosedBefore(days) => field("closed_at").lt(base + Duration::days(*days)),
+                        Condition::ClosedBefore(days) => field("closed_at").lt(base + Span::days(*days)),
                         Condition::Unknown => field("not_a_column").eq("x"),
                     });
                 }
@@ -226,7 +226,7 @@ proptest! {
                         .set(Ticket::STATUS, statuses[index])
                         .set(Ticket::PRIORITY, priorities[index] as i32)
                         .set(Ticket::OWNER_ID, owner)
-                        .set(Ticket::CLOSED_AT, closed[index].map(|days| base + Duration::days(days)))
+                        .set(Ticket::CLOSED_AT, closed[index].map(|days| base + Span::days(days)))
                         .create_one(&test.db)
                         .await
                         .unwrap(),
