@@ -582,8 +582,8 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
 ///     #[searchable(filter)]
 ///     pub status: ContactStatus,
 ///     #[searchable(sort)]
-///     pub created_at: DateTime<Utc>,
-///     pub deleted_at: Option<DateTime<Utc>>,
+///     pub created_at: Timestamp,
+///     pub deleted_at: Option<Timestamp>,
 /// }
 /// ```
 ///
