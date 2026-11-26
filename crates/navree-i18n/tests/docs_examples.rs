@@ -73,7 +73,7 @@ async fn formatting_and_fluent_functions() {
         i18n.t("fr", "deal-amount", args!(amount = money)).unwrap(),
         "42\u{202f}000,00\u{a0}€"
     );
-    let closes = chrono::NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
+    let closes = navree_datetime::Date::new(2026, 10, 26).unwrap();
     assert_eq!(
         i18n.t("fr", "deal-closes", args!(date = closes)).unwrap(),
         "Clôture le 26 oct. 2026"

@@ -38,7 +38,6 @@ ui = ["dep:navree-ui"]
 phone = ["navree-ui?/phone"]
 
 [dependencies]
-chrono = { workspace = true }
 fixed_decimal = { workspace = true }
 fluent-bundle = { workspace = true }
 fluent-syntax = { workspace = true }
@@ -52,6 +51,7 @@ icu_provider = { workspace = true }
 intl-memoizer = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-i18n-macros = { workspace = true }

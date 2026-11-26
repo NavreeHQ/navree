@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
-use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
 use fixed_decimal::Decimal;
 use fluent_bundle::types::{FluentNumber, FluentNumberStyle};
 use icu_calendar::Date;
@@ -214,8 +213,8 @@ impl Formats {
     /// `date` (and `time`) in `style`, in the Gregorian calendar.
     pub(crate) fn date(
         &self,
-        date: NaiveDate,
-        time: Option<NaiveTime>,
+        date: navree_datetime::Date,
+        time: Option<navree_datetime::Time>,
         style: DateStyle,
         time_style: Option<TimeStyle>,
     ) -> String {
@@ -230,22 +229,16 @@ impl Formats {
         let Some(formatter) = formatter else {
             return fallback();
         };
-        let Ok(icu_date) = Date::try_new_gregorian(
-            date.year(),
-            u8::try_from(date.month()).unwrap_or(1),
-            u8::try_from(date.day()).unwrap_or(1),
-        ) else {
+        let Ok(icu_date) =
+            Date::try_new_gregorian(date.year(), date.month_number(), date.day())
+        else {
             return fallback();
         };
         match (&*formatter, time) {
             (DateFormatter::Date(formatter), _) => formatter.format(&icu_date).to_string(),
             (DateFormatter::DateTime(formatter), Some(time)) => {
-                let Ok(icu_time) = Time::try_new(
-                    u8::try_from(time.hour()).unwrap_or(0),
-                    u8::try_from(time.minute()).unwrap_or(0),
-                    u8::try_from(time.second()).unwrap_or(0),
-                    0,
-                ) else {
+                let Ok(icu_time) = Time::try_new(time.hour(), time.minute(), time.second(), 0)
+                else {
                     return fallback();
                 };
                 formatter
@@ -297,11 +290,6 @@ impl Formats {
             })
             .clone()
     }
-}
-
-/// The date of anything chrono can give a calendar date of.
-pub(crate) fn naive_date(date: &impl Datelike) -> NaiveDate {
-    NaiveDate::from_ymd_opt(date.year(), date.month(), date.day()).unwrap_or_default()
 }
 
 /// `usize` digits as an ICU4X magnitude.
@@ -491,7 +479,7 @@ mod tests {
 
     #[test]
     fn dates_follow_the_locale_pattern() {
-        let day = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
+        let day = navree_datetime::Date::new(2026, 10, 26).unwrap();
         assert_eq!(
             formats("en").date(day, None, DateStyle::Medium, None),
             "Oct 26, 2026"
@@ -508,7 +496,7 @@ mod tests {
             formats("en").date(day, None, DateStyle::Short, None),
             "10/26/26"
         );
-        let at = NaiveTime::from_hms_opt(14, 30, 0).unwrap();
+        let at = navree_datetime::Time::new(14, 30, 0).unwrap();
         assert_eq!(
             formats("en").date(day, Some(at), DateStyle::Medium, Some(TimeStyle::Short)),
             "Oct 26, 2026, 2:30\u{202f}PM"

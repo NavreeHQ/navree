@@ -5,13 +5,12 @@ use std::fmt;
 use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
-use chrono::Datelike;
 use http::request::Parts;
 use navree_http::AppError;
 use navree_http::extract::FromRequestParts;
 use unic_langid::LanguageIdentifier;
 
-use crate::format::{DateStyle, Formats, naive_date};
+use crate::format::{DateStyle, Formats};
 use crate::service::Shared;
 use crate::{Args, I18nError, tag};
 
@@ -186,16 +185,18 @@ impl Locale {
         self.formats().money(minor_units, currency)
     }
 
-    /// A date (a chrono `NaiveDate`, `NaiveDateTime` or `DateTime`, in its
-    /// own time zone) in the locale's medium style: `Oct 26, 2026` in `en`,
-    /// `26 oct. 2026` in `fr`.
-    pub fn format_date(&self, date: impl Datelike) -> String {
+    /// A date (a [`Date`](navree_datetime::Date),
+    /// [`DateTime`](navree_datetime::DateTime),
+    /// [`Timestamp`](navree_datetime::Timestamp) in UTC, or
+    /// [`Zoned`](navree_datetime::Zoned) in its own time zone) in the locale's
+    /// medium style: `Oct 26, 2026` in `en`, `26 oct. 2026` in `fr`.
+    pub fn format_date(&self, date: impl IntoDate) -> String {
         self.format_date_with(date, DateStyle::Medium)
     }
 
     /// A date in `style` (`short`, `medium` or `long`).
-    pub fn format_date_with(&self, date: impl Datelike, style: DateStyle) -> String {
-        self.formats().date(naive_date(&date), None, style, None)
+    pub fn format_date_with(&self, date: impl IntoDate, style: DateStyle) -> String {
+        self.formats().date(date.into_date(), None, style, None)
     }
 
     fn formats(&self) -> Arc<Formats> {
@@ -337,6 +338,42 @@ macro_rules! into_number {
 
 into_number!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
 
+/// A calendar date [`Locale::format_date`] formats.
+pub trait IntoDate {
+    /// The calendar date.
+    fn into_date(self) -> navree_datetime::Date;
+}
+
+impl IntoDate for navree_datetime::Date {
+    fn into_date(self) -> navree_datetime::Date {
+        self
+    }
+}
+
+impl IntoDate for navree_datetime::DateTime {
+    fn into_date(self) -> navree_datetime::Date {
+        self.date()
+    }
+}
+
+impl IntoDate for navree_datetime::Timestamp {
+    fn into_date(self) -> navree_datetime::Date {
+        self.date_time_utc().date()
+    }
+}
+
+impl IntoDate for navree_datetime::Zoned {
+    fn into_date(self) -> navree_datetime::Date {
+        self.date()
+    }
+}
+
+impl<T: IntoDate + Copy> IntoDate for &T {
+    fn into_date(self) -> navree_datetime::Date {
+        (*self).into_date()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -345,7 +382,7 @@ mod tests {
         let _ = navree_http::handler::Endpoint::new(handler);
     }
 
-    use chrono::NaiveDate;
+    use navree_datetime::Date;
 
     use super::*;
 
@@ -357,7 +394,7 @@ mod tests {
         assert_eq!(locale.format_number(1234.5), "1.234,5");
         assert_eq!(locale.format_number(3_u8), "3");
         assert_eq!(locale.format_money(1999, "EUR"), "19,99\u{a0}€");
-        let day = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
+        let day = Date::new(2026, 10, 26).unwrap();
         assert_eq!(locale.format_date(day), "26.10.2026");
         assert_eq!(
             locale.format_date_with(day, DateStyle::Long),

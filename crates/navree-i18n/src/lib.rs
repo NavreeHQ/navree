@@ -77,7 +77,7 @@ pub use args::{Arg, Args, Money};
 pub use controller::{I18nController, LocaleInput, LocaleListResource, LocaleResource};
 pub use error::I18nError;
 pub use format::DateStyle;
-pub use locale::{IntoLocale, IntoNumber, Locale};
+pub use locale::{IntoDate, IntoLocale, IntoNumber, Locale};
 pub use migration::I18N_MIGRATIONS;
 pub use module::I18nModule;
 /// Embeds a directory of Fluent files in the binary (`embed_locales!("locales")`),
