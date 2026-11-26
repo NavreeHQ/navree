@@ -10,7 +10,7 @@ use navree_cache::Cache;
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_crypto::{Encrypter, Hasher, random_token, sha256_hex};
-use navree_datetime::{Span, Timestamp};
+use navree_datetime::Timestamp;
 use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
 use navree_http::HttpOptions;
@@ -1246,10 +1246,7 @@ impl Sso {
             }
         };
         // An assertion works once: remember its id until it expires.
-        let remaining =
-            (assertion.not_on_or_after - now) + Span::try_from(skew).unwrap_or(Span::ZERO);
-        let remaining =
-            Duration::from_secs(u64::try_from(remaining.as_seconds()).unwrap_or(1).max(1));
+        let remaining = crate::saml::assertion_replay_ttl(assertion.not_on_or_after, now, skew);
         let first_use = self
             .cache
             .add(

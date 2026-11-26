@@ -277,8 +277,9 @@ fn read_assertion(
     response_in_response_to: Option<&str>,
     check: &ResponseCheck<'_>,
 ) -> Result<SamlAssertion, SamlError> {
-    let skew = Span::try_from(check.clock_skew).unwrap_or(Span::ZERO);
-    let (earliest, latest) = (check.now - skew, check.now + skew);
+    let skew = Span::try_from(check.clock_skew).unwrap_or(Span::MAX);
+    let earliest = check.now.checked_sub(skew).unwrap_or(Timestamp::MIN);
+    let latest = check.now.checked_add(skew).unwrap_or(Timestamp::MAX);
 
     if doc.attr(assertion, "Version") != Some("2.0") {
         return Err(invalid("the assertion is not SAML 2.0"));
@@ -644,5 +645,25 @@ mod tests {
             + &forged[forged.find("</ds:Signature>").unwrap() + "</ds:Signature>".len()..];
         let wrapped = signed.replacen("<saml:Assertion", &format!("{forged}<saml:Assertion"), 1);
         assert!(matches!(validate(&wrapped), Err(SamlError::Invalid(_))));
+    }
+
+    #[test]
+    fn clock_skew_saturates_at_timestamp_bounds() {
+        let signed = sign(&template());
+        assert!(validate_with(&signed, |c| c.clock_skew = Duration::MAX).is_ok());
+        assert_eq!(
+            validate_with(&signed, |c| {
+                c.now = Timestamp::MIN;
+                c.clock_skew = Duration::from_secs(120);
+            }),
+            Err(SamlError::NotYetValid)
+        );
+        assert_eq!(
+            validate_with(&signed, |c| {
+                c.now = Timestamp::MAX;
+                c.clock_skew = Duration::from_secs(120);
+            }),
+            Err(SamlError::Expired)
+        );
     }
 }

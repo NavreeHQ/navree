@@ -285,14 +285,21 @@ impl SessionManager {
             let lifetime = state
                 .lifetime_minutes()
                 .map_or_else(|| self.options.lifetime(), minutes);
+            let rewrite_horizon = lifetime
+                .checked_sub(touch_interval(lifetime))
+                .unwrap_or(Span::ZERO);
             let touch = state.stored_id.as_deref() == Some(state.id.as_str())
                 && state
                     .expires_at
-                    .is_some_and(|at| at - now < lifetime - touch_interval(lifetime));
+                    .is_some_and(|at| at.duration_since(now) < rewrite_horizon);
             let save = (state.dirty || touch).then(|| {
+                let max = navree_datetime::Timestamp::utc(9999, 12, 31, 23, 59, 59).expect("9999");
+                let expires_at = now
+                    .checked_add(lifetime)
+                    .map_or(max, |instant| instant.min(max));
                 let record = SessionRecord {
                     data: state.data.clone(),
-                    expires_at: Some(now + lifetime),
+                    expires_at: Some(expires_at),
                 };
                 (state.id.clone(), record)
             });

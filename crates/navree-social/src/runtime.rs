@@ -272,7 +272,7 @@ impl JwksCache {
                 CachedSet {
                     set: set.clone(),
                     fetched: now,
-                    expires: now + delta(lifetime),
+                    expires: now.checked_add(delta(lifetime)).unwrap_or(Timestamp::MAX),
                 },
             );
         Ok(set)

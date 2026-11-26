@@ -378,7 +378,7 @@ impl Social {
             .get("iat")
             .and_then(Value::as_i64)
             .ok_or_else(|| invalid("no issue time"))?;
-        if iat - LEEWAY_SECS > now || iat < now - NOTIFICATION_MAX_AGE_SECS {
+        if !notification_iat_valid(iat, now) {
             return Err(invalid("issued too long ago or in the future"));
         }
         let events = match claims.get("events") {
@@ -407,7 +407,7 @@ impl Social {
             )
         });
         if let Some(key) = &once {
-            let ttl = Duration::from_secs(NOTIFICATION_MAX_AGE_SECS.unsigned_abs());
+            let ttl = notification_replay_ttl();
             if !rt.cache.add(key, &1_u8, ttl).await? {
                 return Ok(());
             }
@@ -645,13 +645,13 @@ fn check_nonce_and_age(
         .get("iat")
         .and_then(Value::as_i64)
         .ok_or_else(|| invalid_id_token(entry, "the token has no issue time"))?;
-    if iat + LEEWAY_SECS < started {
+    if iat.saturating_add(LEEWAY_SECS) < started {
         return Err(invalid_id_token(
             entry,
             "the token is older than the sign-in attempt",
         ));
     }
-    if iat - LEEWAY_SECS > now {
+    if iat.saturating_sub(LEEWAY_SECS) > now {
         return Err(invalid_id_token(
             entry,
             "the token was issued in the future",
@@ -767,5 +767,36 @@ impl CredentialRevoker for SocialRevoker {
             }
             Ok(RevokedByKind::from([("social_provider_tokens", revoked)]))
         })
+    }
+}
+
+fn notification_iat_valid(iat: i64, now: i64) -> bool {
+    iat.saturating_sub(LEEWAY_SECS) <= now && iat >= now.saturating_sub(NOTIFICATION_MAX_AGE_SECS)
+}
+
+fn notification_replay_ttl() -> Duration {
+    Duration::from_secs((NOTIFICATION_MAX_AGE_SECS + LEEWAY_SECS + 1) as u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn notification_leeway_and_replay_ttl_bound_acceptance_window() {
+        let now = 1_700_000_000_i64;
+        assert!(notification_iat_valid(now + LEEWAY_SECS, now));
+        assert!(!notification_iat_valid(now + LEEWAY_SECS + 1, now));
+        assert!(notification_iat_valid(now - NOTIFICATION_MAX_AGE_SECS, now));
+        assert!(!notification_iat_valid(
+            now - NOTIFICATION_MAX_AGE_SECS - 1,
+            now
+        ));
+        assert!(!notification_iat_valid(i64::MIN, now));
+        assert!(!notification_iat_valid(i64::MAX, now));
+        assert_eq!(
+            notification_replay_ttl(),
+            Duration::from_secs((NOTIFICATION_MAX_AGE_SECS + LEEWAY_SECS + 1) as u64)
+        );
     }
 }

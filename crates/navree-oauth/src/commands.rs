@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 
 use navree_auth::AuthService;
-use navree_datetime::Span;
+use navree_datetime::{Span, Timestamp};
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, BoxError, CommandSpec};
 use navree_orm::Model as _;
@@ -323,7 +323,7 @@ pub(crate) async fn prune(ctx: &AppContext, args: &[String]) -> Result<String, B
         None => 7,
     };
     let core = ctx.get::<Core>().await?;
-    let cutoff = core.now() - Span::days(days);
+    let cutoff = prune_cutoff(core.now(), days);
     let deleted = in_uow(ctx, |uow| async move {
         let mut total = 0;
         total += authorization_request::Model::query()
@@ -360,6 +360,12 @@ pub(crate) async fn prune(ctx: &AppContext, args: &[String]) -> Result<String, B
     Ok(format!(
         "Pruned {deleted} expired or revoked OAuth record(s) older than {days} day(s).\n"
     ))
+}
+
+fn prune_cutoff(now: Timestamp, days: i64) -> Timestamp {
+    Span::try_days(days)
+        .and_then(|span| now.checked_sub(span))
+        .unwrap_or(Timestamp::MIN)
 }
 
 #[cfg(test)]
@@ -404,5 +410,15 @@ mod tests {
         assert!(RSA_KEY_STEPS.contains("openssl genpkey -algorithm RSA"));
         assert!(RSA_KEY_STEPS.contains("APP_OAUTH__SIGNING_KEY=rsa:"));
         assert!(RSA_KEY_STEPS.contains("APP_OAUTH__ID_TOKEN_SIGNING_ALG=RS256"));
+    }
+
+    #[test]
+    fn prune_cutoff_saturates_on_huge_day_counts() {
+        let now = Timestamp::utc(2026, 11, 26, 12, 0, 0).unwrap();
+        assert_eq!(
+            prune_cutoff(now, 7),
+            Timestamp::utc(2026, 11, 19, 12, 0, 0).unwrap()
+        );
+        assert_eq!(prune_cutoff(now, i64::MAX), Timestamp::MIN);
     }
 }

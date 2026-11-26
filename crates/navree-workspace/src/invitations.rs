@@ -3,8 +3,8 @@
 use std::fmt;
 use std::sync::Arc;
 
-use navree_datetime::{Span, Timestamp};
 use navree_crypto::{random_token, sha256_hex};
+use navree_datetime::{Span, Timestamp};
 use navree_db::Uow;
 use navree_mail::{Mailable, Message, TemplateMail};
 use navree_orm::{Model as _, Record};
@@ -333,11 +333,12 @@ fn normalize_email(email: &str) -> Result<String, WorkspaceError> {
     }
 }
 
-/// `at` plus `secs` seconds (saturating).
+/// `at` plus `secs` seconds, clamped to four-digit SQL years.
 fn after(at: Timestamp, secs: u64) -> Timestamp {
+    let max = Timestamp::utc(9999, 12, 31, 23, 59, 59).expect("9999");
     let secs = i64::try_from(secs).unwrap_or(i64::MAX);
     at.checked_add(Span::try_seconds(secs).unwrap_or(Span::MAX))
-        .unwrap_or(Timestamp::MAX)
+        .map_or(max, |instant| instant.min(max))
 }
 
 /// The invitation mail: from the configured template, or built-in text.
@@ -487,5 +488,13 @@ mod tests {
             token: "s3cret-token".into(),
         };
         assert!(!format!("{sent:?}").contains("s3cret-token"));
+    }
+
+    #[test]
+    fn invitation_expiry_clamps_to_four_digit_sql_year() {
+        let at = Timestamp::utc(2026, 11, 26, 12, 0, 0).unwrap();
+        let max_sql = Timestamp::utc(9999, 12, 31, 23, 59, 59).unwrap();
+        assert_eq!(after(at, 500_000_000_000), max_sql);
+        assert_eq!(after(at, u64::MAX), max_sql);
     }
 }

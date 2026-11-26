@@ -14,9 +14,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use navree_datetime::Span;
 use navree_contracts::AuditKind;
 use navree_crypto::{random_token, sha256_hex};
+use navree_datetime::Span;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -179,7 +179,12 @@ impl AuthService {
                     user_id,
                     session_id,
                     action: digest,
-                    expires_at: (self.clock.now() + ttl).as_secs(),
+                    expires_at: self
+                        .clock
+                        .now()
+                        .checked_add(ttl)
+                        .unwrap_or(navree_datetime::Timestamp::MAX)
+                        .as_secs(),
                 },
                 Duration::from_secs(CONFIRM_TTL_SECS + 5),
             )

@@ -223,6 +223,16 @@ impl SsoOptions {
         if self.saml.max_response_bytes < 1024 {
             errors.push("sso.saml.max_response_bytes must be at least 1024".to_owned());
         }
+        if self.saml.clock_skew_secs > MAX_CLOCK_SKEW_SECS {
+            errors.push(format!(
+                "sso.saml.clock_skew_secs must be at most {MAX_CLOCK_SKEW_SECS}"
+            ));
+        }
+        if self.oidc.clock_skew_secs > MAX_CLOCK_SKEW_SECS {
+            errors.push(format!(
+                "sso.oidc.clock_skew_secs must be at most {MAX_CLOCK_SKEW_SECS}"
+            ));
+        }
         if !self.oidc.scopes.iter().any(|s| s == "openid") {
             errors.push("sso.oidc.scopes must include `openid`".to_owned());
         }
@@ -233,6 +243,8 @@ impl SsoOptions {
         }
     }
 }
+
+const MAX_CLOCK_SKEW_SECS: u64 = 86_400;
 
 #[cfg(test)]
 mod tests {
@@ -328,8 +340,13 @@ mod tests {
             base_url: Some("api.acme.test".to_owned()),
             routes_prefix: "sso".to_owned(),
             code_ttl_secs: 0,
+            saml: SamlOptions {
+                clock_skew_secs: MAX_CLOCK_SKEW_SECS + 1,
+                ..SamlOptions::default()
+            },
             oidc: OidcOptions {
                 scopes: vec!["email".to_owned()],
+                clock_skew_secs: MAX_CLOCK_SKEW_SECS + 1,
                 ..OidcOptions::default()
             },
             ..SsoOptions::default()
@@ -339,6 +356,8 @@ mod tests {
             "sso.base_url",
             "sso.routes_prefix",
             "sso.code_ttl_secs",
+            "sso.saml.clock_skew_secs",
+            "sso.oidc.clock_skew_secs",
             "sso.oidc.scopes",
         ] {
             assert!(
