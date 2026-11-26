@@ -11,8 +11,8 @@
 //! the same code.
 //!
 //! ```
-//! use chrono::{TimeZone, Utc};
 //! use navree_crypto::sigv4::{Credentials, Signer};
+//! use navree_datetime::Timestamp;
 //! use url::Url;
 //!
 //! let signer = Signer::new(
@@ -21,7 +21,7 @@
 //!     "service",
 //! );
 //! let url = Url::parse("https://example.amazonaws.com/").unwrap();
-//! let now = Utc.with_ymd_and_hms(2015, 8, 30, 12, 36, 0).unwrap();
+//! let now = Timestamp::utc(2015, 8, 30, 12, 36, 0).unwrap();
 //! let headers = signer.sign("GET", &url, &[], b"", now);
 //! assert_eq!(headers[0], ("x-amz-date".to_owned(), "20150830T123600Z".to_owned()));
 //! assert_eq!(
@@ -36,7 +36,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use sha2::{Digest as _, Sha256};
 use url::Url;
 
@@ -160,7 +160,7 @@ impl Signer {
         url: &Url,
         headers: &[(&str, &str)],
         body: &[u8],
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Vec<(String, String)> {
         let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
         let payload_hash = if self.unsigned_payload {
@@ -433,8 +433,6 @@ fn collapse(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone as _;
-
     use super::*;
 
     #[test]
@@ -508,7 +506,7 @@ mod tests {
             .path_as_sent()
             .unsigned_payload();
         let url = Url::parse("https://bucket.s3.amazonaws.com/a%20b").unwrap();
-        let now = Utc.with_ymd_and_hms(2015, 8, 30, 12, 36, 0).unwrap();
+        let now = Timestamp::utc(2015, 8, 30, 12, 36, 0).unwrap();
         let headers = signer.sign("PUT", &url, &[], b"body", now);
         assert!(headers.contains(&(
             "x-amz-content-sha256".to_owned(),

@@ -41,7 +41,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -176,8 +176,8 @@ impl SnsMessage {
         &self,
         topics: &[String],
         tolerance_secs: u64,
-        now: DateTime<Utc>,
-    ) -> Result<DateTime<Utc>, SnsEnvelopeError> {
+        now: Timestamp,
+    ) -> Result<Timestamp, SnsEnvelopeError> {
         if !matches!(
             self.message_type.as_str(),
             "Notification" | "SubscriptionConfirmation" | "UnsubscribeConfirmation"
@@ -193,10 +193,9 @@ impl SnsMessage {
         if !matches!(self.signature_version.trim(), "1" | "2") {
             return Err(SnsEnvelopeError::UnsupportedVersion);
         }
-        let published = DateTime::parse_from_rfc3339(self.timestamp.trim())
-            .map_err(|_| SnsEnvelopeError::MalformedTimestamp)?
-            .with_timezone(&Utc);
-        if (now - published).num_seconds().unsigned_abs() > tolerance_secs {
+        let published = Timestamp::parse_rfc3339(self.timestamp.trim())
+            .map_err(|_| SnsEnvelopeError::MalformedTimestamp)?;
+        if (now - published).as_seconds().unsigned_abs() > tolerance_secs {
             return Err(SnsEnvelopeError::OutOfTolerance);
         }
         Ok(published)
@@ -233,7 +232,7 @@ pub enum SnsEnvelopeError {
 }
 
 /// How long a fetched signing certificate is kept.
-pub const CERTIFICATE_TTL: TimeDelta = TimeDelta::hours(24);
+pub const CERTIFICATE_TTL: Span = Span::hours(24);
 
 /// The most certificates a [`CertificateCache`] keeps; the oldest goes
 /// first.
@@ -245,7 +244,7 @@ pub const MAX_CERTIFICATES: usize = 32;
 /// have, and [`insert`](CertificateCache::insert)s it.
 #[derive(Default)]
 pub struct CertificateCache {
-    keys: Mutex<HashMap<String, (VerifyingKey, DateTime<Utc>)>>,
+    keys: Mutex<HashMap<String, (VerifyingKey, Timestamp)>>,
 }
 
 impl CertificateCache {
@@ -256,7 +255,7 @@ impl CertificateCache {
 
     /// The key of the certificate at `url`, when it was fetched less than
     /// [`CERTIFICATE_TTL`] before `now`.
-    pub fn get(&self, url: &str, now: DateTime<Utc>) -> Option<VerifyingKey> {
+    pub fn get(&self, url: &str, now: Timestamp) -> Option<VerifyingKey> {
         lock(&self.keys)
             .get(url)
             .filter(|(_, fetched_at)| now - *fetched_at < CERTIFICATE_TTL)
@@ -265,7 +264,7 @@ impl CertificateCache {
 
     /// Keeps `key`, the key of the certificate at `url`, fetched at `now`.
     /// A full cache first drops the certificate fetched longest ago.
-    pub fn insert(&self, url: &str, key: VerifyingKey, now: DateTime<Utc>) {
+    pub fn insert(&self, url: &str, key: VerifyingKey, now: Timestamp) {
         let mut keys = lock(&self.keys);
         if !keys.contains_key(url)
             && keys.len() >= MAX_CERTIFICATES
@@ -418,10 +417,8 @@ mod tests {
         }
     }
 
-    fn at(time: &str) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(&format!("2026-10-27T{time}Z"))
-            .unwrap()
-            .with_timezone(&Utc)
+    fn at(time: &str) -> Timestamp {
+        Timestamp::parse_rfc3339(&format!("2026-10-27T{time}Z")).unwrap()
     }
 
     fn topics() -> Vec<String> {
@@ -573,7 +570,7 @@ mod tests {
             cache
                 .get(
                     url,
-                    at("10:00:00") + CERTIFICATE_TTL - TimeDelta::seconds(1)
+                    at("10:00:00") + CERTIFICATE_TTL - Span::seconds(1)
                 )
                 .is_some()
         );
@@ -588,7 +585,7 @@ mod tests {
             cache.insert(
                 &format!("https://sns.eu-west-1.amazonaws.com/{i}.pem"),
                 key.clone(),
-                at("10:00:00") + TimeDelta::seconds(i64::try_from(i).unwrap()),
+                at("10:00:00") + Span::seconds(i64::try_from(i).unwrap()),
             );
         }
         assert_eq!(cache.len(), MAX_CERTIFICATES);

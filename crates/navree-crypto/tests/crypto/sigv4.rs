@@ -3,8 +3,8 @@
 //! signed on 30 August 2015 at 12:36:00 UTC with the suite's example keys)
 //! and the IAM `ListUsers` example of the AWS documentation.
 
-use chrono::{DateTime, TimeZone, Utc};
 use navree_crypto::sigv4::{self, Credentials, Signer};
+use navree_datetime::{Span, Timestamp};
 use url::Url;
 
 const ACCESS_KEY_ID: &str = "AKIDEXAMPLE";
@@ -14,8 +14,8 @@ fn credentials() -> Credentials {
     Credentials::new(ACCESS_KEY_ID, SECRET_ACCESS_KEY)
 }
 
-fn signed_at() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2015, 8, 30, 12, 36, 0).unwrap()
+fn signed_at() -> Timestamp {
+    Timestamp::utc(2015, 8, 30, 12, 36, 0).unwrap()
 }
 
 /// A request of the test suite and what it is signed with.
@@ -444,7 +444,7 @@ fn everything_signed_changes_the_signature() {
             &url,
             &[("content-type", "text/plain")],
             b"body",
-            signed_at() + chrono::TimeDelta::seconds(1),
+            signed_at() + Span::seconds(1),
         ),
         Signer::new(credentials(), "us-west-2", "service").sign(
             "POST",
