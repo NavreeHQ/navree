@@ -574,7 +574,7 @@ pub(crate) async fn set_role(
     uow: &Uow,
     membership: Member,
     role: WorkspaceRole,
-    now: chrono::DateTime<chrono::Utc>,
+    now: navree_datetime::Timestamp,
 ) -> Result<Member, WorkspaceError> {
     store::update(uow, membership, |row| {
         row.role = role.as_str().to_owned();

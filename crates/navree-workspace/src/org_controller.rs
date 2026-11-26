@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::{Method, Uri};
 use navree_db::Uow;
 use navree_http::{
@@ -56,9 +56,9 @@ pub struct OrganizationResource {
     #[schema(value_type = Object)]
     pub workspaces: WorkspaceSelector,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl OrganizationResource {
@@ -103,9 +103,9 @@ pub struct OrgMemberResource {
     /// The user's name and email, when the user directory knows them.
     pub user: Option<UserSummary>,
     /// When the user joined.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the membership last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl OrgMemberResource {
@@ -161,15 +161,15 @@ pub struct AccessRequestResource {
     /// Who decided.
     pub decided_by: Option<Uuid>,
     /// When it was decided.
-    pub decided_at: Option<DateTime<Utc>>,
+    pub decided_at: Option<Timestamp>,
     /// Why it was declined.
     pub reason: Option<String>,
     /// The requesting user, when the user directory knows them.
     pub user: Option<UserSummary>,
     /// When it was made.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl AccessRequestResource {

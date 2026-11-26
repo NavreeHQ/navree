@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::Method;
 use navree_db::Executor as _;
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
@@ -37,8 +37,8 @@ pub struct Template {
     pub cloned_from_id: Option<Uuid>,
     pub slug: String,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// A block of a template's body (copied with the template).

@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree_contracts::{Clock, FixedClock, Principal};
 use navree_db::navree_schema::{
@@ -33,8 +33,8 @@ use uuid::Uuid;
 pub const SUPER_ADMIN: &str = "super-admin";
 
 /// When every test app's clock starts.
-pub fn start() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap()
+pub fn start() -> Timestamp {
+    Timestamp::utc(2026, 10, 26, 9, 0, 0).unwrap()
 }
 
 /// Creates table `.0` with the columns `.1` adds (given the database's

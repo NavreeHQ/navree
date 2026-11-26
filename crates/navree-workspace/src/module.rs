@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use chrono::Timelike;
 use http::{HeaderName, HeaderValue};
 use navree_access::{AccessModule, Subject, WorkspaceGate};
 use navree_config::ModuleBuilderConfigExt;
@@ -394,9 +393,10 @@ async fn reset_demos_if_due(ctx: AppContext) -> Result<(), BoxError> {
     }
     let now = match ctx.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
-        None => chrono::Utc::now(),
+        None => navree_datetime::Timestamp::now(),
     };
-    if now.hour() != hour || now.minute() != minute {
+    let wall = now.date_time_utc().time();
+    if u32::from(wall.hour()) != hour || u32::from(wall.minute()) != minute {
         return Ok(());
     }
     let reset = ctx.get::<DemoWorkspaces>().await?.reset_all().await?;

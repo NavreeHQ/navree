@@ -40,7 +40,6 @@ ui = ["session", "dep:navree-ui"]
 
 [dependencies]
 base64 = { workspace = true }
-chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 # The conformity checks name a model's default table as its derive does.
 heck = { workspace = true }
@@ -49,6 +48,7 @@ navree-access = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }
