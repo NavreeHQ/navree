@@ -227,7 +227,7 @@ impl Issuer {
 
     /// A token for `email`, signed with ES256.
     fn token(&self, email: &str) -> String {
-        let now = chrono::Utc::now().timestamp();
+        let now = navree_datetime::Timestamp::now().as_secs();
         let claims = json!({
             "iss": ISSUER,
             "aud": "navree-app",
@@ -254,7 +254,7 @@ fn totp(secret: &str) -> String {
     Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
         .build()
         .expect("a valid TOTP")
-        .generate(u64::try_from(chrono::Utc::now().timestamp()).unwrap())
+        .generate(u64::try_from(navree_datetime::Timestamp::now().as_secs()).unwrap())
 }
 
 /// Turns two-factor authentication on for `user`; a recovery code.

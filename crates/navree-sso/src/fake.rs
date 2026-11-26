@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, TimeDelta, Utc};
 use navree_crypto::jose::SigningKey;
+use navree_datetime::{Span, Timestamp};
 
 use crate::dsig::{SIGNATURE_PLACEHOLDER, sign_enveloped};
 use crate::saml::{
@@ -34,7 +34,7 @@ use crate::xml::{Document, escape};
 /// };
 /// // What `GET /api/sso/acme/login` redirects to:
 /// let request = AuthnRequest::new(
-///     &sp, &idp.metadata(), "relay", chrono::Utc::now(), &RequestOptions::default(),
+///     &sp, &idp.metadata(), "relay", navree_datetime::Timestamp::now(), &RequestOptions::default(),
 /// )?;
 /// let response = idp
 ///     .respond_to(&request.url)?
@@ -143,7 +143,7 @@ impl SsoFake {
             .ok_or_else(|| SamlError::Invalid("the request has no issuer".to_owned()))?;
         let issued_at = match doc.attr(root, "IssueInstant") {
             Some(instant) => parse_instant(instant)?,
-            None => Utc::now(),
+            None => Timestamp::now(),
         };
         let mut response = FakeResponse::new(self.clone(), acs, &audience, issued_at);
         response.in_response_to = doc.attr(root, "ID").map(str::to_owned);
@@ -153,7 +153,7 @@ impl SsoFake {
 
     /// An IdP-initiated response to `sp` (no request), issued at
     /// `issued_at`.
-    pub fn unsolicited(&self, sp: &ServiceProvider, issued_at: DateTime<Utc>) -> FakeResponse {
+    pub fn unsolicited(&self, sp: &ServiceProvider, issued_at: Timestamp) -> FakeResponse {
         FakeResponse::new(self.clone(), &sp.acs_url, &sp.entity_id, issued_at)
     }
 }
@@ -166,7 +166,7 @@ pub struct FakeResponse {
     idp: SsoFake,
     acs_url: String,
     audience: String,
-    issued_at: DateTime<Utc>,
+    issued_at: Timestamp,
     lifetime: Duration,
     in_response_to: Option<String>,
     relay_state: Option<String>,
@@ -180,7 +180,7 @@ pub struct FakeResponse {
 }
 
 impl FakeResponse {
-    fn new(idp: SsoFake, acs_url: &str, audience: &str, issued_at: DateTime<Utc>) -> FakeResponse {
+    fn new(idp: SsoFake, acs_url: &str, audience: &str, issued_at: Timestamp) -> FakeResponse {
         FakeResponse {
             idp,
             acs_url: acs_url.to_owned(),
@@ -228,7 +228,7 @@ impl FakeResponse {
     /// When the response was issued (by default the request's
     /// `IssueInstant`).
     #[must_use]
-    pub fn issued_at(mut self, instant: DateTime<Utc>) -> Self {
+    pub fn issued_at(mut self, instant: Timestamp) -> Self {
         self.issued_at = instant;
         self
     }
@@ -294,10 +294,9 @@ impl FakeResponse {
     /// The response XML, signed.
     pub fn xml(&self) -> String {
         let at = format_instant(self.issued_at);
-        let until = format_instant(
-            self.issued_at + TimeDelta::from_std(self.lifetime).unwrap_or(TimeDelta::zero()),
-        );
-        let not_before = format_instant(self.issued_at - TimeDelta::seconds(30));
+        let until =
+            format_instant(self.issued_at + Span::try_from(self.lifetime).unwrap_or(Span::ZERO));
+        let not_before = format_instant(self.issued_at - Span::seconds(30));
         let in_response_to = self
             .in_response_to
             .as_deref()
@@ -435,7 +434,7 @@ mod tests {
         sp: &'a ServiceProvider,
         idp: &'a IdpMetadata,
         request_id: Option<&'a str>,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> ResponseCheck<'a> {
         ResponseCheck {
             sp,
@@ -452,7 +451,7 @@ mod tests {
     fn responses_to_a_request_pass_the_checks() {
         let fake = SsoFake::new();
         let (sp, idp) = (sp(), fake.metadata());
-        let now = Utc::now();
+        let now = Timestamp::now();
         let request = AuthnRequest::new(&sp, &idp, "rs", now, &RequestOptions::default()).unwrap();
         assert!(request.url.starts_with("https://idp.sso-fake.test/sso?"));
         for (sign_response, sign_assertion) in [(false, true), (true, false), (true, true)] {
@@ -478,7 +477,7 @@ mod tests {
     fn failures_unsigned_and_unsolicited_responses() {
         let fake = SsoFake::new();
         let (sp, idp) = (sp(), fake.metadata());
-        let now = Utc::now();
+        let now = Timestamp::now();
         let failed = fake
             .unsolicited(&sp, now)
             .failure("urn:oasis:names:tc:SAML:2.0:status:Requester", Some("no"));

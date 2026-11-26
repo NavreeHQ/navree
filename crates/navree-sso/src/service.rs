@@ -5,12 +5,12 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, TimeDelta, Utc};
 use navree_auth::{AuthService, ClientMeta, SignInAttempt, SignInMethod, User, email_domain};
 use navree_cache::Cache;
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_crypto::{Encrypter, Hasher, random_token, sha256_hex};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
 use navree_http::HttpOptions;
@@ -118,7 +118,7 @@ struct PendingCode {
 struct CachedMetadata {
     metadata: Arc<IdpMetadata>,
     fetched: Instant,
-    version: DateTime<Utc>,
+    version: Timestamp,
 }
 
 /// A connection row with its settings and rules decoded (the client secret
@@ -320,7 +320,7 @@ impl Sso {
         self.tenants_unverified_emails
     }
 
-    fn now(&self) -> DateTime<Utc> {
+    fn now(&self) -> Timestamp {
         self.clock.now()
     }
 
@@ -1055,7 +1055,7 @@ impl Sso {
             verifier: None,
             return_to,
             exp: now
-                .timestamp()
+                .as_secs()
                 .saturating_add(i64::try_from(ttl).unwrap_or(i64::MAX)),
         };
         let url = match &loaded.settings {
@@ -1115,7 +1115,7 @@ impl Sso {
         let Some(state) = self.take::<LoginState>(&Self::state_key(key)).await? else {
             return Ok(None);
         };
-        if state.connection_id != connection || state.exp <= self.now().timestamp() {
+        if state.connection_id != connection || state.exp <= self.now().as_secs() {
             return Err(SsoError::InvalidState);
         }
         Ok(Some(state))
@@ -1246,10 +1246,10 @@ impl Sso {
             }
         };
         // An assertion works once: remember its id until it expires.
-        let remaining = (assertion.not_on_or_after - now)
-            + TimeDelta::from_std(skew).unwrap_or(TimeDelta::zero());
         let remaining =
-            Duration::from_secs(u64::try_from(remaining.num_seconds()).unwrap_or(1).max(1));
+            (assertion.not_on_or_after - now) + Span::try_from(skew).unwrap_or(Span::ZERO);
+        let remaining =
+            Duration::from_secs(u64::try_from(remaining.as_seconds()).unwrap_or(1).max(1));
         let first_use = self
             .cache
             .add(

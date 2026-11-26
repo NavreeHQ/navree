@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
-use chrono::{DateTime, Utc};
 use navree_crypto::jose::{JwkSet, Jws};
+use navree_datetime::Timestamp;
 use navree_http_client::{HttpClient, Response};
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -244,7 +244,7 @@ fn token_body(response: &Response) -> Result<Value, SsoError> {
 pub(crate) struct IdTokenCheck<'a> {
     pub(crate) client_id: &'a str,
     pub(crate) nonce: &'a str,
-    pub(crate) now: DateTime<Utc>,
+    pub(crate) now: Timestamp,
     pub(crate) skew: Duration,
 }
 
@@ -298,7 +298,7 @@ pub(crate) async fn verify_id_token(
     {
         return Err(invalid("the token was issued to another party"));
     }
-    let now = check.now.timestamp();
+    let now = check.now.as_secs();
     let skew = i64::try_from(check.skew.as_secs()).unwrap_or(i64::MAX);
     let exp = claims.get("exp").and_then(Value::as_i64).unwrap_or(0);
     if exp.saturating_add(skew) <= now {

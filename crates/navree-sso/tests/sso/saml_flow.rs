@@ -247,7 +247,7 @@ async fn idp_initiated_sign_in_needs_the_switch() {
             acs_url: connection.service_provider.acs_url.clone().unwrap(),
         };
         let response = fake
-            .unsolicited(&sp, chrono::Utc::now())
+            .unsolicited(&sp, navree_datetime::Timestamp::now())
             .name_id("ida@acme.test")
             .relay_state(Some("/inbox".to_owned()));
         let result = world.acs("acme", &response.form()).await;
