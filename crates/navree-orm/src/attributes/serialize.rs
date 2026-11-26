@@ -23,7 +23,7 @@
 use std::borrow::Cow;
 use std::fmt;
 
-use chrono::{DateTime, FixedOffset, NaiveDateTime, SecondsFormat};
+use navree_datetime::{DateTime, Offset, Precision, Zone, Zoned};
 use serde::ser::{self, Serialize, SerializeMap, Serializer};
 
 use crate::error::{OrmError, Result};
@@ -287,31 +287,31 @@ impl Serializer for Capture {
 // -------------------------------------------------------------------------
 
 /// The default date-time output: RFC 3339, UTC, microseconds.
-pub(crate) fn default_date(at: &DateTime<FixedOffset>) -> serde_json::Value {
-    serde_json::Value::String(at.to_utc().to_rfc3339_opts(SecondsFormat::Micros, true))
+pub(crate) fn default_date(at: &Zoned) -> serde_json::Value {
+    serde_json::Value::String(at.timestamp().to_rfc3339_with(Precision::Micros, true))
 }
 
 /// A date-time written by serde (RFC 3339, or a naive `T`-separated
 /// date-time read as UTC), parsed.
-fn parse_serialized(text: &str) -> Option<DateTime<FixedOffset>> {
-    DateTime::parse_from_rfc3339(text).ok().or_else(|| {
-        NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f")
+fn parse_serialized(text: &str) -> Option<Zoned> {
+    Zoned::parse_rfc3339(text).ok().or_else(|| {
+        DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", text)
             .ok()
-            .map(|at| at.and_utc().fixed_offset())
+            .map(|at| at.in_utc().in_zone(Zone::fixed(Offset::UTC)))
     })
 }
 
 /// A date-time value of an extra column, if it is one.
-fn date_time_value(value: &Value) -> Option<DateTime<FixedOffset>> {
+fn date_time_value(value: &Value) -> Option<Zoned> {
     match value {
-        Value::Timestamp(at) => Some(at.fixed_offset()),
+        Value::Timestamp(at) => Some(at.in_zone(Zone::fixed(Offset::UTC))),
         Value::TimestampTz(at) => Some(*at),
-        Value::DateTime(at) => Some(at.and_utc().fixed_offset()),
+        Value::DateTime(at) => Some(at.in_utc().in_zone(Zone::fixed(Offset::UTC))),
         _ => None,
     }
 }
 
-fn write_date(at: &DateTime<FixedOffset>, serializer: Option<DateSerializer>) -> serde_json::Value {
+fn write_date(at: &Zoned, serializer: Option<DateSerializer>) -> serde_json::Value {
     match serializer {
         Some(serializer) => serializer(at),
         None => default_date(at),

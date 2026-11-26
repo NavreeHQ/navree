@@ -31,7 +31,7 @@ struct BadCasts {
     #[model(cast = "decimal(30)")]
     precise: Decimal,
     #[model(cast = "datetime_format(\"%Q\")")]
-    at: chrono::DateTime<chrono::Utc>,
+    at: navree_datetime::Timestamp,
     #[model(cast = "encrypt")]
     secret: String,
 }

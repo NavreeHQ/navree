@@ -154,9 +154,9 @@ pub fn rust_type_schema(text: &str) -> Json {
         "String" | "str" | "Cow<str>" | "Cow<'static, str>" => FieldKind::Text,
         "Uuid" => FieldKind::Uuid,
         "Ulid" => FieldKind::Ulid,
-        "NaiveDate" => FieldKind::Date,
-        "NaiveTime" => FieldKind::Time,
-        "NaiveDateTime" | "DateTime<Utc>" | "DateTime<FixedOffset>" => FieldKind::DateTime,
+        "Date" => FieldKind::Date,
+        "Time" => FieldKind::Time,
+        "DateTime" | "Timestamp" | "Zoned" => FieldKind::DateTime,
         "Url" => FieldKind::Url,
         _ => FieldKind::Any,
     };

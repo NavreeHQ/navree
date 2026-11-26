@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{DateTime, FixedOffset, TimeZone, Utc};
+use navree_datetime::{Offset, Timestamp, Zoned};
 use navree_crypto::{AppKey, Encrypter, Hasher, HashingOptions};
 use navree_db::Db;
 use navree_db::Executor as _;
@@ -121,13 +121,13 @@ pub struct Ledger {
     #[model(cast = "decimal(2)")]
     pub balance: Decimal,
     #[model(cast = "datetime_format(\"%d/%m/%Y %H:%M\")")]
-    pub opened_at: DateTime<Utc>,
+    pub opened_at: Timestamp,
     #[model(cast = "datetime_format(\"%Y-%m-%dT%H:%M:%S%:z\")")]
-    pub local_time: DateTime<FixedOffset>,
+    pub local_time: Zoned,
     #[model(cast = "unix_timestamp")]
-    pub synced_at: DateTime<Utc>,
+    pub synced_at: Timestamp,
     #[model(cast = "unix_timestamp_ms")]
-    pub pinged_at: Option<DateTime<Utc>>,
+    pub pinged_at: Option<Timestamp>,
     #[model(cast = "binary_uuid")]
     pub reference: Uuid,
     #[model(cast = "binary_ulid")]
@@ -164,15 +164,16 @@ fn services(key: &AppKey) -> CastContext {
 fn ledger() -> Ledger {
     Ledger {
         balance: "1234.565".parse().unwrap(),
-        opened_at: Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 59).unwrap(),
-        local_time: FixedOffset::west_opt(4 * 3600)
+        opened_at: Timestamp::utc(2026, 10, 27, 8, 30, 59).unwrap(),
+        local_time: Timestamp::utc(2026, 10, 27, 8, 30, 0)
             .unwrap()
-            .with_ymd_and_hms(2026, 10, 27, 4, 30, 0)
-            .unwrap(),
-        synced_at: Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 0).unwrap(),
+            .in_zone(navree_datetime::Zone::fixed(
+                Offset::west(4 * 3600).unwrap(),
+            )),
+        synced_at: Timestamp::utc(2026, 10, 27, 9, 0, 0).unwrap(),
         pinged_at: Some(
-            Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 1).unwrap()
-                + chrono::Duration::milliseconds(250),
+            Timestamp::utc(2026, 10, 27, 9, 0, 1).unwrap()
+                + navree_datetime::Span::millis(250),
         ),
         reference: Uuid::now_v7(),
         batch: Ulid::new(),

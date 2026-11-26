@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 
 use crate::error::{OrmError, Result};
 use crate::exec::Target;
@@ -22,7 +22,7 @@ use crate::value::Field;
 pub(crate) async fn insert_models<M: Model>(
     target: &Target<'_>,
     mut models: Vec<M>,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<u64> {
     if models.is_empty() {
         return Ok(0);

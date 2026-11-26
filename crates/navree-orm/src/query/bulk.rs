@@ -57,7 +57,7 @@
 
 use std::borrow::Cow;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 
 use crate::column::{Assignment, Column, ColumnName, IntoQuery};
 use crate::driver::InsertOutcome;
@@ -876,7 +876,7 @@ async fn update_from_on(
 
 /// `models` with empty keys generated and empty timestamps set to `now`,
 /// as [`Record::save`](crate::Record::save) would before inserting.
-fn fill<M: Model>(models: impl IntoIterator<Item = M>, now: DateTime<Utc>) -> Result<Vec<M>> {
+fn fill<M: Model>(models: impl IntoIterator<Item = M>, now: Timestamp) -> Result<Vec<M>> {
     let meta = M::meta();
     let mut filled = Vec::new();
     for mut model in models {

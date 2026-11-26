@@ -3,7 +3,7 @@
 //! every name the examples need in scope, so that each example compiles.
 //! Not API: hidden from the docs, and it may change at any time.
 
-pub use chrono::{DateTime, Duration, Utc};
+pub use navree_datetime::{Span, Timestamp};
 pub use indexmap::IndexMap;
 pub use navree_db::{Db, PageQuery, Uow};
 pub use uuid::Uuid;
@@ -49,11 +49,11 @@ pub struct Deal {
     /// How often the deal was viewed.
     pub views: i64,
     /// When the deal closed.
-    pub closed_at: Option<DateTime<Utc>>,
+    pub closed_at: Option<Timestamp>,
     /// When the deal was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the deal last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 #[relations]
@@ -117,11 +117,11 @@ pub struct Activity {
     /// What it is about.
     pub subject: String,
     /// When it is due.
-    pub due_at: DateTime<Utc>,
+    pub due_at: Timestamp,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 #[relations]
@@ -167,11 +167,11 @@ pub struct Note {
     /// The text.
     pub body: String,
     /// When it was written.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// When it was trashed.
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<Timestamp>,
 }
 
 #[relations]
@@ -202,7 +202,7 @@ pub struct Event {
     /// What happened.
     pub name: String,
     /// When it was recorded.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }

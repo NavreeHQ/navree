@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
 use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db, DbOptions};
@@ -45,8 +45,8 @@ pub async fn sqlite() -> TestDb {
 }
 
 /// The moment the fixed clock of [`app`] starts at.
-pub fn epoch() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, 27, 9, 30, 0).unwrap()
+pub fn epoch() -> Timestamp {
+    Timestamp::utc(2026, 10, 27, 9, 30, 0).unwrap()
 }
 
 /// An app with `DatabaseModule` on a fresh SQLite file, a fixed clock and

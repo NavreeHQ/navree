@@ -1,14 +1,14 @@
 //! Timestamps from the app's clock.
 
-use chrono::Duration;
+use navree_datetime::Span;
 use navree_contracts::FixedClock;
 use navree_orm::{Model, Record};
 
 use crate::models::{Company, Deal, Setting};
 use crate::support::{app, epoch};
 
-fn advance(clock: &FixedClock, by: Duration) {
-    clock.advance(by.to_std().expect("a forward step"));
+fn advance(clock: &FixedClock, by: Span) {
+    clock.advance(by);
 }
 
 #[tokio::test]
@@ -26,14 +26,14 @@ async fn timestamps_come_from_the_apps_clock() {
     assert_eq!(agra.created_at, epoch());
     assert_eq!(agra.updated_at, epoch());
 
-    advance(&clock, Duration::minutes(5));
+    advance(&clock, Span::minutes(5));
     agra.name = "Agra Corp".into();
     agra.save(&*db).await.unwrap();
     assert_eq!(agra.created_at, epoch());
-    assert_eq!(agra.updated_at, epoch() + Duration::minutes(5));
+    assert_eq!(agra.updated_at, epoch() + Span::minutes(5));
 
     // An update timestamp the caller set is kept.
-    let chosen = epoch() - Duration::days(1);
+    let chosen = epoch() - Span::days(1);
     agra.updated_at = chosen;
     agra.employees = 3;
     agra.save(&*db).await.unwrap();
@@ -46,9 +46,9 @@ async fn timestamps_come_from_the_apps_clock() {
     );
 
     // Touch sets it to now.
-    advance(&clock, Duration::minutes(5));
+    advance(&clock, Span::minutes(5));
     assert!(agra.touch(&*db).await.unwrap());
-    assert_eq!(agra.updated_at, epoch() + Duration::minutes(10));
+    assert_eq!(agra.updated_at, epoch() + Span::minutes(10));
     assert_eq!(
         Company::find_or_fail(&*db, agra.id)
             .await
@@ -61,7 +61,7 @@ async fn timestamps_come_from_the_apps_clock() {
 #[tokio::test]
 async fn caller_set_creation_timestamps_are_kept() {
     let (_app, db, _clock) = app(Vec::new()).await;
-    let imported = epoch() - Duration::days(30);
+    let imported = epoch() - Span::days(30);
     let deal = Deal::create(
         &*db,
         Deal {
@@ -90,19 +90,19 @@ async fn models_with_one_timestamp_and_touching_other_columns() {
     .unwrap();
     assert_eq!(setting.updated_at, epoch());
 
-    advance(&clock, Duration::hours(1));
+    advance(&clock, Span::hours(1));
     assert!(
         setting
             .touch_column(&*db, Setting::UPDATED_AT)
             .await
             .unwrap()
     );
-    assert_eq!(setting.updated_at, epoch() + Duration::hours(1));
+    assert_eq!(setting.updated_at, epoch() + Span::hours(1));
 
     let mut deal = Deal::create(&*db, Deal::new("Closing", 1)).await.unwrap();
-    advance(&clock, Duration::hours(1));
+    advance(&clock, Span::hours(1));
     deal.touch_column(&*db, Deal::CLOSED_AT).await.unwrap();
-    assert_eq!(deal.closed_at, Some(epoch() + Duration::hours(2)));
+    assert_eq!(deal.closed_at, Some(epoch() + Span::hours(2)));
 
     let mut event = Record::new(crate::models::Event::default());
     assert!(
@@ -123,7 +123,7 @@ async fn mass_writes_set_the_update_timestamp() {
     )
     .await
     .unwrap();
-    advance(&clock, Duration::minutes(1));
+    advance(&clock, Span::minutes(1));
     Company::query()
         .update(&*db, [Company::EMPLOYEES.set(7)])
         .await
@@ -131,10 +131,10 @@ async fn mass_writes_set_the_update_timestamp() {
     let stored = Company::find_or_fail(&*db, 1).await.unwrap();
     assert_eq!(
         (stored.employees, stored.updated_at),
-        (7, epoch() + Duration::minutes(1))
+        (7, epoch() + Span::minutes(1))
     );
 
-    advance(&clock, Duration::minutes(1));
+    advance(&clock, Span::minutes(1));
     Company::query()
         .increment(&*db, Company::EMPLOYEES, 2)
         .await
@@ -142,13 +142,13 @@ async fn mass_writes_set_the_update_timestamp() {
     let stored = Company::find_or_fail(&*db, 1).await.unwrap();
     assert_eq!(
         (stored.employees, stored.updated_at),
-        (9, epoch() + Duration::minutes(2))
+        (9, epoch() + Span::minutes(2))
     );
 
-    advance(&clock, Duration::minutes(1));
+    advance(&clock, Span::minutes(1));
     assert_eq!(Company::query().touch(&*db).await.unwrap(), 1);
     assert_eq!(
         Company::find_or_fail(&*db, 1).await.unwrap().updated_at,
-        epoch() + Duration::minutes(3)
+        epoch() + Span::minutes(3)
     );
 }

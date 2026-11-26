@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
@@ -46,7 +46,7 @@ pub struct UlidError(String);
 impl Ulid {
     /// A new ULID for the current time.
     pub fn new() -> Self {
-        let now = Utc::now().timestamp_millis();
+        let now = Timestamp::now().as_millis();
         // Before 1970 or after the year 10889: neither happens on a running clock.
         let millis = u64::try_from(now).unwrap_or(0);
         Self::from_parts(millis, random_80())
@@ -76,9 +76,9 @@ impl Ulid {
     }
 
     /// The timestamp part as a date-time.
-    pub fn datetime(&self) -> DateTime<Utc> {
+    pub fn datetime(&self) -> Timestamp {
         let millis = i64::try_from(self.timestamp_ms()).unwrap_or(i64::MAX);
-        DateTime::from_timestamp_millis(millis).unwrap_or_default()
+        Timestamp::from_millis(millis).ok().unwrap_or_default()
     }
 
     /// The 128 bits.
@@ -232,12 +232,12 @@ mod tests {
 
     #[test]
     fn new_ulids_carry_the_time_and_differ() {
-        let before = Utc::now().timestamp_millis();
+        let before = Timestamp::now().as_millis();
         let a = Ulid::new();
         let b = Ulid::new();
         assert_ne!(a, b);
         let ms = i64::try_from(a.timestamp_ms()).unwrap();
-        assert!(ms >= before && ms <= Utc::now().timestamp_millis());
+        assert!(ms >= before && ms <= Timestamp::now().as_millis());
         assert!(!a.is_nil());
     }
 

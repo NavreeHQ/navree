@@ -20,7 +20,7 @@
 //! [`ModelPruningStarting`] and [`ModelPruningFinished`].
 //!
 //! ```no_run
-//! use chrono::{DateTime, Duration, Utc};
+//! use navree_datetime::{Span, Timestamp};
 //! use navree_db::Db;
 //! use navree_orm::prelude::*;
 //! use navree_orm::prune::Prunable;
@@ -30,15 +30,15 @@
 //! struct Note {
 //!     id: i64,
 //!     body: String,
-//!     created_at: DateTime<Utc>,
-//!     updated_at: DateTime<Utc>,
-//!     deleted_at: Option<DateTime<Utc>>,
+//!     created_at: Timestamp,
+//!     updated_at: Timestamp,
+//!     deleted_at: Option<Timestamp>,
 //! }
 //!
 //! impl Prunable for Note {
 //!     /// Trashed notes are gone after 30 days.
 //!     fn prunable(query: Builder<Self>) -> Builder<Self> {
-//!         query.only_trashed().where_(Note::DELETED_AT.lt(Utc::now() - Duration::days(30)))
+//!         query.only_trashed().where_(Note::DELETED_AT.lt(Timestamp::now() - Span::days(30)))
 //!     }
 //! }
 //!

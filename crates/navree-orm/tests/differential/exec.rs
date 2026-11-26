@@ -11,7 +11,7 @@
 //! SQLite keeps them as text), dates as `YYYY-MM-DD`, JSON as JSON (text
 //! holding a JSON object or array too), bytes as text when they are UTF-8.
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, SecondsFormat, Utc};
+use navree_datetime::{Date, DateTime, Precision, Time, Timestamp, Zoned};
 use navree_db::{Db, DbOptions, Executor, Value};
 use navree_orm::{Decimal, Dialect, Statement, Syntax};
 use serde_json::Value as Json;
@@ -177,7 +177,7 @@ fn normalize(value: Value) -> Json {
         Value::Time(t) => time(t),
         Value::DateTime(at) => naive_date_time(at),
         Value::Timestamp(at) => date_time(at),
-        Value::TimestampTz(at) => date_time(at.with_timezone(&Utc)),
+        Value::TimestampTz(at) => date_time(at.timestamp()),
         other => Json::String(format!("{other:?}")),
     }
 }
@@ -209,22 +209,22 @@ pub fn decimal(value: Decimal) -> Json {
 }
 
 /// A date-time in UTC as RFC 3339.
-pub fn date_time(value: DateTime<Utc>) -> Json {
-    Json::String(value.to_rfc3339_opts(SecondsFormat::AutoSi, true))
+pub fn date_time(value: Timestamp) -> Json {
+    Json::String(value.to_rfc3339_with(Precision::Auto, true))
 }
 
 /// A date-time without zone, read as UTC.
-pub fn naive_date_time(value: NaiveDateTime) -> Json {
-    date_time(value.and_utc())
+pub fn naive_date_time(value: DateTime) -> Json {
+    date_time(value.in_utc())
 }
 
 /// A date as `YYYY-MM-DD`.
-pub fn date(value: NaiveDate) -> Json {
+pub fn date(value: Date) -> Json {
     Json::String(value.format("%Y-%m-%d").to_string())
 }
 
 /// A time of day as `HH:MM:SS[.f]`.
-pub fn time(value: NaiveTime) -> Json {
+pub fn time(value: Time) -> Json {
     Json::String(value.format("%H:%M:%S%.f").to_string())
 }
 
@@ -271,16 +271,16 @@ pub fn json(value: Json) -> Json {
 
 /// A date-time written as text (RFC 3339, or SQL's `YYYY-MM-DD
 /// HH:MM:SS[.f][+zone]`), in UTC.
-fn parse_date_time(text: &str) -> Option<DateTime<Utc>> {
+fn parse_date_time(text: &str) -> Option<Timestamp> {
     if text.len() < 16 || !text.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
         return None;
     }
-    if let Ok(at) = DateTime::parse_from_rfc3339(text) {
-        return Some(at.with_timezone(&Utc));
+    if let Ok(at) = Zoned::parse_rfc3339(text) {
+        return Some(at.timestamp());
     }
     for format in ["%Y-%m-%d %H:%M:%S%.f%:z", "%Y-%m-%d %H:%M:%S%.f%#z"] {
-        if let Ok(at) = DateTime::parse_from_str(text, format) {
-            return Some(at.with_timezone(&Utc));
+        if let Ok(at) = Zoned::parse(format, text) {
+            return Some(at.timestamp());
         }
     }
     for format in [
@@ -288,8 +288,8 @@ fn parse_date_time(text: &str) -> Option<DateTime<Utc>> {
         "%Y-%m-%dT%H:%M:%S%.f",
         "%Y-%m-%d %H:%M",
     ] {
-        if let Ok(at) = NaiveDateTime::parse_from_str(text, format) {
-            return Some(at.and_utc());
+        if let Ok(at) = DateTime::parse(format, text) {
+            return Some(at.in_utc());
         }
     }
     None

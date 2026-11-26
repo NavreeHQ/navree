@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use chrono::NaiveDate;
+use navree_datetime::Date;
 use http::Method;
 use navree_api::{ApiModule, ApiOptions, ApiResource};
 use navree_db::{DatabaseModule, Db, PageQuery, Uow};
@@ -63,7 +63,7 @@ pub struct Contact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nickname: Option<String>,
     pub score: Option<f64>,
-    pub created_on: NaiveDate,
+    pub created_on: Date,
 }
 
 #[accessors]
@@ -112,7 +112,7 @@ fn ada() -> Contact {
         tier: Tier::Pro,
         nickname: None,
         score: Some(9.5),
-        created_on: NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(),
+        created_on: Date::new(2026, 10, 27).unwrap(),
     }
 }
 

@@ -1,7 +1,7 @@
 //! Records in queued jobs: identities that serialize into a job and load
 //! the records again when it runs.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::attributes::{ModelRef, ModelRefs};
 use navree_orm::{Model, OrmError, Record};
 use serde::{Deserialize, Serialize};
@@ -27,7 +27,7 @@ CREATE TABLE lines (
 pub struct Invoice {
     pub id: Uuid,
     pub number: String,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<Timestamp>,
 }
 
 #[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]

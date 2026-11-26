@@ -4,8 +4,8 @@ use navree_orm::Model;
 #[model(timestamps, soft_deletes)]
 struct Deal {
     id: i64,
-    updated_at: chrono::DateTime<chrono::Utc>,
-    deleted_at: chrono::DateTime<chrono::Utc>,
+    updated_at: navree_datetime::Timestamp,
+    deleted_at: navree_datetime::Timestamp,
 }
 
 #[derive(Model, Clone, serde::Serialize)]

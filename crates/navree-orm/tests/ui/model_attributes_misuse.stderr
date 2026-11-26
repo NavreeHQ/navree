@@ -40,7 +40,7 @@ error: a decimal keeps at most 28 decimal places, not 30
 31 |     #[model(cast = "decimal(30)")]
    |                    ^^^^^^^^^^^^^
 
-error: `%Q` is not a valid chrono format (see chrono::format::strftime)
+error: `%Q` at byte 0 is not a specifier of a date or time pattern
   --> tests/ui/model_attributes_misuse.rs:33:20
    |
 33 |     #[model(cast = "datetime_format(\"%Q\")")]

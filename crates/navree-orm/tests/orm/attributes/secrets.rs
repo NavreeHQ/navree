@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use navree_datetime::{Date, Timestamp};
 use navree_contracts::{Clock, FixedClock};
 use navree_crypto::{AppKey, Encrypter, Hasher, generate_key};
 use navree_kernel::{Factory, Module, ModuleBuilder};
@@ -39,7 +39,7 @@ CREATE TABLE vaults (
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Visit {
-    pub on: NaiveDate,
+    pub on: Date,
     pub reason: String,
 }
 
@@ -60,8 +60,8 @@ pub struct Patient {
     pub password: String,
     #[model(cast = "hashed")]
     pub pin: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Encrypted with the app's `vault` encrypter.
@@ -79,7 +79,7 @@ fn patient() -> Patient {
         ssn: "078-05-1120".into(),
         notes: Some("allergic to penicillin".into()),
         history: vec![Visit {
-            on: NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            on: Date::new(2026, 3, 1).unwrap(),
             reason: "checkup".into(),
         }],
         scan: vec![0, 159, 146, 150],
@@ -437,24 +437,24 @@ impl Cast<String> for Prefixed {
 pub struct MinutesLeft;
 
 impl Cast<i64> for MinutesLeft {
-    type Stored = DateTime<Utc>;
+    type Stored = Timestamp;
 
     const CONTEXT: bool = true;
 
-    fn get(stored: DateTime<Utc>) -> Result<i64, CastError> {
+    fn get(stored: Timestamp) -> Result<i64, CastError> {
         CastContext::with_current(|context| Self::get_with(stored, context))
     }
 
-    fn set(value: &i64) -> Result<DateTime<Utc>, CastError> {
+    fn set(value: &i64) -> Result<Timestamp, CastError> {
         CastContext::with_current(|context| Self::set_with(value, context))
     }
 
-    fn get_with(stored: DateTime<Utc>, context: &CastContext) -> Result<i64, CastError> {
-        Ok((stored - context.now()).num_minutes())
+    fn get_with(stored: Timestamp, context: &CastContext) -> Result<i64, CastError> {
+        Ok((stored - context.now()).as_minutes())
     }
 
-    fn set_with(value: &i64, context: &CastContext) -> Result<DateTime<Utc>, CastError> {
-        Ok(context.now() + chrono::Duration::minutes(*value))
+    fn set_with(value: &i64, context: &CastContext) -> Result<Timestamp, CastError> {
+        Ok(context.now() + navree_datetime::Span::minutes(*value))
     }
 }
 
@@ -470,7 +470,7 @@ pub struct Invoice {
 
 #[tokio::test]
 async fn custom_casts_read_the_apps_clock_and_configuration() {
-    let now = Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 0).unwrap();
+    let now = Timestamp::utc(2026, 10, 27, 9, 0, 0).unwrap();
     let clock = Arc::new(FixedClock::new(now));
     let app = navree_testing::TestApp::builder()
         .temp_database()
@@ -502,8 +502,8 @@ async fn custom_casts_read_the_apps_clock_and_configuration() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        row.get::<DateTime<Utc>>("due_at").unwrap(),
-        now + chrono::Duration::minutes(90)
+        row.get::<Timestamp>("due_at").unwrap(),
+        now + navree_datetime::Span::minutes(90)
     );
 
     clock.advance(std::time::Duration::from_secs(30 * 60));

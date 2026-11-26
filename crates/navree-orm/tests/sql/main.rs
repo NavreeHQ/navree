@@ -7,7 +7,7 @@ mod attributes;
 use std::borrow::Cow;
 use std::fmt::Write as _;
 
-use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
+use navree_datetime::{Date, Time, Timestamp};
 use navree_orm::ir::{
     ColumnRef, DeleteIr, Direction, Expr as IrExpr, FullText, InsertIr, OnConflict, Operator,
     TableRef, UpdateIr, WhereClause,
@@ -40,10 +40,10 @@ struct Deal {
     stage: Stage,
     #[model(cast = "json")]
     tags: Vec<String>,
-    closed_at: Option<DateTime<Utc>>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    deleted_at: Option<DateTime<Utc>>,
+    closed_at: Option<Timestamp>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
+    deleted_at: Option<Timestamp>,
 }
 
 #[derive(Model, Clone, Debug, Default, Serialize)]
@@ -80,8 +80,8 @@ fn rows(builder: navree_orm::TableBuilder) -> String {
     per_dialect(|dialect| builder.to_sql(dialect))
 }
 
-fn at() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 0).unwrap()
+fn at() -> Timestamp {
+    Timestamp::utc(2026, 10, 27, 8, 30, 0).unwrap()
 }
 
 #[test]
@@ -178,12 +178,12 @@ fn date_parts() {
             .where_date(
                 Deal::CLOSED_AT,
                 "=",
-                NaiveDate::from_ymd_opt(2026, 10, 27).unwrap()
+                Date::new(2026, 10, 27).unwrap()
             )
             .where_time(
                 Deal::CLOSED_AT,
                 ">=",
-                NaiveTime::from_hms_opt(9, 0, 0).unwrap()
+                Time::new(9, 0, 0).unwrap()
             )
             .where_day(Deal::CLOSED_AT, "=", 7)
             .where_month(Deal::CLOSED_AT, "<", 10)

@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
+use navree_datetime::{Date, Offset, Timestamp, Zoned};
 use navree_db::Executor as _;
 use navree_orm::attributes::ExtraCast;
 use navree_orm::cast::{Cast, CastError, Castable, InboundCast, MultiColumnCast};
@@ -275,15 +275,15 @@ pub struct Ledger {
     #[model(cast = "decimal(2)")]
     pub balance: Decimal,
     #[model(cast = "datetime_format(\"%d/%m/%Y %H:%M\")")]
-    pub opened_at: DateTime<Utc>,
+    pub opened_at: Timestamp,
     #[model(cast = "datetime_format(\"%Y-%m-%dT%H:%M:%S%:z\")")]
-    pub local_time: DateTime<FixedOffset>,
+    pub local_time: Zoned,
     #[model(cast = "datetime_format(\"%d.%m.%Y\")")]
-    pub day: Option<NaiveDate>,
+    pub day: Option<Date>,
     #[model(cast = "unix_timestamp")]
-    pub synced_at: DateTime<Utc>,
+    pub synced_at: Timestamp,
     #[model(cast = "unix_timestamp_ms")]
-    pub pinged_at: Option<DateTime<Utc>>,
+    pub pinged_at: Option<Timestamp>,
     #[model(cast = "binary_uuid")]
     pub reference: Uuid,
     #[model(cast = "binary_ulid")]
@@ -311,22 +311,20 @@ pub struct Ledger {
     pub embedding: Option<Vec<f32>>,
 }
 
-fn at(day: u32, hour: u32, minute: u32, second: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, day, hour, minute, second)
-        .unwrap()
+fn at(day: u8, hour: u8, minute: u8, second: u8) -> Timestamp {
+    Timestamp::utc(2026, 10, day, hour, minute, second).unwrap()
 }
 
 fn ledger() -> Ledger {
     Ledger {
         balance: "12.345".parse().unwrap(),
         opened_at: at(27, 8, 30, 45),
-        local_time: FixedOffset::east_opt(19_800)
+        local_time: Timestamp::utc(2026, 10, 27, 8, 30, 0)
             .unwrap()
-            .with_ymd_and_hms(2026, 10, 27, 14, 0, 0)
-            .unwrap(),
-        day: NaiveDate::from_ymd_opt(2026, 2, 1),
-        synced_at: at(27, 9, 0, 0) + chrono::Duration::milliseconds(750),
-        pinged_at: Some(at(27, 9, 0, 1) + chrono::Duration::microseconds(1_234_567)),
+            .in_zone(navree_datetime::Zone::fixed(Offset::east(19_800).unwrap())),
+        day: Date::new(2026, 2, 1).ok(),
+        synced_at: at(27, 9, 0, 0) + navree_datetime::Span::millis(750),
+        pinged_at: Some(at(27, 9, 0, 1) + navree_datetime::Span::micros(1_234_567)),
         reference: Uuid::now_v7(),
         batch: Ulid::new(),
         website: Some(Url::parse("https://navree.com/docs").unwrap()),
@@ -368,11 +366,11 @@ async fn every_cast_stores_its_form_and_reads_back() {
     assert_eq!(row.get::<String>("day").unwrap(), "01.02.2026");
     assert_eq!(
         row.get::<i64>("synced_at").unwrap(),
-        at(27, 9, 0, 0).timestamp()
+        at(27, 9, 0, 0).as_secs()
     );
     assert_eq!(
         row.get::<i64>("pinged_at").unwrap(),
-        at(27, 9, 0, 2).timestamp_millis() + 234
+        at(27, 9, 0, 2).as_millis() + 234
     );
     assert_eq!(
         row.get::<Vec<u8>>("reference").unwrap(),
@@ -662,11 +660,11 @@ async fn untyped_input_reaches_every_cast_in_its_plain_form() {
     assert_eq!(record.balance.to_string(), "7.01");
     assert_eq!(
         record.opened_at,
-        Utc.with_ymd_and_hms(2026, 11, 1, 10, 0, 0).unwrap()
+        Timestamp::utc(2026, 11, 1, 10, 0, 0).unwrap()
     );
-    assert_eq!(record.local_time.offset().local_minus_utc(), -18_000);
-    assert_eq!(record.synced_at.timestamp(), 1_793_089_800);
-    assert_eq!(record.pinged_at.unwrap().timestamp_subsec_millis(), 123);
+    assert_eq!(record.local_time.offset().seconds(), -18_000);
+    assert_eq!(record.synced_at.as_secs(), 1_793_089_800);
+    assert_eq!(record.pinged_at.unwrap().subsec_nanos() / 1_000_000, 123);
     assert_eq!((record.reference, record.batch), (reference, batch));
     assert_eq!(record.statuses, [Status::Draft]);
     assert_eq!(record.priorities, [Priority::High].into());

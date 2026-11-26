@@ -71,7 +71,7 @@ impl PivotSpec {
 /// # async fn demo(db: Db, deal: Record<Deal>) -> Result<()> {
 /// for tag in deal.tags().get(&db).await? {
 ///     let pivot = tag.pivot().unwrap();
-///     let added: Option<DateTime<Utc>> = pivot.value("created_at")?;
+///     let added: Option<navree_datetime::Timestamp> = pivot.value("created_at")?;
 ///     println!("{} added {added:?}", tag.name);
 /// }
 /// # Ok(()) }

@@ -4,7 +4,6 @@
 
 use std::borrow::Cow;
 
-use chrono::{Datelike, Timelike};
 
 use super::{Lowerer, normalize_operator};
 use crate::error::{OrmError, Result};
@@ -394,20 +393,31 @@ impl Lowerer {
             DatePart::Day | DatePart::Month | DatePart::Year => {
                 let number = match value {
                     Value::Date(date) => i64::from(match part {
-                        DatePart::Day => date.day() as i32,
-                        DatePart::Month => date.month() as i32,
+                        DatePart::Day => i32::from(date.day()),
+                        DatePart::Month => i32::from(date.month_number()),
                         _ => date.year(),
                     }),
                     Value::DateTime(at) => i64::from(match part {
-                        DatePart::Day => at.day() as i32,
-                        DatePart::Month => at.month() as i32,
-                        _ => at.year(),
+                        DatePart::Day => i32::from(at.date().day()),
+                        DatePart::Month => i32::from(at.date().month_number()),
+                        _ => at.date().year(),
                     }),
-                    Value::Timestamp(at) => i64::from(match part {
-                        DatePart::Day => at.day() as i32,
-                        DatePart::Month => at.month() as i32,
-                        _ => at.year(),
-                    }),
+                    Value::Timestamp(at) => {
+                        let date = at.date_time_utc().date();
+                        i64::from(match part {
+                            DatePart::Day => i32::from(date.day()),
+                            DatePart::Month => i32::from(date.month_number()),
+                            _ => date.year(),
+                        })
+                    }
+                    Value::TimestampTz(at) => {
+                        let date = at.date();
+                        i64::from(match part {
+                            DatePart::Day => i32::from(date.day()),
+                            DatePart::Month => i32::from(date.month_number()),
+                            _ => date.year(),
+                        })
+                    }
                     other => i64::from_value(other.clone()).map_err(|error| {
                         OrmError::invalid(format!("a {part:?} must be a number: {error}"))
                     })?,

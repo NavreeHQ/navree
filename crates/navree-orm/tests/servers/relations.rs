@@ -5,7 +5,7 @@
 
 #![allow(dead_code)]
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_db::Executor as _;
 use navree_orm::prelude::*;
@@ -163,7 +163,7 @@ pub struct User {
     pub id: i64,
     pub team_id: Option<i64>,
     pub name: String,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<Timestamp>,
 }
 
 #[relations]
@@ -179,8 +179,8 @@ pub struct Company {
     pub id: i64,
     pub parent_id: Option<i64>,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 #[relations]
@@ -206,9 +206,9 @@ pub struct Deal {
     pub owner_id: Option<i64>,
     pub title: String,
     pub amount_cents: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 #[relations]
@@ -239,9 +239,9 @@ pub struct Activity {
     pub deal_id: Option<Uuid>,
     pub kind: String,
     pub minutes: i64,
-    pub due_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub due_at: Option<Timestamp>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 #[relations]
@@ -256,7 +256,7 @@ impl Activity {
 pub struct Tag {
     pub id: i64,
     pub name: String,
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 #[relations]
@@ -368,10 +368,7 @@ pub async fn relations(db: Db, server: Server) {
     let platform = Deal::create(db, deal("Platform", 90_000, None, ada.id))
         .await
         .unwrap();
-    let due = |hour: u32| {
-        use chrono::TimeZone;
-        Some(Utc.with_ymd_and_hms(2026, 3, 2, hour, 0, 0).unwrap())
-    };
+    let due = |hour: u8| Some(Timestamp::utc(2026, 3, 2, hour, 0, 0).unwrap());
     for (deal_id, kind, minutes, due_at) in [
         (renewal.id, "call", 30, due(9)),
         (renewal.id, "email", 5, None),
@@ -535,7 +532,7 @@ pub async fn relations(db: Db, server: Server) {
     );
     assert!(
         tags[1]
-            .pivot_value::<DateTime<Utc>>("created_at")
+            .pivot_value::<Timestamp>("created_at")
             .unwrap()
             .is_some()
     );

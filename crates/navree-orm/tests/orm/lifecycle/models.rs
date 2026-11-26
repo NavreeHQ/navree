@@ -4,7 +4,7 @@
 
 use std::sync::Mutex;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_db::Executor as _;
 use navree_orm::hooks::Flow;
@@ -110,8 +110,8 @@ pub struct Ticket {
     pub id: Uuid,
     pub subject: String,
     pub status: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Opens new tickets, refuses empty subjects and notes what happened.
@@ -221,9 +221,8 @@ pub struct Probe {
 }
 
 /// Before this, records are old enough to prune.
-pub fn prune_cutoff() -> DateTime<Utc> {
-    use chrono::TimeZone;
-    Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()
+pub fn prune_cutoff() -> Timestamp {
+    Timestamp::utc(2026, 1, 1, 0, 0, 0).unwrap()
 }
 
 /// What `LogEntry::pruning` saw, across tests (each test uses its own
@@ -245,9 +244,9 @@ pub fn pruned_with_prefix(prefix: &str) -> Vec<String> {
 pub struct LogEntry {
     pub id: i64,
     pub message: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 impl navree_orm::prune::Prunable for LogEntry {
@@ -273,7 +272,7 @@ impl navree_orm::prune::Prunable for LogEntry {
 pub struct Metric {
     pub id: i64,
     pub name: String,
-    pub recorded_at: DateTime<Utc>,
+    pub recorded_at: Timestamp,
 }
 
 impl navree_orm::prune::MassPrunable for Metric {
@@ -294,8 +293,8 @@ pub struct Order {
     pub id: i64,
     pub reference: String,
     pub total_cents: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// An order was placed.
@@ -362,9 +361,9 @@ impl From<&Record<Order>> for OrderSaving {
 pub struct Room {
     pub id: i64,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 impl navree_orm::broadcast::Broadcasts for Room {}
@@ -412,9 +411,9 @@ pub struct Member {
     pub id: i64,
     pub email: String,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 /// A row an in-transaction observer writes.

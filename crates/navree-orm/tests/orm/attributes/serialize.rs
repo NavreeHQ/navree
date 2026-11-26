@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
+use navree_datetime::{Date, Offset, Timestamp, Zoned};
 use navree_orm::attributes::ExtraCast;
 use navree_orm::{Collection, Kind, Model, OrmError, Record, accessors};
 use serde::{Serialize, Serializer};
@@ -56,12 +56,12 @@ pub struct Person {
     pub secret_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nickname: Option<String>,
-    pub born_on: Option<NaiveDate>,
-    pub last_seen_at: Option<DateTime<FixedOffset>>,
+    pub born_on: Option<Date>,
+    pub last_seen_at: Option<Zoned>,
     #[serde(serialize_with = "as_text")]
     pub score: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 #[accessors]
@@ -104,15 +104,15 @@ pub struct Badge {
     pub email: String,
     pub secret_token: String,
     pub nickname: Option<String>,
-    pub born_on: Option<NaiveDate>,
-    pub last_seen_at: Option<DateTime<FixedOffset>>,
+    pub born_on: Option<Date>,
+    pub last_seen_at: Option<Zoned>,
     pub score: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Dates as `YYYY-MM-DD HH:MM` in the date-time's own offset.
-fn local_dates(at: &DateTime<FixedOffset>) -> serde_json::Value {
+fn local_dates(at: &Zoned) -> serde_json::Value {
     json!(at.format("%Y-%m-%d %H:%M %:z").to_string())
 }
 
@@ -172,17 +172,16 @@ fn ada() -> Person {
         email: "anu@example.com".into(),
         secret_token: "s3cret".into(),
         nickname: None,
-        born_on: NaiveDate::from_ymd_opt(1815, 12, 10),
+        born_on: Date::new(1815, 12, 10).ok(),
         last_seen_at: Some(
-            FixedOffset::east_opt(3600)
+            Timestamp::utc(2026, 10, 27, 9, 30, 0)
                 .unwrap()
-                .with_ymd_and_hms(2026, 10, 27, 10, 30, 0)
-                .unwrap(),
+                .in_zone(navree_datetime::Zone::fixed(Offset::east(3600).unwrap())),
         ),
         score: 42,
-        created_at: Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap()
-            + chrono::Duration::nanoseconds(123_456_789),
-        updated_at: Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 0).unwrap(),
+        created_at: Timestamp::utc(2026, 10, 27, 8, 0, 0).unwrap()
+            + navree_datetime::Span::nanos(123_456_789),
+        updated_at: Timestamp::utc(2026, 10, 27, 9, 0, 0).unwrap(),
     }
 }
 
@@ -292,7 +291,7 @@ fn visible_lists_and_custom_date_formats_per_model() {
     let mut badge = Record::new(Badge {
         id: 7,
         first_name: "Gauri".into(),
-        created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+        created_at: Timestamp::utc(2026, 1, 2, 3, 4, 5).unwrap(),
         ..Badge::default()
     });
     badge.set_extra("rank", 1_i64);

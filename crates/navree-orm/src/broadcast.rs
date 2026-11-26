@@ -18,7 +18,7 @@
 //! the quiet operations) silences it.
 //!
 //! ```no_run
-//! use chrono::{DateTime, Utc};
+//! use navree_datetime::Timestamp;
 //! use navree_orm::broadcast::Broadcasts;
 //! use navree_orm::prelude::*;
 //!
@@ -27,8 +27,8 @@
 //! struct Deal {
 //!     id: i64,
 //!     title: String,
-//!     created_at: DateTime<Utc>,
-//!     updated_at: DateTime<Utc>,
+//!     created_at: Timestamp,
+//!     updated_at: Timestamp,
 //! }
 //!
 //! impl Broadcasts for Deal {

@@ -307,7 +307,7 @@ macro_rules! filters {
         }
 
         /// Adds a comparison of the date part of `column` (`YYYY-MM-DD`)
-        /// with `value` (a `NaiveDate`, or text).
+        /// with `value` (a `Date`, or text).
         pub fn where_date(
             self,
             column: impl $crate::IntoExpr,

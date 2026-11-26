@@ -29,7 +29,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, SecondsFormat, Utc};
+use navree_datetime::{Date, Precision, Timestamp, Zoned};
 use navree_access::{
     Ability, Accessible, ActionMarker, SqlColumn, SqlColumns, SqlFilter, SqlOp, Subject,
 };
@@ -87,8 +87,8 @@ enum Stored {
     Float,
     Text,
     Uuid,
-    DateTimeUtc,
-    NaiveDateTime,
+    Timestamp,
+    DateTime,
     Date,
     Decimal,
     Other,
@@ -119,9 +119,9 @@ fn stored<M: Model>(column: &str) -> Option<Stored> {
         "String" | "Ulid" => Stored::Text,
         "Uuid" => Stored::Uuid,
         "Decimal" => Stored::Decimal,
-        "NaiveDate" => Stored::Date,
-        "NaiveDateTime" => Stored::NaiveDateTime,
-        _ if last.starts_with("DateTime") => Stored::DateTimeUtc,
+        "Date" => Stored::Date,
+        "DateTime" => Stored::DateTime,
+        "Timestamp" | "Zoned" => Stored::Timestamp,
         _ => Stored::Other,
     })
 }
@@ -144,14 +144,14 @@ impl<M: Model> ModelColumns<M> {
                 Stored::Uuid => text
                     .and_then(|t| uuid::Uuid::parse_str(t).ok())
                     .map(Value::from),
-                Stored::DateTimeUtc => text
-                    .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
-                    .map(|at| Value::from(at.with_timezone(&Utc))),
-                Stored::NaiveDateTime => text
-                    .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
-                    .map(|at| Value::from(at.with_timezone(&Utc).naive_utc())),
+                Stored::Timestamp => text
+                    .and_then(|t| Zoned::parse_rfc3339(t).ok())
+                    .map(|at| Value::from(at.timestamp())),
+                Stored::DateTime => text
+                    .and_then(|t| Zoned::parse_rfc3339(t).ok())
+                    .map(|at| Value::from(at.timestamp().date_time_utc())),
                 Stored::Date => text
-                    .and_then(|t| NaiveDate::parse_from_str(t, "%Y-%m-%d").ok())
+                    .and_then(|t| Date::parse("%Y-%m-%d", t).ok())
                     .map(Value::from),
                 Stored::Decimal => match value {
                     Json::String(t) => t.parse::<Decimal>().ok().map(Value::from),
@@ -178,8 +178,8 @@ impl<M: Model> ModelColumns<M> {
             Some(
                 Stored::Text
                 | Stored::Uuid
-                | Stored::DateTimeUtc
-                | Stored::NaiveDateTime
+                | Stored::Timestamp
+                | Stored::DateTime
                 | Stored::Date,
             ) => value.is_string(),
             Some(Stored::Decimal | Stored::Other) => true,
@@ -307,12 +307,12 @@ pub fn model_json<M: Model>(model: &M) -> Json {
 
 /// A stored value as a condition operand spells it.
 fn condition_json(value: &Value) -> Json {
-    let micros = |at: DateTime<Utc>| Json::String(at.to_rfc3339_opts(SecondsFormat::Micros, true));
+    let micros = |at: Timestamp| Json::String(at.to_rfc3339_with(Precision::Micros, true));
     match value {
         Value::Uuid(uuid) => Json::String(uuid.hyphenated().to_string()),
         Value::Timestamp(at) => micros(*at),
-        Value::TimestampTz(at) => micros(at.with_timezone(&Utc)),
-        Value::DateTime(at) => micros(NaiveDateTime::and_utc(at)),
+        Value::TimestampTz(at) => micros(at.timestamp()),
+        Value::DateTime(at) => micros(at.in_utc()),
         Value::Date(date) => Json::String(date.format("%Y-%m-%d").to_string()),
         Value::Time(time) => Json::String(time.format("%H:%M:%S%.f").to_string()),
         // Binary columns have no condition form (and may not be UTF-8).

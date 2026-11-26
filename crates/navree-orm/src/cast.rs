@@ -9,8 +9,8 @@
 //! | `cast = "string_enum"` | [`StringEnum`] | a unit enum, by its serde name | text |
 //! | `cast = "int_enum"` | [`IntEnum`] | `Copy + Into<i64> + TryFrom<i64>` (a `#[repr]` enum) | an integer |
 //! | `cast = "decimal(2)"` | [`DecimalScale`] | `Decimal`, rounded half away from zero to the scale | a decimal |
-//! | `cast = "datetime_format(\"%d/%m/%Y %H:%M\")"` | [`DateTimeFormat`] | `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime`, `NaiveDate`, `NaiveTime` | text in that format |
-//! | `cast = "unix_timestamp"` / `"unix_timestamp_ms"` | [`UnixTimestamp`] / [`UnixTimestampMs`] | `DateTime<Utc>` | integer seconds / milliseconds |
+//! | `cast = "datetime_format(\"%d/%m/%Y %H:%M\")"` | [`DateTimeFormat`] | `Timestamp`, `Zoned`, `DateTime`, `Date`, `Time` | text in that format |
+//! | `cast = "unix_timestamp"` / `"unix_timestamp_ms"` | [`UnixTimestamp`] / [`UnixTimestampMs`] | `Timestamp`, `DateTime` | integer seconds / milliseconds |
 //! | `cast = "encrypted"` | [`Encrypted`] | `String`, `Vec<u8>` | an encrypted payload (navree-crypto) |
 //! | `cast = "encrypted_json"` | [`EncryptedJson`] | any `Serialize + DeserializeOwned` type | encrypted JSON |
 //! | `cast = "hashed"` | [`Hashed`] | `String` | an Argon2id hash (navree-crypto) |

@@ -4,7 +4,7 @@
 use std::borrow::Cow;
 use std::fmt;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree_datetime::{Date, Timestamp};
 use rust_decimal::RoundingStrategy;
 use uuid::Uuid;
 
@@ -98,8 +98,8 @@ impl ExtraCast {
             }
             ExtraCast::String => Value::String(String::from_value(value)?),
             ExtraCast::Json => Value::Json(serde_json::Value::from_value(value)?),
-            ExtraCast::DateTime => Value::Timestamp(DateTime::<Utc>::from_value(value)?),
-            ExtraCast::Date => Value::Date(NaiveDate::from_value(value)?),
+            ExtraCast::DateTime => Value::Timestamp(Timestamp::from_value(value)?),
+            ExtraCast::Date => Value::Date(Date::from_value(value)?),
             ExtraCast::Uuid => Value::Uuid(Uuid::from_value(value)?),
             ExtraCast::Custom(convert) => convert(value)?,
         })

@@ -2,7 +2,7 @@
 //! reading pivots, typed pivot models, pivot conditions, values and order,
 //! metadata, pivot queries and records, and polymorphic pivots.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_orm::prelude::*;
 use navree_orm::relations::Pivot;
@@ -51,11 +51,11 @@ async fn pivot_columns_and_timestamps_load_with_the_related_records() {
     );
     assert_eq!(pivot.value::<i64>("deal_id").unwrap(), Some(crm.renewal.id));
     assert_eq!(pivot.value::<i64>("tag_id").unwrap(), Some(crm.vip.id));
-    let added: Option<DateTime<Utc>> = pivot.value("created_at").unwrap();
+    let added: Option<Timestamp> = pivot.value("created_at").unwrap();
     assert!(added.is_some(), "attaching set the pivot timestamps");
     assert!(
         pivot
-            .value::<DateTime<Utc>>("updated_at")
+            .value::<Timestamp>("updated_at")
             .unwrap()
             .is_some()
     );
@@ -87,7 +87,7 @@ async fn pivot_columns_and_timestamps_load_with_the_related_records() {
     let hot = crm.upgrade.tags().get(&t.db).await.unwrap();
     assert_eq!(
         hot[0]
-            .pivot_value::<Option<DateTime<Utc>>>("created_at")
+            .pivot_value::<Option<Timestamp>>("created_at")
             .unwrap(),
         Some(None)
     );
@@ -100,7 +100,7 @@ async fn pivot_columns_and_timestamps_load_with_the_related_records() {
     let pivot = hot[0].pivot().unwrap();
     assert!(
         pivot
-            .value::<DateTime<Utc>>("updated_at")
+            .value::<Timestamp>("updated_at")
             .unwrap()
             .is_some()
     );

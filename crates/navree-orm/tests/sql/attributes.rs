@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::attributes::CastContext;
 use navree_orm::cast::{CastError, InboundCast};
 use navree_orm::ir::{Expr as IrExpr, InsertIr};
@@ -31,9 +31,9 @@ struct Ledger {
     #[model(cast = "decimal(2)")]
     balance: Decimal,
     #[model(cast = "datetime_format(\"%d/%m/%Y\")")]
-    opened_on: DateTime<Utc>,
+    opened_on: Timestamp,
     #[model(cast = "unix_timestamp")]
-    synced_at: DateTime<Utc>,
+    synced_at: Timestamp,
     #[model(cast = "binary_uuid")]
     reference: Uuid,
     #[model(cast = "binary_ulid")]
@@ -44,8 +44,8 @@ struct Ledger {
     embedding: Vec<f32>,
 }
 
-fn at() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 0).unwrap()
+fn at() -> Timestamp {
+    Timestamp::utc(2026, 10, 27, 8, 30, 0).unwrap()
 }
 
 #[test]

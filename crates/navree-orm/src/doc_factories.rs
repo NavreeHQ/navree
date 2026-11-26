@@ -3,7 +3,7 @@
 //! `Activity`, `Tag`), with every name the examples need in scope. Not API:
 //! hidden from the docs, and it may change at any time.
 
-pub use chrono::{DateTime, Duration, Utc};
+pub use navree_datetime::{Span, Timestamp};
 pub use navree_db::{Db, Uow};
 pub use uuid::Uuid;
 
@@ -74,11 +74,11 @@ pub struct Deal {
     /// The value, in cents.
     pub amount_cents: i64,
     /// When the deal was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the deal last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// When the deal was deleted.
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<Timestamp>,
 }
 
 /// Deals of a new company each, with fake titles.

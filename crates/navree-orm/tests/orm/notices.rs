@@ -3,7 +3,7 @@
 //! the model's own serde. Rows written by hand are read as models, and rows
 //! the ORM writes read back by hand.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{Executor as _, ExecutorExt as _, Statement};
 use navree_orm::Model as _;
 use serde_json::json;
@@ -13,7 +13,7 @@ use crate::support;
 
 /// The `notices` table.
 mod notice {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -26,8 +26,8 @@ mod notice {
         #[serde(rename = "type")]
         pub notice_type: String,
         pub data: serde_json::Value,
-        pub read_at: Option<DateTime<Utc>>,
-        pub created_at: DateTime<Utc>,
+        pub read_at: Option<Timestamp>,
+        pub created_at: Timestamp,
     }
 }
 
@@ -68,7 +68,7 @@ async fn rows_written_by_hand_are_read_as_models_and_back() {
                 written.id.into(),
                 written.notice_type.clone().into(),
                 written.data.clone().into(),
-                Option::<DateTime<Utc>>::None.into(),
+                Option::<Timestamp>::None.into(),
                 written.created_at.into(),
             ],
         ))
@@ -105,7 +105,7 @@ async fn records_track_changes_and_save() {
     assert!(record.is_dirty_on([Notice::READ_AT]));
     record.save(&db.db).await.unwrap();
 
-    let stored: Option<DateTime<Utc>> = db
+    let stored: Option<Timestamp> = db
         .db
         .pool()
         .fetch_scalar(&Statement::portable(

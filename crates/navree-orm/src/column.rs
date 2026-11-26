@@ -24,7 +24,7 @@ pub struct Untyped;
 ///
 /// `#[derive(Model)]` generates one constant per column, typed like its
 /// field (`Deal::AMOUNT_CENTS: Column<Deal, i64>`, `Deal::CLOSED_AT:
-/// Column<Deal, Option<DateTime<Utc>>>`). Conditions built from a column
+/// Column<Deal, Option<Timestamp>>`). Conditions built from a column
 /// take values of its type (a nullable column takes plain values too:
 /// `Deal::CLOSED_AT.gt(now)`) and encode them exactly as the field is
 /// stored (casts included), so `Deal::STAGE.eq(Stage::Won)` compares with

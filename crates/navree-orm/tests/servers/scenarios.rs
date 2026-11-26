@@ -1,6 +1,6 @@
 //! What runs on every real server.
 
-use chrono::{DateTime, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
+use navree_datetime::{Date, Span, Time, Timestamp};
 use navree_db::{ChangeOp, Db};
 use navree_orm::ir::FullText;
 use navree_orm::{CursorRequest, Decimal, Expr, Model, Record, Value, col, col_as, table};
@@ -9,8 +9,8 @@ use uuid::Uuid;
 use crate::models::{Company, Deal, DealMeta, Event, Note, Priority, Stage, Tag};
 use crate::support::Server;
 
-fn at(day: u32, hour: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 3, day, hour, 30, 0).unwrap()
+fn at(day: u8, hour: u8) -> Timestamp {
+    Timestamp::utc(2026, 3, day, hour, 30, 0).unwrap()
 }
 
 /// Two companies and four deals.
@@ -135,10 +135,10 @@ pub async fn records_round_trip(db: Db) {
             tags: vec!["a".into(), "b".into()],
             probability: 0.75,
             value: Decimal::new(1_234_567, 2),
-            closes_on: NaiveDate::from_ymd_opt(2026, 12, 31),
+            closes_on: Date::new(2026, 12, 31).ok(),
             closed_at: Some(
-                Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 15).unwrap()
-                    + Duration::microseconds(123_456),
+                Timestamp::utc(2026, 10, 27, 8, 30, 15).unwrap()
+                    + Span::micros(123_456),
             ),
             ..Deal::new("Exact", 1_000_000_000_000)
         },
@@ -259,7 +259,7 @@ pub async fn queries(db: Db, server: Server) {
         deals(Deal::query().where_date(
             Deal::CLOSED_AT,
             "=",
-            NaiveDate::from_ymd_opt(2026, 3, 20).unwrap()
+            Date::new(2026, 3, 20).unwrap()
         ))
         .await,
         ["Platform deal"]
@@ -282,7 +282,7 @@ pub async fn queries(db: Db, server: Server) {
         deals(Deal::query().where_time(
             Deal::CLOSED_AT,
             "<",
-            NaiveTime::from_hms_opt(12, 0, 0).unwrap()
+            Time::new(12, 0, 0).unwrap()
         ))
         .await,
         ["Small change"]
@@ -942,11 +942,11 @@ pub async fn bulk_writes(db: Db, server: Server) {
 
     // 22,000 rows of 3 values pass the 65,535-value bind limit: two
     // statements, one transaction.
-    let base = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+    let base = Timestamp::utc(2026, 1, 1, 0, 0, 0).unwrap();
     let rows: Vec<Vec<(&str, Value)>> = (0..22_000)
         .map(|i| {
             vec![
-                ("taken_at", Value::from(base + Duration::seconds(i))),
+                ("taken_at", Value::from(base + Span::seconds(i))),
                 ("sensor", Value::from("a")),
                 ("celsius", Value::from(20.0)),
             ]
@@ -1241,7 +1241,7 @@ pub async fn streams(db: Db) {
 /// Time buckets: TimescaleDB's on PostgreSQL, the emulation on MySQL give
 /// the same buckets.
 pub async fn time_buckets(db: Db, server: Server) {
-    let base = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
+    let base = Timestamp::utc(2026, 10, 27, 8, 0, 0).unwrap();
     for (minutes, celsius) in [
         (0, 10.0),
         (10, 12.0),
@@ -1254,7 +1254,7 @@ pub async fn time_buckets(db: Db, server: Server) {
             .insert(
                 &db,
                 [vec![
-                    ("taken_at", Value::from(base + Duration::minutes(minutes))),
+                    ("taken_at", Value::from(base + Span::minutes(minutes))),
                     ("sensor", Value::from("a")),
                     ("celsius", Value::from(celsius)),
                 ]],
@@ -1271,11 +1271,11 @@ pub async fn time_buckets(db: Db, server: Server) {
         .get(&db)
         .await
         .unwrap();
-    let buckets: Vec<(DateTime<Utc>, i64, f64)> = rows
+    let buckets: Vec<(Timestamp, i64, f64)> = rows
         .iter()
         .map(|row| {
             (
-                row.get::<DateTime<Utc>>("bucket").unwrap(),
+                row.get::<Timestamp>("bucket").unwrap(),
                 row.get::<i64>("readings").unwrap(),
                 row.get::<f64>("peak").unwrap(),
             )
@@ -1285,8 +1285,8 @@ pub async fn time_buckets(db: Db, server: Server) {
         buckets,
         [
             (base, 3, 12.0),
-            (base + Duration::hours(1), 2, 15.0),
-            (base + Duration::hours(2), 1, 9.0)
+            (base + Span::hours(1), 2, 15.0),
+            (base + Span::hours(2), 1, 9.0)
         ]
     );
     if server == Server::Postgres {

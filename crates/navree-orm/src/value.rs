@@ -11,14 +11,14 @@
 //! by the column's own type ([`navree_db::Row::value`]), then converts it
 //! leniently between representations of the same thing: `NUMERIC` 42 reads
 //! as an `i64`, the text `2026-10-27 08:00:00+00:00` (SQLite's date-times)
-//! as a `DateTime<Utc>`, MySQL's `TINYINT(1)` as a `bool`. Document rows,
+//! as a [`Timestamp`], MySQL's `TINYINT(1)` as a `bool`. Document rows,
 //! aggregates and dynamic columns convert the same way.
 
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use navree_datetime::{Date, DateTime, Offset, Time, Timestamp, Zone, Zoned};
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use uuid::Uuid;
 
@@ -100,8 +100,8 @@ pub enum FieldKind {
 ///
 /// Implemented for `bool`, `i8`..`i64`, `u8`..`u64`, `f32`, `f64`,
 /// [`Decimal`], `String`, `Vec<u8>`, `Uuid`, [`Ulid`](crate::Ulid),
-/// `chrono`'s `NaiveDate`, `NaiveTime`, `NaiveDateTime`, `DateTime<Utc>`
-/// and `DateTime<FixedOffset>`, `serde_json::Value`, [`Value`] (any
+/// [`Date`], [`Time`], [`DateTime`], [`Timestamp`] and [`Zoned`],
+/// `serde_json::Value`, [`Value`] (any
 /// column, decoded dynamically) and `Option<T>` of any of them. Other
 /// types (enums, serde structs) use a [cast](crate::cast).
 ///
@@ -516,37 +516,37 @@ fn json(value: Value) -> Result<serde_json::Value, FieldError> {
 /// space-separated form SQLite and MySQL use, with or without an offset.
 const DATE_TIME_FORMATS: [&str; 2] = ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%dT%H:%M:%S%.f"];
 
-fn parse_offset_date_time(s: &str) -> Option<DateTime<FixedOffset>> {
+fn parse_offset_date_time(s: &str) -> Option<Zoned> {
     let s = s.trim();
-    DateTime::parse_from_rfc3339(s)
+    Zoned::parse_rfc3339(s)
         .ok()
-        .or_else(|| DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f%:z").ok())
-        .or_else(|| DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f%z").ok())
-        .or_else(|| DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f %:z").ok())
+        .or_else(|| Zoned::parse("%Y-%m-%d %H:%M:%S%.f%:z", s).ok())
+        .or_else(|| Zoned::parse("%Y-%m-%d %H:%M:%S%.f%z", s).ok())
+        .or_else(|| Zoned::parse("%Y-%m-%d %H:%M:%S%.f %:z", s).ok())
 }
 
-fn parse_naive_date_time(s: &str) -> Option<NaiveDateTime> {
+fn parse_naive_date_time(s: &str) -> Option<DateTime> {
     let s = s.trim();
     DATE_TIME_FORMATS
         .iter()
-        .find_map(|format| NaiveDateTime::parse_from_str(s, format).ok())
+        .find_map(|format| DateTime::parse(format, s).ok())
         .or_else(|| {
-            NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            Date::parse("%Y-%m-%d", s)
                 .ok()
-                .and_then(|date| date.and_hms_opt(0, 0, 0))
+                .map(|date| date.at(Time::MIDNIGHT))
         })
 }
 
-fn date_time_utc(value: Value) -> Result<DateTime<Utc>, FieldError> {
+fn date_time_utc(value: Value) -> Result<Timestamp, FieldError> {
     null_check(&value)?;
     match value {
         Value::Timestamp(v) => Ok(v),
-        Value::TimestampTz(v) => Ok(v.with_timezone(&Utc)),
-        Value::DateTime(v) => Ok(Utc.from_utc_datetime(&v)),
-        Value::Date(v) => Ok(Utc.from_utc_datetime(&v.and_time(NaiveTime::MIN))),
+        Value::TimestampTz(v) => Ok(v.timestamp()),
+        Value::DateTime(v) => Ok(v.in_utc()),
+        Value::Date(v) => Ok(v.at(Time::MIDNIGHT).in_utc()),
         Value::String(s) => parse_offset_date_time(&s)
-            .map(|v| v.with_timezone(&Utc))
-            .or_else(|| parse_naive_date_time(&s).map(|v| Utc.from_utc_datetime(&v)))
+            .map(|v| v.timestamp())
+            .or_else(|| parse_naive_date_time(&s).map(|v| v.in_utc()))
             .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date-time"))),
         // A boolean is never a moment in time.
         Value::Bool(_) => Err(mismatch(&value, "a date-time")),
@@ -554,46 +554,49 @@ fn date_time_utc(value: Value) -> Result<DateTime<Utc>, FieldError> {
             // Unix seconds (timestamps stored as integers).
             Ok(seconds) => i64::try_from(seconds)
                 .ok()
-                .and_then(|s| DateTime::from_timestamp(s, 0))
+                .and_then(|s| Timestamp::from_secs(s).ok())
                 .ok_or_else(|| FieldError::Invalid(format!("{seconds} is out of range"))),
             Err(_) => Err(mismatch(&other, "a date-time")),
         },
     }
 }
 
-fn date_time_offset(value: Value) -> Result<DateTime<FixedOffset>, FieldError> {
+fn date_time_offset(value: Value) -> Result<Zoned, FieldError> {
     null_check(&value)?;
     match value {
         Value::TimestampTz(v) => Ok(v),
         Value::String(s) => parse_offset_date_time(&s)
-            .or_else(|| parse_naive_date_time(&s).map(|v| Utc.from_utc_datetime(&v).fixed_offset()))
+            .or_else(|| {
+                parse_naive_date_time(&s)
+                    .map(|v| v.in_utc().in_zone(Zone::fixed(Offset::UTC)))
+            })
             .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date-time"))),
-        other => date_time_utc(other).map(|v| v.fixed_offset()),
+        other => date_time_utc(other).map(|v| v.in_zone(Zone::fixed(Offset::UTC))),
     }
 }
 
-fn naive_date_time(value: Value) -> Result<NaiveDateTime, FieldError> {
+fn naive_date_time(value: Value) -> Result<DateTime, FieldError> {
     null_check(&value)?;
     match value {
         Value::DateTime(v) => Ok(v),
-        Value::Timestamp(v) => Ok(v.naive_utc()),
-        Value::TimestampTz(v) => Ok(v.naive_utc()),
-        Value::Date(v) => Ok(v.and_time(NaiveTime::MIN)),
+        Value::Timestamp(v) => Ok(v.date_time_utc()),
+        Value::TimestampTz(v) => Ok(v.timestamp().date_time_utc()),
+        Value::Date(v) => Ok(v.at(Time::MIDNIGHT)),
         Value::String(s) => parse_naive_date_time(&s)
-            .or_else(|| parse_offset_date_time(&s).map(|v| v.naive_utc()))
+            .or_else(|| parse_offset_date_time(&s).map(|v| v.timestamp().date_time_utc()))
             .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date-time"))),
         other => Err(mismatch(&other, "a date-time")),
     }
 }
 
-fn naive_date(value: Value) -> Result<NaiveDate, FieldError> {
+fn naive_date(value: Value) -> Result<Date, FieldError> {
     null_check(&value)?;
     match value {
         Value::Date(v) => Ok(v),
         Value::DateTime(v) => Ok(v.date()),
-        Value::Timestamp(v) => Ok(v.date_naive()),
-        Value::TimestampTz(v) => Ok(v.date_naive()),
-        Value::String(s) => NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d")
+        Value::Timestamp(v) => Ok(v.date_time_utc().date()),
+        Value::TimestampTz(v) => Ok(v.timestamp().date_time_utc().date()),
+        Value::String(s) => Date::parse("%Y-%m-%d", s.trim())
             .ok()
             .or_else(|| parse_naive_date_time(&s).map(|v| v.date()))
             .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date"))),
@@ -601,13 +604,13 @@ fn naive_date(value: Value) -> Result<NaiveDate, FieldError> {
     }
 }
 
-fn naive_time(value: Value) -> Result<NaiveTime, FieldError> {
+fn naive_time(value: Value) -> Result<Time, FieldError> {
     null_check(&value)?;
     match value {
         Value::Time(v) => Ok(v),
         Value::DateTime(v) => Ok(v.time()),
-        Value::String(s) => NaiveTime::parse_from_str(s.trim(), "%H:%M:%S%.f")
-            .or_else(|_| NaiveTime::parse_from_str(s.trim(), "%H:%M"))
+        Value::String(s) => Time::parse("%H:%M:%S%.f", s.trim())
+            .or_else(|_| Time::parse("%H:%M", s.trim()))
             .map_err(|_| FieldError::Invalid(format!("`{s}` is not a time"))),
         other => Err(mismatch(&other, "a time")),
     }
@@ -849,36 +852,36 @@ impl Field for serde_json::Value {
 }
 
 parsed_field!(
-    NaiveDate,
-    "NaiveDate",
+    Date,
+    "Date",
     FieldKind::Date,
     Value::Null(Kind::Date),
     naive_date
 );
 parsed_field!(
-    NaiveTime,
-    "NaiveTime",
+    Time,
+    "Time",
     FieldKind::Time,
     Value::Null(Kind::Time),
     naive_time
 );
 parsed_field!(
-    NaiveDateTime,
-    "NaiveDateTime",
+    DateTime,
+    "DateTime",
     FieldKind::DateTime,
     Value::Null(Kind::DateTime),
     naive_date_time
 );
 parsed_field!(
-    DateTime<Utc>,
-    "DateTime<Utc>",
+    Timestamp,
+    "Timestamp",
     FieldKind::DateTime,
     Value::Null(Kind::Timestamp),
     date_time_utc
 );
 parsed_field!(
-    DateTime<FixedOffset>,
-    "DateTime<FixedOffset>",
+    Zoned,
+    "Zoned",
     FieldKind::DateTime,
     Value::Null(Kind::TimestampTz),
     date_time_offset
@@ -1097,11 +1100,11 @@ into_value!(
     String,
     Vec<u8>,
     serde_json::Value,
-    NaiveDate,
-    NaiveTime,
-    NaiveDateTime,
-    DateTime<Utc>,
-    DateTime<FixedOffset>,
+    Date,
+    Time,
+    DateTime,
+    Timestamp,
+    Zoned,
     Uuid,
     Decimal,
     crate::Ulid,
@@ -1254,7 +1257,7 @@ mod tests {
 
     #[test]
     fn date_times_parse_the_text_forms_databases_return() {
-        let expected = Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 0).unwrap();
+        let expected = Timestamp::utc(2026, 10, 27, 8, 30, 0).unwrap();
         for text in [
             "2026-10-27T08:30:00Z",
             "2026-10-27 08:30:00+00:00",
@@ -1262,20 +1265,20 @@ mod tests {
             "2026-10-27T10:30:00+02:00",
         ] {
             assert_eq!(
-                DateTime::<Utc>::from_value(Value::String(text.into())).unwrap(),
+                Timestamp::from_value(Value::String(text.into())).unwrap(),
                 expected,
                 "{text}"
             );
         }
         assert_eq!(
-            NaiveDate::from_value(Value::String("2026-10-27".into())).unwrap(),
-            NaiveDate::from_ymd_opt(2026, 10, 27).unwrap()
+            Date::from_value(Value::String("2026-10-27".into())).unwrap(),
+            Date::new(2026, 10, 27).unwrap()
         );
         assert_eq!(
-            NaiveTime::from_value(Value::String("08:30:15".into())).unwrap(),
-            NaiveTime::from_hms_opt(8, 30, 15).unwrap()
+            Time::from_value(Value::String("08:30:15".into())).unwrap(),
+            Time::new(8, 30, 15).unwrap()
         );
-        assert!(DateTime::<Utc>::from_value(Value::String("soon".into())).is_err());
+        assert!(Timestamp::from_value(Value::String("soon".into())).is_err());
     }
 
     #[test]

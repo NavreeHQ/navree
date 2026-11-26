@@ -49,7 +49,7 @@
 //!   and `model:show` ([`OrmModule`]).
 //!
 //! ```
-//! use chrono::{DateTime, Utc};
+//! use navree_datetime::Timestamp;
 //! use navree_db::{Db, DbOptions, Executor};
 //! use navree_orm::prelude::*;
 //! use serde::{Deserialize, Serialize};
@@ -70,8 +70,8 @@
 //!     amount_cents: i64,
 //!     #[model(cast = "string_enum")]
 //!     stage: Stage,
-//!     created_at: DateTime<Utc>,
-//!     updated_at: DateTime<Utc>,
+//!     created_at: Timestamp,
+//!     updated_at: Timestamp,
 //! }
 //!
 //! # tokio::runtime::Runtime::new().unwrap().block_on(async {
@@ -179,7 +179,7 @@ pub use global_scopes::ClosureScope;
 pub use ir::{Expr, LockMode, VectorMetric};
 pub use lifecycle::ModelLifecycle;
 pub use model::{
-    ColumnMeta, DateSerializer, KeyKind, Model, ModelMeta, PartialSchemaFn, PrimaryKey, Timestamp,
+    ColumnMeta, DateSerializer, KeyKind, Model, ModelMeta, PartialSchemaFn, PrimaryKey, HasTimestamps,
 };
 pub use module::{
     ConfiguredOrmModule, ModuleBuilderOrmExt, OrmModule, OrmRuntime, RegisteredModel,
@@ -218,7 +218,7 @@ pub mod __private {
     pub use crate::cast::{decode, decode_option, encode, encode_option};
     pub use crate::model::derive_support::*;
     pub use crate::relations::derive_support as relations;
-    pub use chrono::{DateTime, FixedOffset, Utc};
+    pub use navree_datetime::{Date, DateTime, Offset, Time, Timestamp, Zoned};
     pub use navree_kernel::BoxFuture;
     pub use navree_openapi;
     pub use serde;

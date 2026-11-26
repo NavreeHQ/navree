@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::attributes::{Attributes, DiscardPolicy, unguarded, with_discard_policy};
 use navree_orm::{Model, OrmError, Record, attrs};
 use serde::{Deserialize, Serialize};
@@ -104,9 +104,9 @@ pub struct Member {
     pub settings: serde_json::Value,
     #[model(cast = "json")]
     pub profile: Option<Profile>,
-    pub joined_at: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub joined_at: Timestamp,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Emails are stored trimmed and lower-cased.
@@ -189,7 +189,7 @@ fn untyped_input_is_converted_through_types_and_casts() {
     assert_eq!(member.settings, json!({"theme": "dark"}));
     assert_eq!(
         member.joined_at,
-        Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 0).unwrap()
+        Timestamp::utc(2026, 10, 27, 8, 30, 0).unwrap()
     );
     assert_eq!(member.profile.as_ref().unwrap().bio, "Mathematician");
 

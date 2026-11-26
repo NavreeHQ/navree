@@ -6,7 +6,7 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
+use navree_datetime::{Date, Time, Timestamp};
 use navree_orm::ir::{
     Aggregate, AggregateFunction, ColumnRef, DeleteIr, Expr as IrExpr, FullText, InValues,
     InsertIr, Join, JoinKind, OnConflict, QueryIr, SelectItem, TableRef, UpdateIr, Where,
@@ -95,10 +95,10 @@ pub struct Deal {
     pub stage: String,
     pub tags: Option<serde_json::Value>,
     pub meta: Option<serde_json::Value>,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub closed_at: Option<Timestamp>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 /// The fixture's `companies` as a model.
@@ -112,9 +112,8 @@ pub struct Company {
     pub region_id: Option<i64>,
 }
 
-fn at(day: u32, hour: u32, minute: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, day, hour, minute, 0)
-        .unwrap()
+fn at(day: u8, hour: u8, minute: u8) -> Timestamp {
+    Timestamp::utc(2026, 10, day, hour, minute, 0).unwrap()
 }
 
 fn count() -> Aggregate {
@@ -258,7 +257,7 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             deals().where_date(
                 "closed_at",
                 "=",
-                NaiveDate::from_ymd_opt(2026, 10, 20).unwrap(),
+                Date::new(2026, 10, 20).unwrap(),
             ),
         ),
         read(
@@ -267,7 +266,7 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         read(
             "date part: time",
-            deals().where_time("closed_at", ">=", NaiveTime::from_hms_opt(9, 0, 0).unwrap()),
+            deals().where_time("closed_at", ">=", Time::new(9, 0, 0).unwrap()),
         ),
         read("date part: day", deals().where_day("created_at", "=", 1)),
         read(

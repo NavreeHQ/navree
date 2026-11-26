@@ -26,7 +26,7 @@ async fn create_reads_back_a_database_assigned_key_and_fills_timestamps() {
     assert!(first.was_recently_created());
     assert_ne!(
         first.created_at,
-        chrono::DateTime::<chrono::Utc>::UNIX_EPOCH
+        navree_datetime::Timestamp::UNIX_EPOCH
     );
     assert_eq!(first.created_at, first.updated_at);
     assert!(first.is_clean(), "a saved record is clean");

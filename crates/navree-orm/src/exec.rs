@@ -45,7 +45,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use futures::stream::{BoxStream, Stream, StreamExt};
 use navree_contracts::Clock;
 use navree_db::{
@@ -401,13 +401,13 @@ impl ExecContext {
     /// truncated to the [precision](Self::time_precision) the database
     /// keeps (microseconds on PostgreSQL, MySQL and SQLite, milliseconds on
     /// MongoDB), so a saved record and its stored row agree.
-    pub async fn now(&self) -> DateTime<Utc> {
+    pub async fn now(&self) -> Timestamp {
         let now = match &self.app {
             Some(app) => match app.try_get::<dyn Clock>().await {
                 Some(clock) => clock.now(),
-                None => Utc::now(),
+                None => Timestamp::now(),
             },
-            None => Utc::now(),
+            None => Timestamp::now(),
         };
         truncate_to(now, self.time_precision)
     }
@@ -426,16 +426,16 @@ impl fmt::Debug for ExecContext {
 
 /// `at` without its sub-microsecond part (the precision SQL databases
 /// keep).
-pub(crate) fn truncate_to_micros(at: DateTime<Utc>) -> DateTime<Utc> {
+pub(crate) fn truncate_to_micros(at: Timestamp) -> Timestamp {
     truncate_to(at, MICROSECONDS)
 }
 
 /// `at` without the fractional-second digits after the first `digits` (at
 /// most 9, nanoseconds).
-pub(crate) fn truncate_to(at: DateTime<Utc>, digits: u32) -> DateTime<Utc> {
+pub(crate) fn truncate_to(at: Timestamp, digits: u32) -> Timestamp {
     let unit = 10_u32.pow(9 - digits.min(9));
-    let nanos = at.timestamp_subsec_nanos();
-    DateTime::from_timestamp(at.timestamp(), nanos - nanos % unit).unwrap_or(at)
+    let nanos = at.subsec_nanos();
+    Timestamp::from_secs_nanos(at.as_secs(), nanos - nanos % unit).ok().unwrap_or(at)
 }
 
 impl Target<'_> {
@@ -1231,10 +1231,10 @@ mod tests {
 
     #[test]
     fn timestamps_keep_the_precision_asked_for() {
-        let at = DateTime::from_timestamp(1_700_000_000, 123_456_789).unwrap();
-        assert_eq!(truncate_to(at, 6).timestamp_subsec_nanos(), 123_456_000);
-        assert_eq!(truncate_to(at, 3).timestamp_subsec_nanos(), 123_000_000);
-        assert_eq!(truncate_to(at, 0).timestamp_subsec_nanos(), 0);
+        let at = Timestamp::from_secs_nanos(1_700_000_000, 123_456_789).unwrap();
+        assert_eq!(truncate_to(at, 6).subsec_nanos(), 123_456_000);
+        assert_eq!(truncate_to(at, 3).subsec_nanos(), 123_000_000);
+        assert_eq!(truncate_to(at, 0).subsec_nanos(), 0);
         assert_eq!(truncate_to(at, 9), at);
         assert_eq!(truncate_to(at, 12), at, "more than nanoseconds keeps all");
         assert_eq!(ExecContext::default().time_precision(), 6);

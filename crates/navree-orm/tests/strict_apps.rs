@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db};
 use navree_orm::strict::Violation;
@@ -18,8 +18,8 @@ struct Probe {
     id: i64,
     name: String,
     reading: i64,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 async fn app(builder: navree_testing::TestAppBuilder) -> (TestApp, Arc<Db>) {

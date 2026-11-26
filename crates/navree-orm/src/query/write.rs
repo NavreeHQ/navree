@@ -9,7 +9,7 @@
 
 use std::borrow::Cow;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 
 use crate::column::{Assignment, Column};
 use crate::error::{OrmError, Result};
@@ -89,7 +89,7 @@ impl<M: Model> Builder<M> {
     /// (`col("meta->status").set("won")`) changes that value inside the
     /// column (see [`render_update`](crate::sql::render_update)).
     pub(crate) fn sets(
-        now: DateTime<Utc>,
+        now: Timestamp,
         assignments: impl IntoIterator<Item = Assignment>,
     ) -> Result<Vec<(Cow<'static, str>, Expr)>> {
         let mut sets = Vec::new();
