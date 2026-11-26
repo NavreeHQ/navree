@@ -66,7 +66,7 @@ driver = "memory"
 ## Read and write
 
 ```rust
-use chrono::{Duration, Utc};
+use navree::datetime::{Span, Timestamp};
 use navree::prelude::*;
 use navree::storage::{Disk, StorageError};
 
@@ -80,7 +80,7 @@ impl ReportFiles {
     pub async fn publish(&self, quarter: &str, csv: String) -> Result<String, StorageError> {
         let path = format!("reports/{quarter}.csv");
         self.disk.put(&path, csv).await?;                     // atomic replace
-        self.disk.temporary_url(&path, Utc::now() + Duration::minutes(30)).await
+        self.disk.temporary_url(&path, Timestamp::now() + Span::minutes(30)).await
     }
 }
 ```
@@ -141,7 +141,7 @@ the browser `PUT`s the file to it; the browser reports it done, the app
 checks it.
 
 ```rust,ignore
-use chrono::Duration;
+use navree::datetime::Span;
 use navree::http::CurrentPrincipal;
 use navree::prelude::*;
 use navree::storage::{PresignedUpload, Storage, StoredFile, UploadRules, upload_path};
@@ -156,7 +156,7 @@ async fn start(&self, CurrentPrincipal(me): CurrentPrincipal, Json(file): Json<N
     let path = upload_path(&format!("incoming/{}", me.user_id), &file.content_type);
     let rules = rules();
     let upload = self.storage.disk("documents")?
-        .presigned_put(&path, Duration::minutes(15), &rules)
+        .presigned_put(&path, Span::minutes(15), &rules)
         .content_type(file.content_type)   // required when the rules list types
         .size(file.size)
         .await?;                           // 400/413 when the declared values break the rules

@@ -44,7 +44,7 @@ assert_eq!(zone.name(), "Asia/Kolkata");           // legacy alias replaced
 let gulf = Zone::for_country("AE").unwrap();       // Asia/Dubai
 let label = zone.offset_label(now);                // "+05:30"
 let today = zone.today(now);                       // LocalDay
-let at = zone.to_utc(naive_local);                 // gap: moves forward; repeat: earlier
+let at = zone.to_utc(local);                       // gap: moves forward; repeat: earlier
 ```
 
 - Store `zone.name()`, never the raw input: PostgreSQL servers without the
@@ -197,10 +197,15 @@ One fake per level (a second fails the boot). `fake.set(..)` and
 
 ## Common mistakes
 
-- Filtering `created_at` by `NaiveDate` or by UTC midnight: use
+- Filtering `created_at` by `Date` or by UTC midnight: use
   `range.utc_bounds(&zone)` (half-open; 23- or 25-hour days on DST changes).
 - Storing a browser-reported zone as is: parse it with `Zone` first.
 - `daily_at("09:00")` without `in_zone`/`per_workspace_local` is 09:00 UTC.
 - SQLite `local_date` without `within`: uses today's offset for all rows.
 - Using `s.job(value).per_workspace_local()`: every workspace gets the same
   value; build per workspace with `s.job_with(|run| ..)`.
+
+## Docs
+
+- https://navree.com/docs/digging-deeper/time-zones/
+- https://navree.com/docs/digging-deeper/dates-and-times/

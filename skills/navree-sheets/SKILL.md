@@ -43,9 +43,9 @@ fn cents_to_cell(cents: &i64) -> Cell {
 }
 ```
 
-   `IntoCell` covers strings, integers, floats, `bool`, chrono dates and
-   date-times, `Uuid`, `serde_json::Value` and `Option<T>`; implement it for
-   your own types.
+   `IntoCell` covers strings, integers, floats, `bool`, `navree::datetime`
+   dates, date-times and times, `Uuid`, `serde_json::Value` and `Option<T>`;
+   implement it for your own types.
 
 2. Return a `Download` from a handler:
 

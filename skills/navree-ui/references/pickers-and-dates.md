@@ -72,7 +72,7 @@ option, and the route behind `create_url` must check that they may.
 
 ## Dates and times
 
-Four components choose dates and times. A day is `NaiveDate`, never a point
+Four components choose dates and times. A day is `Date`, never a point
 in time: nothing in the toolkit passes a day through a time zone. "Today" is
 a date the page says (`.today(date)`), so a page is the same wherever it is
 read and a test can name its own today. The server decides: what is posted is
@@ -82,13 +82,13 @@ picker was drawn with.
 | Choose | Use |
 |---|---|
 | A month grid, one day, several days or a range | `Calendar` |
-| One day in a form | `DatePicker`, or `#[form(widget = date_picker)]` on a `NaiveDate` |
+| One day in a form | `DatePicker`, or `#[form(widget = date_picker)]` on a `Date` |
 | A window of days, for a report | `DateRangePicker` in a `GET` form, read with `DateRangeQuery` |
-| A time of day | `TimePicker`, or `#[form(widget = time_picker)]` on a `NaiveTime` |
+| A time of day | `TimePicker`, or `#[form(widget = time_picker)]` on a `Time` |
 | A day and a time together (a meeting, a delivery slot) | `DateTimePicker`: one value, `2026-11-12T14:30`, read back with `DateTimePicker::read`; with JavaScript off it is the browser's own date-and-time field |
 
 ```rust
-use chrono::{NaiveDate, NaiveTime, Weekday};
+use navree::datetime::{Date, Time, Weekday};
 use navree::ui::dates::{
     DatePicker, DatePreset, DateRange, DateRangePicker, DateRangeQuery, DateRules, TimePicker,
 };
@@ -96,7 +96,7 @@ use navree::ui::{Button, Element, Field, Form, Stack, Validate, el};
 use serde::Deserialize;
 
 /// The pickers of a visit form. `today` comes from the caller: the toolkit never reads the clock.
-pub fn visit_fields(today: NaiveDate) -> Stack {
+pub fn visit_fields(today: Date) -> Stack {
     Stack::gap(4).children((
         Field::new("visit", "Visit on")
             .help("Type it as 11/30/2026, or pick it.")
@@ -107,8 +107,8 @@ pub fn visit_fields(today: NaiveDate) -> Stack {
 }
 
 /// A report's window lives in the address: a `GET` form, so back, reload and a shared link show it.
-pub fn report_filter(today: NaiveDate, window: Option<DateRange>) -> Element {
-    let range = window.unwrap_or_else(|| DateRange::new(today - chrono::Duration::days(6), today));
+pub fn report_filter(today: Date, window: Option<DateRange>) -> Element {
+    let range = window.unwrap_or_else(|| DateRange::new(today.add_days(-6).unwrap_or(today), today));
     el("form")
         .attr("method", "get")
         .attr("action", "/reports/sales")
@@ -128,15 +128,15 @@ pub struct Booking {
     /// Start date
     #[validate(skip)]
     #[form(widget = date_picker, date_rules = weekdays_only, help = "A weekday.")]
-    pub start: NaiveDate,
+    pub start: Date,
     /// Arrives at
     #[validate(skip)]
     #[form(widget = time_picker)]
-    pub arrives: NaiveTime,
+    pub arrives: Time,
 }
 
 fn weekdays_only() -> DateRules {
-    DateRules::new().disable_weekdays([Weekday::Sat, Weekday::Sun])
+    DateRules::new().disable_weekdays([Weekday::Saturday, Weekday::Sunday])
 }
 
 /// What the report route reads: `DateRangeQuery` keeps a bad or backwards window from failing the request.

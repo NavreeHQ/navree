@@ -144,8 +144,8 @@ The order of work for a screen that lists records and adds new ones:
 5. Tests, then a look at the page at 1440 and 390 pixels.
 
 ```rust
-use chrono::{DateTime, Utc};
 use navree::access::{Accessible, Create, Read};
+use navree::datetime::Timestamp;
 use navree::db::Uow;
 use navree::http::response::{IntoResponse, Response};
 use navree::orm::Record;
@@ -179,8 +179,8 @@ pub struct Contact {
     pub email: String,
     #[model(cast = "string_enum")]
     pub city: City,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// The city filter's choices: the values stored, with their labels.
@@ -202,7 +202,7 @@ pub struct ContactRow {
     pub city: &'static str,
     /// Added
     #[col(sortable, hide_on_mobile)]
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl ContactRow {
@@ -470,7 +470,7 @@ picks the control:
 | integers, floats, `Decimal` | a number input |
 | `bool` | a checkbox; `widget = switch` |
 | `Money` | an amount typed like `1,00,000.50`, stored in its smallest unit |
-| `NaiveDate`, `NaiveTime`, `NaiveDateTime` | the browser's own input; `widget = date_picker` or `time_picker` for the pickers ([`pickers-and-dates.md`](references/pickers-and-dates.md)) |
+| `Date`, `Time`, `DateTime` | the browser's own input; `widget = date_picker` or `time_picker` for the pickers ([`pickers-and-dates.md`](references/pickers-and-dates.md)) |
 | `Phone`, `PhoneNumber` | a `PhoneInput` (same file) |
 | an enum with `#[derive(Options)]` | a select of its variants; `widget = radio` for radio buttons |
 | `String` with `widget = select`, `listbox` or `combobox` | a select over choices from `FormView::options`, or a searched list |
@@ -1078,7 +1078,7 @@ marketing blocks draw a public site from the same app with no script, and
 - Putting every option of a growing set in a `Select`. Search on the server
   with a `Combobox`.
 - Trusting the option a form posted. Check it with `all_pickable`.
-- Using `Utc::now()` for "today" in a picker. Pass the date in, in the
+- Using `Timestamp::now()` for "today" in a picker. Pass the date in, in the
   person's zone (`navree-time-zones`).
 - Marking a link `.prefetch()` whose `GET` changes something.
 - Reading a redirect target from the request without `ReturnTo`: it is an

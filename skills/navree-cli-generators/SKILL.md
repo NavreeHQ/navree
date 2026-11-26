@@ -13,9 +13,9 @@ Two command lines:
 - **The app's binary** owns runtime commands (`serve`, `migrate`,
   `queue:work`, ...). `navree <command>` forwards anything the CLI doesn't
   own (`new`, `make:*`, `plugin:add`, `plugin:remove`, `plugin:list`, `dev`,
-  `check`, `gate`, `dock*`, the Harbor commands, `mcp`, `skills:install`,
-  `browser:install`, `openapi:client`, `native:coverage`, `native:doctor`,
-  `native:init`) as
+  `check`, `gate`, `upgrade`, `dock*`, the Harbor commands, `mcp`,
+  `skills:install`, `browser:install`, `openapi:client`, `native:coverage`,
+  `native:doctor`, `native:init`) as
   `cargo run --quiet -- <command>`. In
   production, run the binary itself: `./my-app migrate`. When the app has
   a `dock.toml`, `navree dev` and forwarded commands get its services'

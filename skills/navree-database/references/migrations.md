@@ -60,7 +60,7 @@ impl navree::schema::Migration for Migration {
 
 Match the model (on MySQL and MariaDB `uuid` is `BINARY(16)`, the 16 bytes a
 model writes):
-`uuid` for `Uuid`, `timestamp_tz` for `DateTime<Utc>`,
+`uuid` for `Uuid`, `timestamp_tz` for `Timestamp`,
 `boolean` for `bool`, `big_integer` for `i64`, `string`/`text` for
 `String`, `.nullable()` for `Option<T>`. Columns are `NOT NULL` unless
 `.nullable()`. Helpers: `timestamps_tz()` (nullable created/updated_at),

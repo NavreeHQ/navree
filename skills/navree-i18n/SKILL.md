@@ -106,7 +106,7 @@ let explicit = i18n.t("pt-BR", "deal-created", args!(count = 2))?; // Arc<I18n>
 
 ```rust,ignore
 locale.format_money(4_200_000, "EUR");   // en "€42,000.00", fr "42 000,00 €" (U+202F, U+00A0)
-locale.format_date(chrono::Utc::now());  // en "Oct 26, 2026", fr "26 oct. 2026"
+locale.format_date(navree::datetime::Timestamp::now()); // en "Oct 26, 2026", fr "26 oct. 2026"
 locale.format_date_with(day, DateStyle::Long);
 locale.format_number(1234.5);            // en "1,234.5", de "1.234,5"
 ```
@@ -116,7 +116,7 @@ In Fluent: numbers print with the locale's separators; `NUMBER($n, style:
 arguments are literals), `NUMBER($year, useGrouping: "false")`;
 `DATETIME($date, dateStyle: "short|medium|long|full", timeStyle:
 "short|medium")`. Arguments: integers, floats, strings, `bool`, `Money`,
-`NaiveDate`, `NaiveDateTime`, `DateTime<Tz>`, `Option<_>`.
+`Date`, `DateTime`, `Timestamp`, `Zoned`, `Option<_>`.
 
 ## Saved locales
 

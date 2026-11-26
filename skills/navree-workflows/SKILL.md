@@ -79,7 +79,7 @@ running again. So:
 
 - Anything with side effects or varying answers (DB reads, HTTP, random
   numbers, the time) goes inside a `step`. Read the time with
-  `ctx.now().await`, never `Utc::now()`.
+  `ctx.now().await`, never `Timestamp::now()`.
 - Code between steps must decide the same way every time: branch on step
   results, the input, `ctx.now()`, `ctx.version()`.
 - Steps run at least once: a step whose process dies runs again. Pass an
@@ -177,7 +177,7 @@ inside the unit of work see its writes.
 
 - [ ] Every workflow and every awaited event is registered
       (`for_feature`/`m.workflow`, `m.workflow_event`).
-- [ ] Side effects live in steps with idempotency keys; no `Utc::now()` in
+- [ ] Side effects live in steps with idempotency keys; no `Timestamp::now()` in
       workflow code.
 - [ ] Steps are shorter than `workflows.lease_secs` (300 s).
 - [ ] Runs are started in the request's unit of work, with a `key` where a

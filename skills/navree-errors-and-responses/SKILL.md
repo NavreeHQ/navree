@@ -344,7 +344,7 @@ pub struct NoteResource {
     pub resource_type: &'static str, // always "Note"
     pub id: Uuid,
     pub body: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 ```
 

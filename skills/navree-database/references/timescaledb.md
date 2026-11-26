@@ -62,13 +62,14 @@ whole chunks. Tune them in an app migration:
 ## Pruning in code
 
 ```rust,ignore
+use navree::datetime::{Span, Timestamp};
 use navree::db::prune_time_series;
 
 // Inside a transaction: count, drop the chunks before the cutoff, delete the rest.
-let deleted = prune_time_series(&tx, "events", "occurred_at", Utc::now() - TimeDelta::days(90)).await?;
+let deleted = prune_time_series(&tx, "events", "occurred_at", Timestamp::now() - Span::days(90)).await?;
 ```
 
-The cutoff is a `DateTime<Utc>` for timestamp columns, an `i64` for integer
+The cutoff is a `Timestamp` for timestamp columns, an `i64` for integer
 ones. On anything but a TimescaleDB hypertable it is one `DELETE`.
 
 ## Queries
@@ -82,7 +83,7 @@ let points = table("readings")
     .group_by(["bucket"])
     .order_by("bucket")
     .get(&db)
-    .await?;                                    // point.get::<DateTime<Utc>>("bucket")
+    .await?;                                    // point.get::<Timestamp>("bucket")
 ```
 
 `select_first(value, time, alias)` / `select_last(...)` and month or year

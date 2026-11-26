@@ -20,7 +20,7 @@ and its tests (`tests/graphql/`, `tests/docs_examples.rs`).
 ```toml
 [dependencies]
 navree = { version = "1", features = ["graphql"] }
-async-graphql = { version = "7.2", default-features = false, features = ["chrono", "uuid"] }
+async-graphql = { version = "7.2", default-features = false, features = ["uuid"] }
 ```
 
 2. Add the module to the app root. It needs `ConfigModule` and `HttpModule`;

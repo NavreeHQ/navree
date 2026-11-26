@@ -325,8 +325,10 @@ synchronous CPU work, seconds at the limits: run a client's file with
 ## Saving and queueing
 
 ```rust,ignore
+use navree::datetime::{Span, Timestamp};
+
 let stored = documents.save(&render, "reports/q3.pdf").await?;          // documents.disk or the default disk
-let link = stored.temporary_url(Utc::now() + Duration::hours(1)).await?;
+let link = stored.temporary_url(Timestamp::now() + Span::hours(1)).await?;
 
 let queued = documents.queue(render, "exports/audit-q3.pdf").await?;    // QueuedDocument {id, disk, path, job_id}
 match documents.status(&queued).await? {

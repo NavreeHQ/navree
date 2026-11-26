@@ -15,7 +15,7 @@ The Rust below belongs to the invoices module of the worked example in the
 templates. Its two models:
 
 ```rust
-use chrono::{DateTime, NaiveDate, Utc};
+use navree::datetime::{Date, Timestamp};
 use navree::orm::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -46,12 +46,12 @@ pub struct Invoice {
     pub currency: String,           // ISO 4217, beside every amount
     #[model(cast = "decimal(4)")]
     pub tax_rate: Decimal,          // an exact decimal where minor units don't fit
-    pub issued_on: NaiveDate,       // a calendar day: no time zone
-    pub due_on: NaiveDate,
-    pub sent_at: Option<DateTime<Utc>>, // an instant: stored in UTC
+    pub issued_on: Date,            // a calendar day: no time zone
+    pub due_on: Date,
+    pub sent_at: Option<Timestamp>, // an instant: stored in UTC
     pub void_reason: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 #[relations]
@@ -68,9 +68,9 @@ pub struct Customer {
     pub workspace_id: Uuid,
     pub name: String,
     pub billing_email: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 ```
 
@@ -102,8 +102,8 @@ whose one definition drives the query, the URL and the drawing
 `<NavreeDataTable>`, or a Helm resource for back-office lists.
 
 ```rust
-use chrono::NaiveDate;
 use navree::access::{Accessible, Read};
+use navree::datetime::Date;
 use navree::orm::access::AccessibleQuery as _;
 use navree::prelude::*;
 use navree::validation::rules;
@@ -120,9 +120,9 @@ pub struct InvoiceFilters {
     #[validate(skip)]
     pub customer_id: Option<Uuid>,
     #[validate(skip)]
-    pub issued_from: Option<NaiveDate>,
+    pub issued_from: Option<Date>,
     #[validate(skip)]
-    pub issued_to: Option<NaiveDate>,
+    pub issued_to: Option<Date>,
     #[validate(custom(rules::one_of(&["issued_on", "-issued_on", "total", "-total"])))]
     pub sort: Option<String>,
 }
@@ -321,8 +321,8 @@ Mixed formats in the profile (`SQL-019`) are the proof that the control
 let people type anything.
 
 **Navree form:** the control table in `spec-crud.md`, with the field's
-Rust type deciding what the server accepts: `NaiveDate` for a day,
-`DateTime<Utc>` for an instant, minor units for money, `Phone` for a phone
+Rust type deciding what the server accepts: `Date` for a day,
+`Timestamp` for an instant, minor units for money, `Phone` for a phone
 number (E.164), an enum for a status, a `Uuid` reference checked with
 `exists`. Helm fields follow the same types (`Field::date`, `money`,
 `select`, `belongs_to`, `email`, `textarea`, `file`). In navree-ui pages
@@ -528,8 +528,8 @@ rg -n "NOW\(\)|CURRENT_TIMESTAMP|date\(\s*['\"]|new Date\(\)|DateTime\.Now|datet
 Find the old server's and database's zone (`data-migration.md`, SQL-061)
 and how each date column was written.
 
-**Navree form:** instants in `DateTime<Utc>`, calendar days in
-`NaiveDate`; each user and workspace has a zone; reports group by the
+**Navree form:** instants in `Timestamp`, calendar days in
+`Date`; each user and workspace has a zone; reports group by the
 local day of the workspace; schedules run at a local time per workspace
 (`per_workspace_local`); tests use a fixed clock (`Arc<dyn Clock>`).
 Skills: `navree-time-zones`, `navree-queues-and-scheduling`.
@@ -606,7 +606,7 @@ pub struct ReminderLog {
     pub workspace_id: Uuid,
     pub customer_id: Uuid,
     pub week: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

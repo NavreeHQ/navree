@@ -118,7 +118,7 @@ Global scopes: `impl GlobalScope<Project> for NotArchived` and
 
 ## Soft deletes and pruning
 
-`#[model(soft_deletes)]` plus `pub deleted_at: Option<DateTime<Utc>>`
+`#[model(soft_deletes)]` plus `pub deleted_at: Option<Timestamp>`
 (`t.soft_deletes_tz()` in the migration): `delete` sets `deleted_at`,
 queries leave trashed records out, `restore` clears it, `force_delete`
 removes the row, `trashed()` tells. Queries: `with_trashed()`,

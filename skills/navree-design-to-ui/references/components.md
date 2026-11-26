@@ -155,8 +155,8 @@ form can't be a struct.
 | Long text | textarea | `#[form(widget = textarea, rows = 5)]` |
 | Whole number, decimal | number input | an integer or float type; `range` rules set `min`, `max` |
 | Money | amount input, typed `12,500.50` | `Money` (minor units); its currency in an `addon` |
-| Calendar day | date picker: a typed date or a calendar, a native date field with JavaScript off | `NaiveDate` with `widget = date_picker` (the plain `date` widget is the browser's own) |
-| Time of day | time picker: typed or from a list, a native time field with JavaScript off | `NaiveTime` with `widget = time_picker` |
+| Calendar day | date picker: a typed date or a calendar, a native date field with JavaScript off | `Date` with `widget = date_picker` (the plain `date` widget is the browser's own) |
+| Time of day | time picker: typed or from a list, a native time field with JavaScript off | `Time` with `widget = time_picker` |
 | Day and time together | a date picker and a time picker side by side, or the browser's own input | two fields; `widget = datetime` for the native one |
 | A window of days, for a report | date range picker with presets, its two dates in the address | `DateRangePicker` in a `GET` form, read back with `DateRangeQuery` |
 | A month grid to browse, or to pick days | calendar | `Calendar::new(id)`, `.mode(CalendarMode::Multiple \| Range)`, `.rules(DateRules::new()..)` for days that can't be chosen |

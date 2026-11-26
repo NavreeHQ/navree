@@ -189,7 +189,7 @@ max_connections = 2
 ```rust,ignore
 use std::collections::HashMap;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree::datetime::{Date, Timestamp};
 use navree::db::{Db, Executor as _, Row, Statement};
 use navree::kernel::{AppContext, BoxError, CommandSpec};
 use navree::orm::{Decimal, Model};
@@ -207,7 +207,7 @@ pub struct LegacyReject {
     pub legacy_id: i64,
     pub rule: String,
     pub reason: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// Old ids to new ones, for parents that children look up (table `legacy_ids`).
@@ -375,10 +375,10 @@ fn invoice_from(row: &Row, customers: &HashMap<i64, Uuid>) -> Result<Invoice, Re
 }
 
 /// C-6: the formats the branches typed dates in (the profile, SQL-019).
-fn parse_day(text: &str) -> Option<NaiveDate> {
+fn parse_day(text: &str) -> Option<Date> {
     ["%Y-%m-%d", "%d/%m/%Y"]
         .iter()
-        .find_map(|format| NaiveDate::parse_from_str(text, format).ok())
+        .find_map(|format| Date::parse(format, text).ok())
 }
 ```
 

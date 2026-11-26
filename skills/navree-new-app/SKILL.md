@@ -194,7 +194,7 @@ pages take `Desk` (see `navree-cli-generators`).
 cargo add navree
 ```
 
-Also add `serde` (derive), `chrono` and `uuid` (`serde`, `v7`): serde's
+Also add `serde` (derive) and `uuid` (`serde`, `v7`): serde's
 derives name their own crate. (The ORM's derives, `#[derive(Validate)]`,
 migrations and database drivers come with `navree`.) A minimal app:
 

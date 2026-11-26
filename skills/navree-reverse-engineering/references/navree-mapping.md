@@ -16,7 +16,7 @@ against the code.
 | Key | `id: Uuid` (a UUID v7 on create); old key in `legacy_id`, unique per workspace | `navree-orm` |
 | Text, long text | `String`; `length` rules | `navree-validation` |
 | Money | `i64` minor units plus a `currency` column; or `Decimal` with `cast = "decimal(N)"` | `navree-orm` |
-| Date, instant | `NaiveDate`; `DateTime<Utc>` | `navree-orm`, `navree-time-zones` |
+| Date, instant | `Date`; `Timestamp` | `navree-orm`, `navree-time-zones` |
 | Enum | a unit enum with `cast = "string_enum"` (or `int_enum`) | `navree-orm` |
 | Reference | `Uuid` column, `#[relations]` (`belongs_to`, `has_many`, ...), foreign key in the migration, `exists` rule | `navree-orm`, `navree-migrations`, `navree-validation` |
 | JSON blob | `cast = "json"` with a typed struct | `navree-orm` |
