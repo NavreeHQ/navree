@@ -29,7 +29,9 @@ async fn documents_methods(documents: &Documents, render: Render) -> Result<(), 
     let _: Pdf = documents.render(&render).await?;
     let _: EngineKind = documents.engine_for(&render)?;
     let stored: StoredDocument = documents.save(&render, "reports/q3.pdf").await?;
-    let _: String = stored.temporary_url(chrono::Utc::now()).await?;
+    let _: String = stored
+        .temporary_url(navree_datetime::Timestamp::now())
+        .await?;
     let _: String = stored.url()?;
     let queued: QueuedDocument = documents.queue(render, "exports/q3.pdf").await?;
     let _: Option<uuid::Uuid> = queued.operation_id;

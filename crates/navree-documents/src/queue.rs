@@ -1,8 +1,8 @@
 //! Stored and queued documents: [`StoredDocument`], [`QueuedDocument`],
 //! [`DocumentStatus`] and the [`RenderDocument`] job.
 
-use chrono::{DateTime, Utc};
 use navree_contracts::{Job, JobCancelled, JobContext, JobOptions};
+use navree_datetime::Timestamp;
 use navree_kernel::BoxError;
 use navree_storage::{Disk, StorageError};
 use serde::{Deserialize, Serialize};
@@ -47,7 +47,7 @@ impl StoredDocument {
     /// A link that downloads it until `expires_at`, without a session: the
     /// cloud store's presigned URL on an S3, GCS or Azure disk, else a
     /// signed link served by navree-storage's `GET /storage/{disk}/{*path}`.
-    pub async fn temporary_url(&self, expires_at: DateTime<Utc>) -> Result<String, DocumentsError> {
+    pub async fn temporary_url(&self, expires_at: Timestamp) -> Result<String, DocumentsError> {
         Ok(self.disk.temporary_url(&self.path, expires_at).await?)
     }
 }

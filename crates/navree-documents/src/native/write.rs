@@ -4,7 +4,6 @@
 
 use std::num::NonZeroU16;
 
-use chrono::{DateTime, Datelike, Timelike, Utc};
 use krilla::action::{Action, LinkAction};
 use krilla::annotation::{Annotation, LinkAnnotation, Target};
 use krilla::color::rgb;
@@ -22,6 +21,7 @@ use krilla::tagging::{
 };
 use krilla::text::{GlyphId, KrillaGlyph};
 use krilla::{Document, SerializeSettings};
+use navree_datetime::{Timestamp, Zone};
 
 use super::fonts::FontBook;
 use super::layout::{Draw, LaidDocument};
@@ -35,7 +35,7 @@ pub(crate) struct Info {
     pub(crate) author: Option<String>,
     pub(crate) lang: Option<String>,
     pub(crate) rtl: bool,
-    pub(crate) created: Option<DateTime<Utc>>,
+    pub(crate) created: Option<Timestamp>,
 }
 
 /// The PDF of `laid`.
@@ -367,12 +367,14 @@ fn metadata(info: &Info) -> Metadata {
         metadata = metadata.text_direction(TextDirection::RightToLeft);
     }
     if let Some(now) = info.created {
-        let date = krilla::metadata::DateTime::new(now.year().clamp(0, 9999) as u16)
-            .month(now.month() as u8)
-            .day(now.day() as u8)
-            .hour(now.hour() as u8)
-            .minute(now.minute() as u8)
-            .second(now.second() as u8)
+        let utc = now.in_zone(Zone::UTC);
+        let (d, t) = (utc.date(), utc.time());
+        let date = krilla::metadata::DateTime::new(d.year().clamp(0, 9999) as u16)
+            .month(d.month_number())
+            .day(d.day())
+            .hour(t.hour())
+            .minute(t.minute())
+            .second(t.second())
             .utc_offset_hour(0)
             .utc_offset_minute(0);
         metadata = metadata.creation_date(date);
