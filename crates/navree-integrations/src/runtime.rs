@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_cache::{Cache, Locks};
 use navree_contracts::{AuditEntry, AuditSink, Clock, SystemClock};
 use navree_crypto::Encrypter;
@@ -30,7 +30,7 @@ use crate::{
 
 /// A token minted for a service account acting as another user, kept in
 /// memory: (token, expiry).
-pub(crate) type SubjectToken = (String, Option<DateTime<Utc>>);
+pub(crate) type SubjectToken = (String, Option<Timestamp>);
 
 /// The bound service's state.
 pub(crate) struct Runtime {
@@ -155,7 +155,7 @@ impl Runtime {
         Ok(format!("{}/{key}", base.trim_end_matches('/')))
     }
 
-    pub(crate) fn now(&self) -> DateTime<Utc> {
+    pub(crate) fn now(&self) -> Timestamp {
         self.clock.now()
     }
 

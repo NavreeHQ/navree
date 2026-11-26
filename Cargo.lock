@@ -5079,7 +5079,6 @@ version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
- "chrono",
  "form_urlencoded",
  "http",
  "navree-access",
@@ -5088,6 +5087,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",

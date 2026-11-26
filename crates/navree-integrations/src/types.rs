@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::Secret;
 use navree_crypto::jose::{Algorithm, SigningKey};
 use navree_openapi::ToSchema;
@@ -213,13 +213,13 @@ pub struct ConnectionInfo {
     /// The last failure, as the provider put it (never a credential).
     pub last_error: Option<String>,
     /// When it was last checked.
-    pub last_checked_at: Option<DateTime<Utc>>,
+    pub last_checked_at: Option<Timestamp>,
     /// The user who connected it.
     pub connected_by: Option<Uuid>,
     /// When it was connected.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl ConnectionInfo {
@@ -250,7 +250,7 @@ pub struct Health {
     /// What failed, if the check did.
     pub error: Option<String>,
     /// When it ran.
-    pub checked_at: DateTime<Utc>,
+    pub checked_at: Timestamp,
 }
 
 /// What `integrations:check` did.

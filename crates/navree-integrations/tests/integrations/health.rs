@@ -153,7 +153,7 @@ async fn due_connections_are_checked_once_per_interval() {
     assert_eq!(integrations.check_all().await.unwrap().checked, 1);
     assert_eq!(
         integrations.find(first.id).await.unwrap().last_checked_at,
-        Some(start() + chrono::TimeDelta::seconds(61 * 60))
+        Some(start() + navree_datetime::Span::seconds(61 * 60))
     );
 }
 

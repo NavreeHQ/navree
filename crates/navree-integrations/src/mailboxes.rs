@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp, Zoned};
 use http::{Method, StatusCode, header};
 use navree_config::ConfigTable;
 use navree_contracts::Secret;
@@ -156,13 +156,13 @@ pub struct MailboxWatch {
     /// The last error.
     pub last_error: Option<String>,
     /// When the subscription or watch expires at the provider.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
     /// When a message last arrived through it.
-    pub last_received_at: Option<DateTime<Utc>>,
+    pub last_received_at: Option<Timestamp>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl fmt::Debug for MailboxWatch {
@@ -395,7 +395,7 @@ impl MailboxWatches {
     /// (what `integrations:mailboxes --renew` runs hourly).
     pub async fn renew_due(&self) -> Result<RenewSummary, IntegrationsError> {
         let rt = self.rt()?.clone();
-        let horizon = rt.now() + TimeDelta::hours(i64::from(self.options()?.renew_before_hours));
+        let horizon = rt.now() + Span::hours(i64::from(self.options()?.renew_before_hours));
         let mut summary = RenewSummary::default();
         for watch in self.all().await? {
             let due = watch.status != "active" || watch.expires_at.is_none_or(|at| at <= horizon);
@@ -481,7 +481,7 @@ impl MailboxWatches {
     async fn graph_subscribe(
         &self,
         watch: &MailboxWatch,
-    ) -> Result<(String, Option<DateTime<Utc>>), IntegrationsError> {
+    ) -> Result<(String, Option<Timestamp>), IntegrationsError> {
         let rt = self.rt()?;
         let url = self
             .options()?
@@ -492,7 +492,7 @@ impl MailboxWatches {
                     "integrations.mailboxes.graph_notification_url is not set".to_owned(),
                 )
             })?;
-        let expires = rt.now() + TimeDelta::minutes(GRAPH_SUBSCRIPTION_MINUTES);
+        let expires = rt.now() + Span::minutes(GRAPH_SUBSCRIPTION_MINUTES);
         let graph = self.graph(watch).await?;
         let created: Value = graph
             .post("/subscriptions")
@@ -521,9 +521,9 @@ impl MailboxWatches {
         &self,
         watch: &MailboxWatch,
         subscription: &str,
-    ) -> Result<Option<DateTime<Utc>>, IntegrationsError> {
+    ) -> Result<Option<Timestamp>, IntegrationsError> {
         let rt = self.rt()?;
-        let expires = rt.now() + TimeDelta::minutes(GRAPH_SUBSCRIPTION_MINUTES);
+        let expires = rt.now() + Span::minutes(GRAPH_SUBSCRIPTION_MINUTES);
         let graph = self.graph(watch).await?;
         let renewed: Value = graph
             .patch(format!("/subscriptions/{subscription}"))
@@ -635,7 +635,7 @@ impl MailboxWatches {
     /// day back) and receives them.
     async fn graph_sync(&self, watch: &MailboxWatch) -> Result<Vec<Received>, IntegrationsError> {
         let rt = self.rt()?;
-        let floor = rt.now() - TimeDelta::days(1);
+        let floor = rt.now() - Span::days(1);
         let since = watch
             .last_received_at
             .filter(|at| *at > floor)
@@ -675,7 +675,7 @@ impl MailboxWatches {
     async fn gmail_watch(
         &self,
         watch: &MailboxWatch,
-    ) -> Result<(String, Option<DateTime<Utc>>), IntegrationsError> {
+    ) -> Result<(String, Option<Timestamp>), IntegrationsError> {
         let topic = self.options()?.gmail_topic.clone().ok_or_else(|| {
             IntegrationsError::Config("integrations.mailboxes.gmail_topic is not set".to_owned())
         })?;
@@ -693,7 +693,7 @@ impl MailboxWatches {
             .ok_or_else(|| api_error("Google Workspace", "users.watch gave no historyId"))?;
         let expires = text(&answer["expiration"])
             .and_then(|ms| ms.parse::<i64>().ok())
-            .and_then(DateTime::from_timestamp_millis);
+            .and_then(|ms| Timestamp::from_millis(ms).ok());
         Ok((history, expires))
     }
 
@@ -920,11 +920,11 @@ fn text(value: &Value) -> Option<String> {
     }
 }
 
-fn parse_time(value: &Value) -> Option<DateTime<Utc>> {
+fn parse_time(value: &Value) -> Option<Timestamp> {
     value
         .as_str()
-        .and_then(|time| DateTime::parse_from_rfc3339(time).ok())
-        .map(|time| time.with_timezone(&Utc))
+        .and_then(|time| Zoned::parse_rfc3339(time).ok())
+        .map(|time| time.timestamp())
 }
 
 fn api_error(provider: &str, error: &str) -> IntegrationsError {

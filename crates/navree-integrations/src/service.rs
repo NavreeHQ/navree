@@ -4,7 +4,7 @@
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_contracts::{AuditEntry, AuditKind, Secret};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle};
 use navree_orm::{Model as _, Record};
@@ -131,7 +131,7 @@ impl Integrations {
             options.user_id,
             options.return_to,
             entry.pkce(),
-            rt.now().timestamp().saturating_add(ttl),
+            rt.now().as_secs().saturating_add(ttl),
         );
         let sealed = state.seal(&rt.encrypter)?;
         let mut url = authorize_url(
@@ -168,7 +168,7 @@ impl Integrations {
         let rt = self.rt()?;
         let entry = rt.provider(provider)?.clone();
         let state = StatePayload::open(&rt.encrypter, &callback.state)?;
-        let now = rt.now().timestamp();
+        let now = rt.now().as_secs();
         if state.provider != entry.key
             || state.owner != owner
             || state.exp <= now
@@ -415,7 +415,7 @@ impl Integrations {
             .transpose()?;
         let expires = token
             .and_then(|grant| grant.expires_in)
-            .map(|secs| now + TimeDelta::seconds(secs));
+            .map(|secs| now + Span::seconds(secs));
         let scopes = grant.scopes.clone().unwrap_or(requested).join(" ");
         let scopes = (!scopes.is_empty()).then_some(scopes);
         let (owner_type, owner_id) = owner.columns();
@@ -836,7 +836,7 @@ impl Integrations {
             return Ok(CheckSummary::default());
         }
         let cutoff =
-            rt.now() - TimeDelta::minutes(i64::try_from(interval).unwrap_or(i64::MAX / 120));
+            rt.now() - Span::minutes(i64::try_from(interval).unwrap_or(i64::MAX / 120));
         let ids = Row::query()
             .where_group(|due| {
                 due.where_(Row::LAST_CHECKED_AT.is_null())

@@ -315,7 +315,7 @@ async fn gmail_mailboxes_are_watched_and_pushes_read_the_history() {
     assert_eq!(watch.provider, "google");
     assert_eq!(watch.cursor.as_deref(), Some("1000"));
     assert_eq!(
-        watch.expires_at.map(|at| at.timestamp_millis()),
+        watch.expires_at.map(|at| at.as_millis()),
         Some(1_793_433_600_000)
     );
     h.fake.api().assert_sent(|request| {

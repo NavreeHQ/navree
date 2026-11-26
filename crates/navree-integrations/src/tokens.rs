@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use http::Method;
 use navree_orm::{Model as _, Record};
 use serde_json::Value;
@@ -50,7 +50,7 @@ impl Runtime {
         };
         let fresh = model
             .token_expires_at
-            .is_none_or(|at| at > self.now() + TimeDelta::seconds(FRESH_MARGIN_SECS));
+            .is_none_or(|at| at > self.now() + Span::seconds(FRESH_MARGIN_SECS));
         if !fresh || *want == Want::Fresh {
             return Ok(None);
         }
@@ -158,9 +158,9 @@ impl Runtime {
         want: &Want,
     ) -> Result<String, IntegrationsError> {
         let key = (model.id, subject.to_owned());
-        let usable = |(token, expires): &(String, Option<DateTime<Utc>>)| {
+        let usable = |(token, expires): &(String, Option<Timestamp>)| {
             let fresh =
-                expires.is_none_or(|at| at > self.now() + TimeDelta::seconds(FRESH_MARGIN_SECS));
+                expires.is_none_or(|at| at > self.now() + Span::seconds(FRESH_MARGIN_SECS));
             let rejected = matches!(want, Want::Replace(stale) if stale == token);
             (fresh && !rejected && *want != Want::Fresh).then(|| token.clone())
         };
@@ -170,7 +170,7 @@ impl Runtime {
         let grant = self.mint(entry, model, credentials, Some(subject)).await?;
         let expires = grant
             .expires_in
-            .map(|secs| self.now() + TimeDelta::seconds(secs));
+            .map(|secs| self.now() + Span::seconds(secs));
         self.subject_tokens
             .lock()
             .await
@@ -244,7 +244,7 @@ impl Runtime {
     ) -> Result<(), IntegrationsError> {
         let now = self.now();
         let token = self.encrypter.encrypt_string(&grant.access_token)?;
-        let expires = grant.expires_in.map(|secs| now + TimeDelta::seconds(secs));
+        let expires = grant.expires_in.map(|secs| now + Span::seconds(secs));
         let rotated = match (credentials, &grant.refresh_token) {
             (StoredCredentials::OAuth { refresh_token }, Some(new))
                 if refresh_token.as_deref() != Some(new.as_str()) =>
@@ -302,7 +302,7 @@ impl Runtime {
         &self,
         model: &Row,
         failure: Option<(String, bool)>,
-        checked_at: Option<DateTime<Utc>>,
+        checked_at: Option<Timestamp>,
     ) -> Result<Health, IntegrationsError> {
         let now = self.now();
         let before = ConnectionStatus::parse(&model.status);
