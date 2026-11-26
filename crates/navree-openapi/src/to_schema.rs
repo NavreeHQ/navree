@@ -1,12 +1,12 @@
 //! [`ToSchema`] and its implementations for the types of the standard library,
-//! chrono, uuid and serde_json.
+//! navree-datetime, uuid and serde_json.
 
 use std::borrow::{Cow, ToOwned};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
+use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -198,10 +198,11 @@ inline_schema! {
     impl[] f32 => number("float");
     impl[] f64 => number("double");
     impl[] Uuid => formatted("uuid");
-    impl[Tz: TimeZone] DateTime<Tz> => formatted("date-time");
-    impl[] NaiveDateTime => formatted("date-time");
-    impl[] NaiveDate => formatted("date");
-    impl[] NaiveTime => Schema::string();
+    impl[] Timestamp => formatted("date-time");
+    impl[] Zoned => formatted("date-time");
+    impl[] DateTime => formatted("date-time");
+    impl[] Date => formatted("date");
+    impl[] Time => Schema::string();
     impl[] Value => Schema::default();
     impl[] serde_json::Map<String, Value> => Schema::map(Schema::string(), Schema::default());
     impl[] Object => Schema::object();
@@ -432,9 +433,22 @@ mod tests {
         );
         assert_eq!(value::<Uuid>(), json!({"type": "string", "format": "uuid"}));
         assert_eq!(
-            value::<DateTime<chrono::Utc>>(),
+            value::<Timestamp>(),
             json!({"type": "string", "format": "date-time"})
         );
+        assert_eq!(
+            value::<Zoned>(),
+            json!({"type": "string", "format": "date-time"})
+        );
+        assert_eq!(
+            value::<DateTime>(),
+            json!({"type": "string", "format": "date-time"})
+        );
+        assert_eq!(
+            value::<Date>(),
+            json!({"type": "string", "format": "date"})
+        );
+        assert_eq!(value::<Time>(), json!({"type": "string"}));
         assert_eq!(value::<Value>(), json!({}));
     }
 

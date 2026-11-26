@@ -19,8 +19,8 @@ targets = ["x86_64-unknown-linux-gnu"]
 workspace = true
 
 [dependencies]
-chrono = { workspace = true }
 indexmap = { workspace = true }
+navree-datetime = { workspace = true }
 navree-macros = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

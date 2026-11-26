@@ -5625,8 +5625,8 @@ dependencies = [
 name = "navree-openapi"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "indexmap",
+ "navree-datetime",
  "navree-macros",
  "serde",
  "serde_json",
