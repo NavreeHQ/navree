@@ -110,19 +110,18 @@ fn date_filter_defaults_to_iso_date() {
 }
 
 #[test]
-fn date_filter_accepts_chrono_values() {
-    let at = chrono::DateTime::parse_from_rfc3339("2026-10-25T08:05:00Z")
-        .expect("timestamp")
-        .with_timezone(&chrono::Utc);
-    let day = chrono::NaiveDate::from_ymd_opt(2026, 1, 2).expect("date");
+fn date_filter_accepts_datetime_values() {
+    let at = navree_datetime::Timestamp::utc(2026, 10, 25, 8, 5, 0).expect("timestamp");
+    let day = navree_datetime::Date::new(2026, 1, 2).expect("date");
+    let time = navree_datetime::Time::new(14, 30, 0).expect("time");
 
     let out = render(
-        "{{ at|date('%H:%M') }} {{ day|date('%d/%m/%Y') }}",
-        json!({ "at": at, "day": day }),
+        "{{ at|date('%H:%M') }} {{ day|date('%d/%m/%Y') }} {{ time|date('%H:%M') }}",
+        json!({ "at": at, "day": day, "time": time }),
     )
     .expect("render");
 
-    assert_eq!(out, "08:05 02/01/2026");
+    assert_eq!(out, "08:05 02/01/2026 14:30");
 }
 
 #[test]

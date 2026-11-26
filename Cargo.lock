@@ -6366,8 +6366,8 @@ dependencies = [
 name = "navree-view"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "navree-config",
+ "navree-datetime",
  "navree-kernel",
  "navree-macros",
  "navree-template",

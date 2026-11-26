@@ -19,8 +19,8 @@ targets = ["x86_64-unknown-linux-gnu"]
 workspace = true
 
 [dependencies]
-chrono = { workspace = true }
 navree-config = { workspace = true }
+navree-datetime = { workspace = true }
 navree-kernel = { workspace = true }
 navree-template = { workspace = true }
 serde = { workspace = true }
