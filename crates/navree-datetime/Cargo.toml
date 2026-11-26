@@ -13,10 +13,33 @@ readme = "README.md"
 include = ["src/**", "README.md", "LICENSE-*"]
 
 [package.metadata.docs.rs]
+all-features = true
 targets = ["x86_64-unknown-linux-gnu"]
 
 [lints]
 workspace = true
+
+[features]
+default = ["serde"]
+## `Serialize` and `Deserialize` for every date, time, zone and span type.
+serde = ["dep:serde"]
+## `sqlx::Type`, `Encode`, `Decode` and `PgHasArrayType` for PostgreSQL.
+sqlx-postgres = ["dep:sqlx", "sqlx/postgres"]
+## `sqlx::Type`, `Encode` and `Decode` for MySQL and MariaDB.
+sqlx-mysql = ["dep:sqlx", "dep:serde_json", "sqlx/mysql", "sqlx/macros"]
+## `sqlx::Type`, `Encode` and `Decode` for SQLite.
+sqlx-sqlite = ["dep:sqlx", "dep:serde_json", "sqlx/sqlite-bundled", "sqlx/macros"]
+## `async_graphql::ScalarType` implementations with Navree's GraphQL scalar names.
+async-graphql = ["dep:async-graphql"]
+## `bson::DateTime` conversions and MongoDB Extended JSON serde helpers.
+bson = ["dep:bson", "serde"]
+
+[dependencies]
+async-graphql = { workspace = true, optional = true }
+bson = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+sqlx = { workspace = true, optional = true }
 
 [dev-dependencies]
 # The tests read the recorded values in `tests/golden/`, one JSON object a line.
