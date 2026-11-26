@@ -10,10 +10,10 @@ homepage.workspace = true
 keywords = ["navree", "date", "time", "datetime", "calendar"]
 categories = ["date-and-time"]
 readme = "README.md"
-include = ["src/**", "README.md", "LICENSE-*"]
+include = ["src/**", "/README.md", "/LICENSE-*"]
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["async-graphql", "bson", "serde", "sqlx-mysql", "sqlx-postgres", "sqlx-sqlite"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [lints]

@@ -333,6 +333,9 @@ impl Store for AzureStore {
                     let response = check_response(response).await?;
                     ensure_blob_file(&response)?;
                     match span {
+                        Some(span) if is_empty_at_eof(&response, span.start) => {
+                            response.bytes_up_to(0).await
+                        }
                         Some(span) => response.ranged_bytes(span).await,
                         None => response.bytes().await,
                     }
@@ -656,9 +659,53 @@ fn ensure_blob_file(response: &Response) -> Result<()> {
     Ok(())
 }
 
+/// Azurite checks `rangeStart > contentLength` rather than `>=`, so a range
+/// starting right at EOF (`bytes=16-31` on a 16-byte blob) comes back as
+/// `206 Partial Content` with `Content-Length: 0` and
+/// `Content-Range: bytes 16-15/16` instead of `416`.
+fn is_empty_at_eof(response: &Response, start: u64) -> bool {
+    if response.status() != StatusCode::PARTIAL_CONTENT || response.declared_length() != Some(0) {
+        return false;
+    }
+    let Some(raw) = response.header("content-range") else {
+        return false;
+    };
+    is_eof_content_range(raw, start)
+}
+
+fn is_eof_content_range(raw: &str, start: u64) -> bool {
+    let Some((range_part, total_part)) = raw
+        .trim()
+        .strip_prefix("bytes ")
+        .and_then(|rest| rest.split_once('/'))
+    else {
+        return false;
+    };
+    let Ok(total) = total_part.trim().parse::<u64>() else {
+        return false;
+    };
+    start >= total && !range_part.trim().is_empty()
+}
+
 fn parse_http_date(text: &str) -> Result<Timestamp> {
     let trimmed = text.trim();
     Timestamp::parse_rfc2822(trimmed)
         .or_else(|_| Timestamp::parse_rfc3339(trimmed))
         .map_err(|_| Error::new(ErrorKind::Answer, "the blob Last-Modified date is invalid"))
+}
+
+#[cfg(test)]
+mod eof_range_tests {
+    use super::is_eof_content_range;
+
+    #[test]
+    fn accepts_azurite_empty_range_at_or_past_eof_only() {
+        assert!(is_eof_content_range("bytes 16-15/16", 16));
+        assert!(is_eof_content_range("bytes */16", 16));
+        assert!(is_eof_content_range("bytes 0--1/0", 0));
+        assert!(!is_eof_content_range("bytes 15-14/16", 15));
+        assert!(!is_eof_content_range("bytes 4-11/16", 4));
+        assert!(!is_eof_content_range("bytes 16-15/*", 16));
+        assert!(!is_eof_content_range("items 16-15/16", 16));
+    }
 }

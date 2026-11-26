@@ -320,9 +320,15 @@ jobs:
 
       - name: Find the reference app and the skeleton
         id: repos
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           for repo in crm skeleton; do
-            if git ls-remote "https://github.com/NavreeHQ/$repo.git" HEAD > /dev/null 2>&1; then
+            if [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads "https://github.com/NavreeHQ/$repo.git" "$HEAD_REF" > /dev/null 2>&1; then
+              echo "${repo}_ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
+              echo "$repo=true" >> "$GITHUB_OUTPUT"
+            elif git ls-remote "https://github.com/NavreeHQ/$repo.git" HEAD > /dev/null 2>&1; then
+              echo "${repo}_ref=" >> "$GITHUB_OUTPUT"
               echo "$repo=true" >> "$GITHUB_OUTPUT"
             else
               echo "::notice::NavreeHQ/$repo is not public yet: skipped"
@@ -332,12 +338,14 @@ jobs:
         if: ${{ steps.repos.outputs.crm == 'true' }}
         with:
           repository: NavreeHQ/crm
+          ref: ${{ steps.repos.outputs.crm_ref }}
           path: crm
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: ${{ steps.repos.outputs.skeleton == 'true' }}
         with:
           repository: NavreeHQ/skeleton
+          ref: ${{ steps.repos.outputs.skeleton_ref }}
           path: skeleton
           persist-credentials: false
 

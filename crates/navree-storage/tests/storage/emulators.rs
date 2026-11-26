@@ -60,13 +60,26 @@ mod gcs {
                 })))
                 .mount(&token_server)
                 .await;
+            let endpoint = format!(
+                "{}://{}:{}",
+                url.scheme(),
+                url.host_str().unwrap(),
+                url.port_or_known_default().unwrap()
+            );
+            let _ = rustls::crypto::ring::default_provider().install_default();
+            let create = reqwest::Client::new()
+                .post(format!("{endpoint}/storage/v1/b?project=navree-test"))
+                .json(&json!({ "name": &name }))
+                .send()
+                .await
+                .expect("the emulator answers bucket creation");
+            assert!(
+                create.status().as_u16() == 200 || create.status().as_u16() == 409,
+                "creating `{name}`: {}",
+                create.status()
+            );
             Some(Bucket {
-                endpoint: format!(
-                    "{}://{}:{}",
-                    url.scheme(),
-                    url.host_str().unwrap(),
-                    url.port_or_known_default().unwrap()
-                ),
+                endpoint,
                 name,
                 prefix: format!("navree-test-{}", navree_crypto::random_token(12)),
                 token_server,
