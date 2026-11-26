@@ -23,7 +23,7 @@ use crate::{Date, Span, Time, Timestamp};
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DateTime {
     date: Date,
     time: Time,

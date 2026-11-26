@@ -25,7 +25,7 @@ const LIMIT_SECS: i32 = 25 * 3_600 + 59 * 60 + 59;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Offset {
     /// Seconds east of UTC, below zero for west.
     secs: i32,

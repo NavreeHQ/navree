@@ -103,12 +103,68 @@
 //! an app has stored still fits, the last instant among them: Navree stores
 //! [`Timestamp::MAX`] where a time is never to come.
 //!
+//! ## Text
+//!
+//! Every value has one fixed text, which `Display` writes and `to_string()`
+//! gives. It is data as much as the value is: it is stored, sent and
+//! compared, so it never depends on the machine's language or settings.
+//!
+//! | Type | `Display` | `Debug` | `str::parse` reads |
+//! |---|---|---|---|
+//! | [`Timestamp`] | `2026-11-25 12:00:00 UTC` | `2026-11-25T12:00:00Z` | RFC 3339, loosely: both of these and more |
+//! | [`Zoned`] | `2026-11-25 17:30:00 IST` | `2026-11-25T17:30:00IST` | RFC 3339, loosely, at the offset written |
+//! | [`Zone`] | `Asia/Kolkata`, `+05:30` | `Zone("Asia/Kolkata")` | a zone's name (`Asia/Kolkata`) |
+//! | [`Date`] | `2026-11-25` | the same | `2026-11-25` |
+//! | [`Time`] | `09:30:00` | the same | `09:30:00`, `09:30` |
+//! | [`DateTime`] | `2026-11-25 09:30:00` | `2026-11-25T09:30:00` | the `Debug` form, with its `T` |
+//! | [`Offset`] | `+05:30` | the same | `+05:30`, `+0530` |
+//! | [`Span`] | `PT5400S` | its two numbers | |
+//! | [`Weekday`] | `Wed` | the same | `Wed`, `Wednesday` |
+//! | [`Month`] | `November` | the same | `Nov`, `November` |
+//!
+//! A fraction of a second is shown where there is one, in three, six or
+//! nine digits, the fewest that lose nothing: `09:30:00.250`. A year before
+//! 0 or after 9999 is shown with its sign: `-0044-03-15`.
+//!
+//! An instant is sent as RFC 3339: [`Timestamp::to_rfc3339`],
+//! [`Timestamp::to_rfc3339_with`] and [`Zoned::to_rfc3339`] write it, and
+//! [`Timestamp::parse_rfc3339`] and [`Zoned::parse_rfc3339`] read it.
+//! [`Timestamp::to_rfc2822`], [`Zoned::to_rfc2822`],
+//! [`Timestamp::parse_rfc2822`] and [`Zoned::parse_rfc2822`] are for the
+//! dates of email and HTTP.
+//!
+//! For any other layout there are patterns, in the `strftime` style:
+//! `value.format(pattern)` writes one and `Type::parse(pattern, text)`
+//! reads one. The [`pattern`] module lists what a pattern can hold.
+//!
+//! ```
+//! use navree_datetime::{Date, Precision, Timestamp};
+//!
+//! # fn main() -> navree_datetime::Result<()> {
+//! let sent = Timestamp::utc(2026, 11, 25, 12, 0, 0)?;
+//! assert_eq!(sent.to_string(), "2026-11-25 12:00:00 UTC");
+//! assert_eq!(sent.to_rfc3339_with(Precision::Auto, true), "2026-11-25T12:00:00Z");
+//! assert_eq!("2026-11-25T17:30:00+05:30".parse::<Timestamp>()?, sent);
+//!
+//! let day = Date::new(2026, 11, 25)?;
+//! assert_eq!(day.format("%-d %b %Y").to_string(), "25 Nov 2026");
+//! assert_eq!(Date::parse("%d/%m/%Y", "25/11/2026")?, day);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Text can name second 60, which a clock shows when a leap second is
+//! added. A minute has 60 seconds here, so such a text is read as the last
+//! nanosecond of its minute: `23:59:60`, with any fraction, is
+//! `23:59:59.999999999`. No value is ever written with second 60.
+//!
 //! ## Errors
 //!
 //! Making a value from numbers that name no day or time is an [`Error`]
 //! with a [kind](ErrorKind), never a panic: [`ErrorKind::Invalid`] for a
 //! value that does not exist (30 February, hour 24) and
-//! [`ErrorKind::OutOfRange`] for one past the ends of its type. Arithmetic
+//! [`ErrorKind::OutOfRange`] for one past the ends of its type. Text that
+//! cannot be read as the value asked for is [`ErrorKind::Parse`]. Arithmetic
 //! that can leave the range has a form that answers `None`
 //! ([`Timestamp::checked_add`], [`Date::add_days`], [`Span::checked_add`]).
 //! The operators `+`, `-`, `*` and `/` are for values known to stay in the
@@ -124,6 +180,7 @@ mod error;
 mod month;
 mod offset;
 mod span;
+mod text;
 mod time;
 mod timestamp;
 mod weekday;
@@ -135,6 +192,7 @@ pub use error::{Error, ErrorKind, Result};
 pub use month::Month;
 pub use offset::Offset;
 pub use span::Span;
+pub use text::{Formatted, Precision, pattern};
 pub use time::Time;
 pub use timestamp::Timestamp;
 pub use weekday::Weekday;

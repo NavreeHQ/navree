@@ -22,7 +22,7 @@ const NANOS_PER_SEC: u32 = 1_000_000_000;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Time {
     hour: u8,
     minute: u8,

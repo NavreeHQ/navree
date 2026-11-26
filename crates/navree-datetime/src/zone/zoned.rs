@@ -48,7 +48,7 @@ use crate::{Date, DateTime, Error, Offset, Result, Span, Time, Timestamp};
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Zoned {
     timestamp: Timestamp,
     zone: Zone,

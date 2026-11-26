@@ -15,7 +15,7 @@ use crate::{Error, Result};
 /// assert_eq!(Weekday::Wednesday.days_from_sunday(), 3);
 /// assert_eq!(Weekday::Sunday.succ(), Weekday::Monday);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Weekday {
     /// Monday.
     Monday,
