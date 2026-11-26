@@ -5849,13 +5849,13 @@ name = "navree-redis"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "futures-util",
  "http",
  "navree-cache",
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",

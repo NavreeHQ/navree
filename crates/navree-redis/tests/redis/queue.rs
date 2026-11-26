@@ -131,7 +131,7 @@ async fn release_and_fail_need_the_reservation() {
         ),
         ("0001", "boom", 2)
     );
-    assert_eq!(failed[0].failed_at.timestamp_millis(), NOW + 2_000);
+    assert_eq!(failed[0].failed_at.as_millis(), NOW + 2_000);
     t.cleanup().await;
 }
 
