@@ -1,6 +1,6 @@
 //! `schedule_runs` keeps a week of runs: older rows are deleted hourly.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{IndexKind, Schema};
 use navree_db::{Db, Executor, ExecutorExt, MIGRATIONS_TABLE, Statement, prune_time_series};
 use navree_kernel::App;
@@ -9,7 +9,7 @@ use crate::databases::Scratch;
 use crate::on_every_server;
 use crate::support::{Counter, Tasks, TestDb, at, clock, runs, scheduler};
 
-async fn insert_run(app: &App, task: &str, tick: DateTime<Utc>) {
+async fn insert_run(app: &App, task: &str, tick: Timestamp) {
     let db = app.ctx().get::<Db>().await.unwrap();
     db.execute(&Statement::portable(
         "INSERT INTO schedule_runs (task, tick, started_at, finished_at, status) VALUES (?, ?, ?, ?, ?)",

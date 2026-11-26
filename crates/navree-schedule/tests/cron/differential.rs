@@ -8,9 +8,9 @@
 
 use std::str::FromStr;
 
-use chrono::{DateTime, LocalResult, TimeDelta, TimeZone, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_schedule::CronExpression;
-use navree_time::Tz;
+use navree_time::{LocalTime, Tz};
 
 const TABLE: &str = include_str!("../data/croner_next_runs.txt");
 
@@ -108,9 +108,7 @@ fn rows() -> Vec<Row<'static>> {
 }
 
 fn utc(seconds: i64) -> String {
-    DateTime::<Utc>::from_timestamp(seconds, 0)
-        .unwrap()
-        .to_rfc3339()
+    Timestamp::from_secs(seconds).unwrap().to_rfc3339()
 }
 
 #[test]
@@ -152,10 +150,9 @@ fn parse_verdicts_match_croner() {
 /// Our runs by brute force: every UTC minute after `start` at which the
 /// expression is due under the daylight saving time rule, written out
 /// without the skipping search of `next_after`.
-fn brute_force(cron: &CronExpression, zone: Tz, start: DateTime<Utc>, count: usize) -> Vec<i64> {
-    let local = |t: DateTime<Utc>| t.with_timezone(&zone).naive_local();
-    let mut minute =
-        DateTime::from_timestamp(start.timestamp().div_euclid(60) * 60 + 60, 0).unwrap();
+fn brute_force(cron: &CronExpression, zone: Tz, start: Timestamp, count: usize) -> Vec<i64> {
+    let local = |t: Timestamp| zone.local(t).date_time();
+    let mut minute = Timestamp::from_secs(start.as_secs().div_euclid(60) * 60 + 60).unwrap();
     let mut runs = Vec::new();
     while runs.len() < count {
         let now = local(minute);
@@ -163,24 +160,26 @@ fn brute_force(cron: &CronExpression, zone: Tz, start: DateTime<Utc>, count: usi
             // Wildcard expressions: every real minute whose clock matches.
             cron.matches_local(now)
         } else if cron.matches_local(now) {
-            match zone.from_local_datetime(&now) {
-                LocalResult::Ambiguous(first, _) => first.to_utc() == minute,
+            match zone.resolve_local(now) {
+                LocalTime::Ambiguous((first, _), _) => first == minute,
                 _ => true,
             }
         } else {
             // The clock jumped over local minutes: they run now, once.
-            let mut skipped = local(minute - TimeDelta::minutes(1)) + TimeDelta::minutes(1);
+            let mut skipped = local(minute - Span::minutes(1))
+                .add(Span::minutes(1))
+                .unwrap();
             let mut hit = false;
             while skipped < now {
                 hit |= cron.matches_local(skipped);
-                skipped += TimeDelta::minutes(1);
+                skipped = skipped.add(Span::minutes(1)).unwrap();
             }
             hit
         };
         if due {
-            runs.push(minute.timestamp() / 60);
+            runs.push(minute.as_secs() / 60);
         }
-        minute += TimeDelta::minutes(1);
+        minute += Span::minutes(1);
     }
     runs
 }
@@ -188,14 +187,17 @@ fn brute_force(cron: &CronExpression, zone: Tz, start: DateTime<Utc>, count: usi
 /// What croner does differently at `minute` (unix minutes), when only one
 /// side has a run there.
 fn kind(cron: &CronExpression, zone: Tz, minute: i64, croner_has_it: bool) -> &'static str {
-    let at = DateTime::<Utc>::from_timestamp(minute * 60, 0).unwrap();
-    let local = |t: DateTime<Utc>| t.with_timezone(&zone).naive_local();
+    let at = Timestamp::from_secs(minute * 60).unwrap();
+    let local = |t: Timestamp| zone.local(t).date_time();
     let now = local(at);
     let second_pass = matches!(
-        zone.from_local_datetime(&now),
-        LocalResult::Ambiguous(first, _) if first.to_utc() != at
+        zone.resolve_local(now),
+        LocalTime::Ambiguous((first, _), _) if first != at
     );
-    let after_gap = local(at - TimeDelta::minutes(1)) + TimeDelta::minutes(1) < now;
+    let after_gap = local(at - Span::minutes(1))
+        .add(Span::minutes(1))
+        .unwrap()
+        < now;
     match (
         croner_has_it,
         second_pass,
@@ -226,15 +228,15 @@ fn next_runs_match_croner() {
             continue;
         };
         let zone: Tz = row.zone.parse().unwrap();
-        let start = DateTime::from_timestamp(row.start, 0).unwrap();
+        let start = Timestamp::from_secs(row.start).unwrap();
         let mut cursor = start;
         let mut ours = Vec::new();
         while ours.len() < 10 {
             let Some(next) = cron.next_after(cursor, &zone) else {
                 break;
             };
-            assert_eq!(next.timestamp() % 60, 0);
-            ours.push(next.timestamp() / 60);
+            assert_eq!(next.as_secs() % 60, 0);
+            ours.push(next.as_secs() / 60);
             cursor = next;
         }
         if ours == row.runs {

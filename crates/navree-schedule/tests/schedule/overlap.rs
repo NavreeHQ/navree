@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_db::{Db, Executor, Statement};
 use navree_kernel::{AppContext, BoxError};
 use navree_schedule::{RunStatus, SkipReason};
@@ -147,7 +147,7 @@ async fn a_running_row_older_than_a_day_does_not_block(scratch: Scratch) {
         .await;
 
     // A run from a process that crashed 25 hours ago.
-    let crashed = at("2026-10-25T10:00:00Z") - TimeDelta::hours(25);
+    let crashed = at("2026-10-25T10:00:00Z") - Span::hours(25);
     let db_handle = app.ctx().get::<Db>().await.unwrap();
     db_handle
         .execute(&Statement::portable(

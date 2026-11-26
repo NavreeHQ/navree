@@ -5877,10 +5877,10 @@ dependencies = [
 name = "navree-schedule"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-kernel",
  "navree-telemetry",

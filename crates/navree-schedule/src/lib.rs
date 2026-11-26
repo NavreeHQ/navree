@@ -90,7 +90,7 @@ mod schedule;
 mod scheduler;
 mod store;
 
-pub use cron::{CronError, CronExpression, MAX_EXPRESSION_LEN};
+pub use cron::{CronError, CronExpression, CronZone, MAX_EXPRESSION_LEN};
 pub use error::ScheduleError;
 pub use local::LocalRun;
 pub use module::ScheduleModule;

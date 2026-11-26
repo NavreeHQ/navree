@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, DbOptions, Migrator};
 use navree_kernel::{Module, ModuleBuilder, Navree};
 use navree_schedule::{
@@ -80,7 +80,7 @@ async fn without_a_clock_the_system_clock_is_used() {
         .await
         .expect("boots");
     let scheduler = app.ctx().get::<Scheduler>().await.unwrap();
-    let drift = (Utc::now() - scheduler.now()).num_seconds().abs();
+    let drift = (Timestamp::now() - scheduler.now()).as_seconds().abs();
     assert!(drift < 5, "{drift}");
 }
 
