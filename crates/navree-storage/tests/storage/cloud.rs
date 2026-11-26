@@ -7,7 +7,7 @@ mod gcs {
     use chrono::{Duration, Utc};
     use navree_storage::{Disk, GcsConfig, Storage, UploadRules};
     use serde_json::json;
-    use wiremock::matchers::{header_exists, method, path};
+    use wiremock::matchers::{header, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::support::{SIGNING_KEY, single_disk};
@@ -15,12 +15,14 @@ mod gcs {
     const PRIVATE_KEY: &str = include_str!("../fixtures/rsa-2048.pem");
     const EMAIL: &str = "navree-test@navree-test.iam.gserviceaccount.com";
 
-    /// A gcs disk on `server`, signing with the test key.
+    /// A gcs disk on `server`, signing with the test key and exchanging tokens
+    /// at `{server}/token`.
     fn disk(server: &MockServer, prefix: Option<&str>) -> Disk {
         let key = json!({
             "private_key": PRIVATE_KEY,
             "private_key_id": "test-key",
             "client_email": EMAIL,
+            "token_uri": format!("{}/token", server.uri()),
         });
         let config = GcsConfig {
             service_account_key: Some(key.to_string().into()),
@@ -33,39 +35,51 @@ mod gcs {
             .default_disk()
     }
 
-    fn object() -> ResponseTemplate {
-        ResponseTemplate::new(200)
-            .insert_header("etag", "\"abc\"")
-            .insert_header("last-modified", "Mon, 26 Oct 2026 10:00:00 GMT")
-    }
-
     #[tokio::test]
     async fn files_go_to_the_bucket_with_a_bearer_token() {
         let server = MockServer::start().await;
-        // The object name (prefix and path) is one percent-encoded segment.
-        let object_path = "/agra%2Dmedia/site%2Freports%2Fq1%2Ecsv";
-        Mock::given(method("PUT"))
-            .and(path(object_path))
-            .and(header_exists("authorization"))
-            .respond_with(object())
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "tok-agra-1",
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/upload/storage/v1/b/agra-media/o"))
+            .and(query_param("uploadType", "media"))
+            .and(query_param("name", "site/reports/q1.csv"))
+            .and(header("authorization", "Bearer tok-agra-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "name": "site/reports/q1.csv",
+                "size": "4",
+                "updated": "2026-10-26T10:00:00Z",
+            })))
             .expect(1)
             .mount(&server)
             .await;
         Mock::given(method("GET"))
-            .and(path(object_path))
-            .respond_with(object().set_body_string("a,b\n"))
+            .and(path("/storage/v1/b/agra-media/o/site%2Freports%2Fq1.csv"))
+            .and(query_param("alt", "media"))
+            .and(header("authorization", "Bearer tok-agra-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("a,b\n"))
+            .expect(1)
             .mount(&server)
             .await;
+
         let disk = disk(&server, Some("site"));
         assert_eq!(disk.driver(), "gcs");
         disk.put("reports/q1.csv", "a,b\n").await.unwrap();
         assert_eq!(disk.get("reports/q1.csv").await.unwrap(), "a,b\n");
 
         let requests = server.received_requests().await.unwrap();
-        let authorization = requests[0].headers["authorization"].to_str().unwrap();
+        let token_body = std::str::from_utf8(&requests[0].body).unwrap();
         assert!(
-            authorization.starts_with("Bearer ey"),
-            "a self-signed JWT: {authorization}"
+            token_body.contains("assertion=ey"),
+            "an RS256 JWT assertion: {token_body}"
         );
     }
 

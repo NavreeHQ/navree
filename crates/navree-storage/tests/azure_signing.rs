@@ -422,8 +422,9 @@ async fn the_credential_chain_order_is_todays() {
     Mock::given(method("POST"))
         .and(path("/tid-agra/oauth2/v2.0/token"))
         .respond_with(|req: &wiremock::Request| {
-            let form: BTreeMap<String, String> =
-                url::form_urlencoded::parse(&req.body).into_owned().collect();
+            let form: BTreeMap<String, String> = url::form_urlencoded::parse(&req.body)
+                .into_owned()
+                .collect();
             assert_eq!(form["grant_type"], "client_credentials");
             assert_eq!(form["client_id"], "cid-agra");
             assert_eq!(form["scope"], "https://storage.azure.com/.default");
@@ -461,7 +462,10 @@ async fn the_credential_chain_order_is_todays() {
         .unwrap()
         .with_retry_policy(quick_retry());
     assert_eq!(step3.auth_kind(), AuthKind::ClientSecret);
-    step3.put("sp.txt", Bytes::from_static(b"ok")).await.unwrap();
+    step3
+        .put("sp.txt", Bytes::from_static(b"ok"))
+        .await
+        .unwrap();
 
     // 4. Workload Identity (`AZURE_FEDERATED_TOKEN_FILE`) wins when
     //    `AZURE_CLIENT_SECRET` is absent.
@@ -474,7 +478,10 @@ async fn the_credential_chain_order_is_todays() {
         .unwrap()
         .with_retry_policy(quick_retry());
     assert_eq!(step4.auth_kind(), AuthKind::WorkloadIdentity);
-    step4.put("wi.txt", Bytes::from_static(b"ok")).await.unwrap();
+    step4
+        .put("wi.txt", Bytes::from_static(b"ok"))
+        .await
+        .unwrap();
 
     // 5a. App Service Managed Identity (`IDENTITY_ENDPOINT` + `IDENTITY_HEADER`)
     //     wins over IMDS and forwards `client_id` when `AZURE_CLIENT_ID` is set.
@@ -567,8 +574,9 @@ async fn an_expired_token_is_refreshed_between_blocks() {
         .and(path("/tid-amritsar/oauth2/v2.0/token"))
         .respond_with(move |req: &wiremock::Request| {
             let n = counted.fetch_add(1, Ordering::SeqCst) + 1;
-            let form: BTreeMap<String, String> =
-                url::form_urlencoded::parse(&req.body).into_owned().collect();
+            let form: BTreeMap<String, String> = url::form_urlencoded::parse(&req.body)
+                .into_owned()
+                .collect();
             let expected_assertion = format!("assertion-v{n}");
             assert_eq!(form["client_assertion"], expected_assertion);
             ResponseTemplate::new(200).set_body_json(json!({
@@ -593,10 +601,7 @@ async fn an_expired_token_is_refreshed_between_blocks() {
     let vars = env_map(&[
         ("AZURE_TENANT_ID", "tid-amritsar"),
         ("AZURE_CLIENT_ID", "cid-amritsar"),
-        (
-            "AZURE_FEDERATED_TOKEN_FILE",
-            token_file.to_str().unwrap(),
-        ),
+        ("AZURE_FEDERATED_TOKEN_FILE", token_file.to_str().unwrap()),
         ("AZURE_AUTHORITY_HOST", &oauth_server.uri()),
     ]);
     let config = AzureConfig {
@@ -660,10 +665,7 @@ async fn an_expired_token_is_refreshed_between_blocks() {
     assert_eq!(commit_params["comp"], "blocklist");
     let block_list = xml::parse(&requests[3].body).unwrap();
     assert_eq!(block_list.name(), "BlockList");
-    let committed: Vec<&str> = block_list
-        .all("Latest")
-        .map(xml::Element::text)
-        .collect();
+    let committed: Vec<&str> = block_list.all("Latest").map(xml::Element::text).collect();
     assert_eq!(committed, staged_ids);
 }
 
@@ -700,8 +702,9 @@ async fn blob_operations_pagination_and_errors_keep_secrets_out_of_messages() {
                 .insert_header("content-range", "bytes 0-3/8")
                 .insert_header("etag", "\"0x10\"")
                 .set_body_string("Agra"),
-            Some(range) if range == "bytes=50-60" => ResponseTemplate::new(416)
-                .insert_header("content-range", "bytes */8"),
+            Some(range) if range == "bytes=50-60" => {
+                ResponseTemplate::new(416).insert_header("content-range", "bytes */8")
+            }
             None => ResponseTemplate::new(200)
                 .insert_header("etag", "\"0x10\"")
                 .set_body_string("Agra-108"),
@@ -719,9 +722,7 @@ async fn blob_operations_pagination_and_errors_keep_secrets_out_of_messages() {
 
     Mock::given(method("DELETE"))
         .and(path("/devstoreaccount1/archive/docs/missing.txt"))
-        .respond_with(
-            ResponseTemplate::new(404).insert_header("x-ms-error-code", "BlobNotFound"),
-        )
+        .respond_with(ResponseTemplate::new(404).insert_header("x-ms-error-code", "BlobNotFound"))
         .expect(1)
         .mount(&server)
         .await;
@@ -840,7 +841,13 @@ async fn blob_operations_pagination_and_errors_keep_secrets_out_of_messages() {
         .unwrap_err();
     let rendered = format!("{err} {err:?}");
     assert!(rendered.contains("AuthenticationFailed"), "{rendered}");
-    assert!(!rendered.contains("StringToSign-with-secret-detail"), "{rendered}");
-    assert!(!rendered.contains("Server failed to authenticate"), "{rendered}");
+    assert!(
+        !rendered.contains("StringToSign-with-secret-detail"),
+        "{rendered}"
+    );
+    assert!(
+        !rendered.contains("Server failed to authenticate"),
+        "{rendered}"
+    );
     assert!(!rendered.contains(AZURITE_KEY), "{rendered}");
 }

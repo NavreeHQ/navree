@@ -353,9 +353,7 @@ fn parse_token_answer(body: &[u8], clock: &Clock) -> Result<Credential<Auth>> {
             "the token service sent an unreadable answer",
         )
     })?;
-    if parsed.access_token.trim().is_empty()
-        || parsed.access_token.chars().any(char::is_control)
-    {
+    if parsed.access_token.trim().is_empty() || parsed.access_token.chars().any(char::is_control) {
         return Err(Error::new(
             ErrorKind::Credential,
             "the token service sent an unusable access token",

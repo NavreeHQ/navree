@@ -27,18 +27,16 @@ pub use blocks::DEFAULT_BLOCK_SIZE;
 pub use credentials::{Auth, AuthKind};
 pub use shared_key::{SharedKey, VERSION, http_date};
 
-pub use crate::azure_sas::UserDelegationKey;
-use crate::azure_sas::SharedKeySas;
 use crate::StorageError;
+use crate::azure_sas::SharedKeySas;
+pub use crate::azure_sas::UserDelegationKey;
 use crate::cloud::credentials::Provider;
 use crate::cloud::http::{Client, Request, Response};
 use crate::cloud::keys::{check_prefix, encode_component, object_url};
 use crate::cloud::retry::{Replay, RetryPolicy, with_backoff};
 use crate::cloud::{Error, ErrorKind, Result, xml};
 use crate::options::AzureConfig;
-use crate::store::{
-    HeaderName, HeaderValue, Meta, Object, Store, StoreError, StoreResult, Upload,
-};
+use crate::store::{HeaderName, HeaderValue, Meta, Object, Store, StoreError, StoreResult, Upload};
 
 use self::blocks::BlockUpload;
 use self::credentials::{AuthSource, Clock, ResolveError};
@@ -182,7 +180,11 @@ impl AzureStore {
     /// stages a block (`DEFAULT_BLOCK_SIZE` by default).
     #[must_use]
     pub fn with_block_size(self, block_size: usize) -> Self {
-        self.rebuild(self.inner.clock.clone(), self.inner.policy.clone(), block_size.max(1))
+        self.rebuild(
+            self.inner.clock.clone(),
+            self.inner.policy.clone(),
+            block_size.max(1),
+        )
     }
 
     /// Sets the [`RetryPolicy`] used for storage, delegation-key and token
@@ -354,7 +356,10 @@ impl Store for AzureStore {
                     inner.client.send(request).await
                 }
             });
-            Ok(Object::new(size, Box::pin(stream.map_err(StoreError::from))))
+            Ok(Object::new(
+                size,
+                Box::pin(stream.map_err(StoreError::from)),
+            ))
         })
     }
 

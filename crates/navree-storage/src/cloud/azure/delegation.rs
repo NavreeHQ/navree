@@ -65,9 +65,7 @@ impl DelegationKeys {
             return Ok(key);
         }
 
-        let validity = expires_in
-            .max(DEFAULT_KEY_VALIDITY)
-            .min(MAX_DELEGATION_TTL);
+        let validity = expires_in.max(DEFAULT_KEY_VALIDITY).min(MAX_DELEGATION_TTL);
         let requested_expiry = start
             .checked_add_signed(
                 chrono::Duration::from_std(validity).unwrap_or(chrono::Duration::days(7)),
@@ -94,8 +92,7 @@ impl DelegationKeys {
         })
         .await?;
 
-        let (key, starts_at, expires_at) =
-            parse_delegation_key(&answer, start, requested_expiry)?;
+        let (key, starts_at, expires_at) = parse_delegation_key(&answer, start, requested_expiry)?;
         *kept = Some(CachedKey {
             key: key.clone(),
             starts_at,

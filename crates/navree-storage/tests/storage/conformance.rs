@@ -450,8 +450,8 @@ async fn presigned_put_uploads(subject: &Subject) {
 }
 
 /// A link signed for a declared size refuses a body of another size, and
-/// stores nothing. S3 cannot bind a size to a presigned `PUT` (object
-/// store's signer refuses to sign `Content-Length`): there,
+/// stores nothing. S3 cannot bind a size to a presigned `PUT` (SigV4
+/// presigned PUTs do not enforce a signed size range): there,
 /// `accept_upload` checks the size against the rules afterwards.
 async fn presigned_put_binds_the_declared_size(subject: &Subject) {
     let disk = &subject.disk;

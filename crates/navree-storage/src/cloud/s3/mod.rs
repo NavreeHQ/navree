@@ -73,13 +73,10 @@ impl S3Store {
         let retry = RetryPolicy::default();
         let shared_clock: Clock = Arc::new(clock);
         let provider_clock = shared_clock.clone();
-        let credentials = credentials::build_provider(
-            config,
-            &resolved.region,
-            env,
-            retry.clone(),
-            move || provider_clock(),
-        )?;
+        let credentials =
+            credentials::build_provider(config, &resolved.region, env, retry.clone(), move || {
+                provider_clock()
+            })?;
         Ok(Self {
             bucket: config.bucket.clone(),
             region: resolved.region,
@@ -147,7 +144,12 @@ impl Store for S3Store {
                 async move {
                     let credential = self.credentials.credential().await?;
                     let mut request = Request::new(Method::PUT, url).with_body(contents);
-                    sigv4::sign_request(&mut request, &credential.secret, &self.region, self.now())?;
+                    sigv4::sign_request(
+                        &mut request,
+                        &credential.secret,
+                        &self.region,
+                        self.now(),
+                    )?;
                     self.client
                         .send(request)
                         .await?
@@ -164,7 +166,11 @@ impl Store for S3Store {
 
     fn begin_upload<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Box<dyn Upload>>> {
         let store = self.clone();
-        Box::pin(async move { multipart::begin(store, path).await.map_err(StoreError::from) })
+        Box::pin(async move {
+            multipart::begin(store, path)
+                .await
+                .map_err(StoreError::from)
+        })
     }
 
     fn read<'a>(
@@ -193,9 +199,15 @@ impl Store for S3Store {
                     if let Some(ref value) = range_header {
                         request = request.header("range", value)?;
                     }
-                    sigv4::sign_request(&mut request, &credential.secret, &self.region, self.now())?;
+                    sigv4::sign_request(
+                        &mut request,
+                        &credential.secret,
+                        &self.region,
+                        self.now(),
+                    )?;
                     let answer = self.client.send(request).await?;
-                    if range_header.is_some() && answer.status() == StatusCode::RANGE_NOT_SATISFIABLE
+                    if range_header.is_some()
+                        && answer.status() == StatusCode::RANGE_NOT_SATISFIABLE
                     {
                         return Ok(None);
                     }
@@ -223,7 +235,12 @@ impl Store for S3Store {
                 async move {
                     let credential = self.credentials.credential().await?;
                     let mut request = Request::new(Method::GET, url);
-                    sigv4::sign_request(&mut request, &credential.secret, &self.region, self.now())?;
+                    sigv4::sign_request(
+                        &mut request,
+                        &credential.secret,
+                        &self.region,
+                        self.now(),
+                    )?;
                     self.client
                         .send(request)
                         .await?
@@ -268,7 +285,12 @@ impl Store for S3Store {
                 async move {
                     let credential = self.credentials.credential().await?;
                     let mut request = Request::new(Method::HEAD, url);
-                    sigv4::sign_request(&mut request, &credential.secret, &self.region, self.now())?;
+                    sigv4::sign_request(
+                        &mut request,
+                        &credential.secret,
+                        &self.region,
+                        self.now(),
+                    )?;
                     self.client
                         .send(request)
                         .await?
@@ -304,7 +326,12 @@ impl Store for S3Store {
                 async move {
                     let credential = self.credentials.credential().await?;
                     let mut request = Request::new(Method::DELETE, url);
-                    sigv4::sign_request(&mut request, &credential.secret, &self.region, self.now())?;
+                    sigv4::sign_request(
+                        &mut request,
+                        &credential.secret,
+                        &self.region,
+                        self.now(),
+                    )?;
                     self.client
                         .send(request)
                         .await?
@@ -320,7 +347,11 @@ impl Store for S3Store {
     }
 
     fn list<'a>(&'a self, prefix: &'a str) -> BoxFuture<'a, StoreResult<Vec<Meta>>> {
-        Box::pin(async move { list::list_objects(self, prefix).await.map_err(StoreError::from) })
+        Box::pin(async move {
+            list::list_objects(self, prefix)
+                .await
+                .map_err(StoreError::from)
+        })
     }
 
     fn signed_url_with<'a>(

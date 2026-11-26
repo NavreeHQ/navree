@@ -184,7 +184,9 @@ fn parse_bool_env(raw: Option<&String>, name: &'static str) -> Result<bool> {
     };
     if value.eq_ignore_ascii_case("true") || value == "1" || value.eq_ignore_ascii_case("yes") {
         Ok(true)
-    } else if value.eq_ignore_ascii_case("false") || value == "0" || value.eq_ignore_ascii_case("no")
+    } else if value.eq_ignore_ascii_case("false")
+        || value == "0"
+        || value.eq_ignore_ascii_case("no")
     {
         Ok(false)
     } else {
@@ -220,11 +222,14 @@ fn parse_ecs_relative_uri(relative: &str) -> Result<Url> {
             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI must be a relative path starting with `/`",
         )
     };
-    if !relative.starts_with('/') || relative.starts_with("//") || relative.chars().any(char::is_control)
+    if !relative.starts_with('/')
+        || relative.starts_with("//")
+        || relative.chars().any(char::is_control)
     {
         return Err(refused());
     }
-    let url = Url::parse(&format!("http://{ECS_CREDENTIALS_HOST}{relative}")).map_err(|_| refused())?;
+    let url =
+        Url::parse(&format!("http://{ECS_CREDENTIALS_HOST}{relative}")).map_err(|_| refused())?;
     if url.scheme() != "http"
         || url.host() != Some(Host::Ipv4(ECS_CREDENTIALS_HOST))
         || url.port_or_known_default() != Some(80)
@@ -295,10 +300,18 @@ fn container_source(
 async fn read_token_file(path: PathBuf, label: &'static str) -> Result<String> {
     let content = tokio::task::spawn_blocking(move || std::fs::read_to_string(path))
         .await
-        .map_err(|_| Error::new(ErrorKind::Credential, format!("the {label} could not be read")))?
+        .map_err(|_| {
+            Error::new(
+                ErrorKind::Credential,
+                format!("the {label} could not be read"),
+            )
+        })?
         .map_err(|io_err| {
-            Error::new(ErrorKind::Credential, format!("the {label} could not be read"))
-                .with_source(io_err)
+            Error::new(
+                ErrorKind::Credential,
+                format!("the {label} could not be read"),
+            )
+            .with_source(io_err)
         })?;
     let trimmed = content.trim_end_matches(['\r', '\n']).trim();
     if trimmed.is_empty() {
@@ -418,7 +431,10 @@ struct JsonSessionCredentials {
     expiration: String,
 }
 
-fn parse_json_credentials(body: &[u8], source_name: &'static str) -> Result<Credential<Credentials>> {
+fn parse_json_credentials(
+    body: &[u8],
+    source_name: &'static str,
+) -> Result<Credential<Credentials>> {
     let parsed: JsonSessionCredentials = serde_json::from_slice(body).map_err(|_| {
         Error::new(
             ErrorKind::Answer,
@@ -505,9 +521,8 @@ impl ImdsSource {
         match token_result {
             Ok(answer) => {
                 let bytes = answer.bytes_up_to(METADATA_SMALL_LIMIT).await?;
-                let text = std::str::from_utf8(&bytes).map_err(|_| {
-                    Error::new(ErrorKind::Answer, "the IMDSv2 token is not UTF-8")
-                })?;
+                let text = std::str::from_utf8(&bytes)
+                    .map_err(|_| Error::new(ErrorKind::Answer, "the IMDSv2 token is not UTF-8"))?;
                 let token = text.trim();
                 if token.is_empty() {
                     return Err(Error::new(ErrorKind::Answer, "the IMDSv2 token is empty"));
@@ -552,9 +567,8 @@ impl Source<Credentials> for ImdsSource {
             .await?;
 
             let role_bytes = role_answer.bytes_up_to(METADATA_SMALL_LIMIT).await?;
-            let role_text = std::str::from_utf8(&role_bytes).map_err(|_| {
-                Error::new(ErrorKind::Answer, "the IMDS role name is not UTF-8")
-            })?;
+            let role_text = std::str::from_utf8(&role_bytes)
+                .map_err(|_| Error::new(ErrorKind::Answer, "the IMDS role name is not UTF-8"))?;
             let role = role_text
                 .lines()
                 .map(str::trim)

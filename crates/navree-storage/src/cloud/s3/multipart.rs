@@ -185,15 +185,14 @@ impl S3Upload {
                         code,
                         "InternalError" | "SlowDown" | "RequestTimeout" | "ServiceUnavailable"
                     ) {
-                        return Err(
-                            Error::busy("the store asked to complete the upload again")
-                                .with_code(code),
-                        );
+                        return Err(Error::busy("the store asked to complete the upload again")
+                            .with_code(code));
                     }
-                    return Err(
-                        Error::new(ErrorKind::Answer, "the store refused to complete the upload")
-                            .with_code(code),
-                    );
+                    return Err(Error::new(
+                        ErrorKind::Answer,
+                        "the store refused to complete the upload",
+                    )
+                    .with_code(code));
                 }
                 Ok(())
             }
@@ -230,7 +229,9 @@ impl Upload for S3Upload {
     fn write<'a>(&'a mut self, chunk: Bytes) -> BoxFuture<'a, StoreResult<()>> {
         Box::pin(async move {
             if self.failed {
-                return Err(StoreError::failed("the multipart upload has already failed"));
+                return Err(StoreError::failed(
+                    "the multipart upload has already failed",
+                ));
             }
             self.buffer.extend_from_slice(&chunk);
             while self.buffer.len() >= self.part_size {
@@ -248,7 +249,9 @@ impl Upload for S3Upload {
         Box::pin(async move {
             if self.failed {
                 let _ = self.abort_remote().await;
-                return Err(StoreError::failed("the multipart upload has already failed"));
+                return Err(StoreError::failed(
+                    "the multipart upload has already failed",
+                ));
             }
             // S3 requires at least one part in CompleteMultipartUpload, so an
             // empty stream uploads a single zero-byte part.

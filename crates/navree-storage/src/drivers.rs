@@ -180,17 +180,12 @@ mod cloud {
         config: &S3Config,
         env: &BTreeMap<String, String>,
     ) -> Result<Backend, StorageError> {
-        const _: fn(Arc<dyn object_store::ObjectStore>) -> crate::store::cloud::Cloud =
-            crate::store::cloud::Cloud::new;
-
-        let store = Arc::new(
-            crate::cloud::s3::S3Store::with_env(config, env).map_err(|error| {
-                StorageError::Backend {
-                    disk: name.to_owned(),
-                    source: Box::new(error),
-                }
-            })?,
-        );
+        let store = Arc::new(crate::cloud::s3::S3Store::with_env(config, env).map_err(
+            |error| StorageError::Backend {
+                disk: name.to_owned(),
+                source: Box::new(error),
+            },
+        )?);
         Ok(Backend {
             store: store.clone(),
             provider: Some(Provider::from_store(ProviderKind::S3, store)),
@@ -223,11 +218,6 @@ mod cloud {
         config: &AzureConfig,
         env: &BTreeMap<String, String>,
     ) -> Result<Backend, StorageError> {
-        // Keeps `store::cloud::Cloud` live under `--no-default-features --features azure`
-        // until `object_store` is removed across all three drivers.
-        const _: fn(Arc<dyn object_store::ObjectStore>) -> crate::store::cloud::Cloud =
-            crate::store::cloud::Cloud::new;
-
         let store = Arc::new(crate::cloud::azure::AzureStore::build_for_disk(
             name, config, env,
         )?);

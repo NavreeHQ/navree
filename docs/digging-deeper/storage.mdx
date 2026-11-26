@@ -3,7 +3,7 @@ title: "File storage"
 description: "Named disks (local, memory, S3, Google Cloud Storage, Azure): streaming, upload checks, signed links, direct browser uploads and disk sync."
 ---
 
-<Badge feature="storage" /> `navree-storage` gives your app named **disks**: places to keep files, each with its own root. You write and read files by path on a disk, stream large files without loading them into memory, accept uploads with a size limit and a content check, let browsers upload straight to a bucket, hand out links that expire, and copy a disk's files to another. Local and memory disks are Navree's own; the S3, Google Cloud Storage and Azure disks talk to the provider through the [object_store](https://docs.rs/object_store) crate, which is compiled in only with their features.
+<Badge feature="storage" /> `navree-storage` gives your app named **disks**: places to keep files, each with its own root. You write and read files by path on a disk, stream large files without loading them into memory, accept uploads with a size limit and a content check, let browsers upload straight to a bucket, hand out links that expire, and copy a disk's files to another. Every built-in disk — local, memory, S3, Google Cloud Storage and Azure Blob Storage — is Navree's own implementation, with the cloud drivers compiled in only with their features.
 
 A disk uses one of five built-in drivers, or a driver a module registers. Your code is the same on all of them:
 
@@ -110,7 +110,7 @@ bucket = "agra-documents"
 region = "eu-west-1"
 ```
 
-With no keys in the disk, credentials come from `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (and `AWS_SESSION_TOKEN`), a web identity (`AWS_WEB_IDENTITY_TOKEN_FILE` with `AWS_ROLE_ARN`, as on EKS), the container credentials of ECS, or the instance metadata service.
+With no keys in the disk, credentials come from `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (with optional `AWS_SESSION_TOKEN`), a web identity (`AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN`, with optional `AWS_ROLE_SESSION_NAME` and `AWS_ENDPOINT_URL_STS`, as on EKS), the container credentials of ECS and EKS Pod Identity (`AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` or `AWS_CONTAINER_CREDENTIALS_FULL_URI`, with `AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE` or `AWS_CONTAINER_AUTHORIZATION_TOKEN`), or the instance metadata service (IMDSv2 at `AWS_METADATA_ENDPOINT` or `169.254.169.254`, falling back to IMDSv1 only when `AWS_IMDSV1_FALLBACK` is enabled).
 
 </Tab>
 <Tab label="MinIO">
@@ -159,7 +159,7 @@ Put the secret in the environment: `APP_STORAGE__DISKS__DOCUMENTS__SECRET_KEY`.
 |---|---|---|
 | `bucket` | | The bucket. Required. |
 | `region` | `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `us-east-1` | The region requests are signed for (`auto` for R2). |
-| `endpoint` | `AWS_ENDPOINT_URL_S3`, then `AWS_ENDPOINT_URL`, then AWS | The URL of an S3-compatible store. An `http://` endpoint allows plain HTTP. |
+| `endpoint` | `AWS_ENDPOINT_URL_S3`, then `AWS_ENDPOINT_URL`, then `AWS_ENDPOINT`, then AWS | The URL of an S3-compatible store. An `http://` endpoint allows plain HTTP. |
 | `access_key`, `secret_key` | the AWS environment | Static credentials. Set both or neither; with both set, no credential is read from the environment. |
 | `session_token` | none | The session token of temporary credentials. |
 | `path_style` | `true` with an `endpoint`, `false` on AWS | Address the bucket in the path (`https://host/bucket/key`) instead of the host name (`https://bucket.host/key`). |
@@ -183,7 +183,7 @@ bucket = "agra-media"
 service_account_path = "/run/secrets/gcs.json"   # optional
 ```
 
-Credentials come from `service_account_path` (a key file) or `service_account_key` (its JSON contents), else from `GOOGLE_SERVICE_ACCOUNT_KEY`, `GOOGLE_SERVICE_ACCOUNT` or `GOOGLE_APPLICATION_CREDENTIALS`, else from the metadata server (workload identity on GKE and Cloud Run). Signed links need a service account key, or the metadata server's account with the `iam.serviceAccounts.signBlob` permission. `endpoint` points the disk at an emulator; `prefix` and `public_url` work as for S3.
+Credentials come from `service_account_path` (a key file) or `service_account_key` (its JSON contents), else from `GOOGLE_SERVICE_ACCOUNT_KEY`, `GOOGLE_SERVICE_ACCOUNT` / `GOOGLE_SERVICE_ACCOUNT_PATH` / `SERVICE_ACCOUNT`, or `GOOGLE_APPLICATION_CREDENTIALS` (either a `service_account` key or an `authorized_user` refresh-token file), else from the Compute Engine metadata server (`GCE_METADATA_HOST` or `metadata.google.internal`, used by Workload Identity on GKE and Cloud Run). Signed links use V4 `GOOG4-RSA-SHA256` signing with the service account key, or the metadata server's account with the `iam.serviceAccounts.signBlob` permission. `endpoint` points the disk at an emulator; `prefix` and `public_url` work as for S3.
 
 ### Azure Blob Storage
 
@@ -196,7 +196,7 @@ account = "agrastorage"
 container = "archive"
 ```
 
-The account key comes from `access_key` or `AZURE_STORAGE_ACCOUNT_KEY`; without one, the disk uses a service principal (`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`), workload identity or the managed identity. `account` defaults to `AZURE_STORAGE_ACCOUNT_NAME`. For Azurite, set `endpoint = "http://127.0.0.1:10000/devstoreaccount1"`. Signed links are service SAS URLs, which need the account key.
+The account key comes from `access_key` or `AZURE_STORAGE_ACCOUNT_KEY` / `AZURE_STORAGE_ACCESS_KEY`; without one, the disk uses an Entra service principal (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`), workload identity federation (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_FEDERATED_TOKEN_FILE`) or the managed identity (App Service `IDENTITY_ENDPOINT` and `IDENTITY_HEADER`, or IMDS `169.254.169.254`, with optional `AZURE_CLIENT_ID`). `account` defaults to `AZURE_STORAGE_ACCOUNT_NAME` / `AZURE_STORAGE_ACCOUNT`. For Azurite, set `endpoint = "http://127.0.0.1:10000/devstoreaccount1"`. Signed links are service SAS URLs when an account key is configured, and user delegation SAS URLs (at most 7 days) when authenticated with OAuth.
 
 ### Prefixes and public URLs
 
@@ -510,7 +510,7 @@ export async function uploadDocument(file: File, token: string) {
 |---|---|---|
 | `s3` | A SigV4 presigned `PUT` signed by the provider | with another `Content-Type`, or after it expires (at most 7 days). S3 cannot bind a size to a presigned `PUT`. |
 | `gcs` | A V4 signed `PUT` | with another `Content-Type`, outside `x-goog-content-length-range` (up to `max_bytes`, or exactly the declared size), or after it expires (at most 7 days). |
-| `azure` | A service SAS for one blob | after it expires. The client also sends `x-ms-blob-type: BlockBlob`, listed in `headers`. |
+| `azure` | A service or user delegation SAS for one blob | after it expires (at most 7 days for a user delegation SAS). The client also sends `x-ms-blob-type: BlockBlob`, listed in `headers`. |
 | `local`, `memory` | The app's own route, `PUT /storage/{disk}/{*path}`, signed with HMAC-SHA-256 | with another `Content-Type`, over `max_bytes` or of another size than declared (checked while streaming), or after it expires. |
 
 No provider can see what a file contains, and only some check its size, so `accept_upload` is the step that makes a file trusted. It reads the file's size and its first 8 KiB, sniffs the type the same way `store_upload` does, and returns a `StoredFile` (with `original_name: null`). A file that breaks the rules is deleted, and the error is `StorageError::Rejected`:
@@ -581,7 +581,7 @@ let link = self
     .await?;
 ```
 
-On a cloud disk the link is signed with the provider's scheme and the browser downloads straight from the bucket: a SigV4 presigned `GET` on S3, a V4 signed URL on Google Cloud Storage, a read-only service SAS on Azure. Your app signs it without contacting the bucket. S3 and Google Cloud Storage links last at most 7 days; asking for longer fails with `StorageError::Signing`.
+On a cloud disk the link is signed with the provider's scheme and the browser downloads straight from the bucket: a SigV4 presigned `GET` on S3, a V4 signed URL on Google Cloud Storage, a read-only service or user delegation SAS on Azure. S3, Google Cloud Storage and Azure user delegation SAS links last at most 7 days; asking for longer fails with `StorageError::Signing`.
 
 On a local or memory disk the link is your app's own:
 
@@ -762,7 +762,7 @@ A memory disk signs direct uploads to the app's own route, so a test can run the
 
 To try an `s3` disk against a real store on your machine, run MinIO with [Dock](/docs/tools/dock/): `navree dock:add minio`, then `navree dock up`.
 
-Navree's own suite runs the `s3` driver against an in-process S3 server and, in CI, against RustFS, an S3-compatible server (`NAVREE_TEST_S3_URL=http://<key>:<secret>@127.0.0.1:9000/<bucket>`). AWS S3 itself, MinIO, R2 and Spaces follow the same API but are not part of that run, so try a new store in staging first.
+Navree's own suite runs the `s3`, `gcs` and `azure` drivers against in-process protocol servers and, in CI, against MinIO and RustFS (`NAVREE_TEST_S3_URL`), `fake-gcs-server` (`NAVREE_TEST_GCS_URL`) and Azurite (`NAVREE_TEST_AZURE_URL`). Managed cloud buckets can differ in IAM policy or bucket settings from local emulators, so try a new store in staging first.
 
 ## Related
 

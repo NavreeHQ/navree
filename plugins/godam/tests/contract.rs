@@ -1,28 +1,24 @@
 //! Direct contract checks for [`GodamDisk`], [`GodamSettings`] and
 //! [`GodamModule`]: byte ranges, path normalisation, unfinished uploads,
-//! missing files, folder boundaries and configuration errors.
+//! fault-injecting [`Store`] wrappers, missing files, folder boundaries and
+//! configuration errors.
 
 use std::fmt;
 use std::ops::Range;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
-use futures_util::StreamExt;
-use futures_util::stream::{self, BoxStream};
+use futures_util::stream;
 use navree::kernel::BoxFuture;
 use navree::plugin::prelude::*;
 use navree::prelude::*;
+use navree::storage::store::{MemoryStore, Meta, Object, Store, StoreError, StoreResult, Upload};
 use navree::storage::{
     Disk, DiskDriver, DiskDriverError, DiskUpload, FileMeta, OpenedFile, StorageError,
 };
 use navree::testing::TestApp;
 use navree_plugin_godam::{GodamDisk, GodamModule, GodamSettings};
-use object_store::memory::InMemory;
-use object_store::path::Path as ObjectPath;
-use object_store::{
-    CopyOptions, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
-    PutMultipartOptions, PutOptions, PutPayload, PutResult, UploadPart,
-};
 use serde_json::json;
 
 #[tokio::test]
@@ -96,13 +92,13 @@ async fn a_range_past_the_end_is_cut_and_one_past_the_file_is_empty() {
 
 #[derive(Clone, Default)]
 struct RecordingStore {
-    inner: InMemory,
+    inner: Arc<MemoryStore>,
     paths: Arc<Mutex<Vec<String>>>,
 }
 
 impl RecordingStore {
-    fn record(&self, path: &ObjectPath) {
-        self.paths.lock().unwrap().push(path.as_ref().to_owned());
+    fn record(&self, path: &str) {
+        self.paths.lock().unwrap().push(path.to_owned());
     }
 
     fn seen(&self) -> Vec<String> {
@@ -122,81 +118,46 @@ impl fmt::Display for RecordingStore {
     }
 }
 
-#[async_trait::async_trait]
-impl ObjectStore for RecordingStore {
-    async fn put_opts(
-        &self,
-        location: &ObjectPath,
-        payload: PutPayload,
-        opts: PutOptions,
-    ) -> object_store::Result<PutResult> {
-        self.record(location);
-        self.inner.put_opts(location, payload, opts).await
+impl Store for RecordingStore {
+    fn put<'a>(&'a self, path: &'a str, contents: Bytes) -> BoxFuture<'a, StoreResult<()>> {
+        self.record(path);
+        self.inner.put(path, contents)
     }
 
-    async fn put_multipart_opts(
-        &self,
-        location: &ObjectPath,
-        opts: PutMultipartOptions,
-    ) -> object_store::Result<Box<dyn MultipartUpload>> {
-        self.record(location);
-        self.inner.put_multipart_opts(location, opts).await
+    fn begin_upload<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Box<dyn Upload>>> {
+        self.record(path);
+        self.inner.begin_upload(path)
     }
 
-    async fn get_opts(
-        &self,
-        location: &ObjectPath,
-        options: GetOptions,
-    ) -> object_store::Result<GetResult> {
-        self.record(location);
-        self.inner.get_opts(location, options).await
+    fn read<'a>(
+        &'a self,
+        path: &'a str,
+        range: Option<Range<u64>>,
+    ) -> BoxFuture<'a, StoreResult<Bytes>> {
+        self.record(path);
+        self.inner.read(path, range)
     }
 
-    fn delete_stream(
-        &self,
-        locations: BoxStream<'static, object_store::Result<ObjectPath>>,
-    ) -> BoxStream<'static, object_store::Result<ObjectPath>> {
-        let paths = self.paths.clone();
-        let recorded = locations
-            .map(move |item| {
-                if let Ok(path) = &item {
-                    paths.lock().unwrap().push(path.as_ref().to_owned());
-                }
-                item
-            })
-            .boxed();
-        self.inner.delete_stream(recorded)
+    fn open<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Object>> {
+        self.record(path);
+        self.inner.open(path)
     }
 
-    fn list(
-        &self,
-        prefix: Option<&ObjectPath>,
-    ) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
-        if let Some(prefix) = prefix {
+    fn head<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Meta>> {
+        self.record(path);
+        self.inner.head(path)
+    }
+
+    fn delete<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<()>> {
+        self.record(path);
+        self.inner.delete(path)
+    }
+
+    fn list<'a>(&'a self, prefix: &'a str) -> BoxFuture<'a, StoreResult<Vec<Meta>>> {
+        if !prefix.is_empty() {
             self.record(prefix);
         }
         self.inner.list(prefix)
-    }
-
-    async fn list_with_delimiter(
-        &self,
-        prefix: Option<&ObjectPath>,
-    ) -> object_store::Result<ListResult> {
-        if let Some(prefix) = prefix {
-            self.record(prefix);
-        }
-        self.inner.list_with_delimiter(prefix).await
-    }
-
-    async fn copy_opts(
-        &self,
-        from: &ObjectPath,
-        to: &ObjectPath,
-        options: CopyOptions,
-    ) -> object_store::Result<()> {
-        self.record(from);
-        self.record(to);
-        self.inner.copy_opts(from, to, options).await
     }
 }
 
@@ -530,7 +491,7 @@ struct PartMetrics {
 
 #[derive(Clone, Default)]
 struct StrictPartStore {
-    inner: InMemory,
+    inner: Arc<MemoryStore>,
     metrics: Arc<Mutex<PartMetrics>>,
 }
 
@@ -546,113 +507,91 @@ impl fmt::Display for StrictPartStore {
     }
 }
 
-#[derive(Debug)]
 struct StrictMultipartUpload {
-    inner: Box<dyn MultipartUpload>,
+    inner: Box<dyn Upload>,
     part_sizes: Vec<usize>,
     metrics: Arc<Mutex<PartMetrics>>,
 }
 
-#[async_trait::async_trait]
-impl MultipartUpload for StrictMultipartUpload {
-    fn put_part(&mut self, data: PutPayload) -> UploadPart {
-        self.part_sizes.push(data.content_length());
-        self.inner.put_part(data)
+impl Upload for StrictMultipartUpload {
+    fn write<'a>(&'a mut self, chunk: Bytes) -> BoxFuture<'a, StoreResult<()>> {
+        let len = chunk.len();
+        Box::pin(async move {
+            self.part_sizes.push(len);
+            self.inner.write(chunk).await
+        })
     }
 
-    async fn complete(&mut self) -> object_store::Result<PutResult> {
-        const FIVE_MIB: usize = 5 * 1024 * 1024;
-        if self.part_sizes.is_empty() {
-            return Err(object_store::Error::Generic {
-                store: "StrictPartStore",
-                source: "zero-part multipart completion refused".into(),
-            });
-        }
-        for &size in &self.part_sizes[..self.part_sizes.len() - 1] {
-            if size != FIVE_MIB {
-                return Err(object_store::Error::Generic {
-                    store: "StrictPartStore",
-                    source: "non-final part must be 5 MiB".into(),
-                });
+    fn finish(mut self: Box<Self>) -> BoxFuture<'static, StoreResult<()>> {
+        Box::pin(async move {
+            const FIVE_MIB: usize = 5 * 1024 * 1024;
+            if self.part_sizes.is_empty() {
+                return Err(StoreError::failed("zero-part multipart completion refused"));
             }
-        }
-        let result = self.inner.complete().await?;
-        let mut metrics = self.metrics.lock().unwrap();
-        metrics.multipart_completes += 1;
-        metrics
-            .completed_part_sizes
-            .push(std::mem::take(&mut self.part_sizes));
-        Ok(result)
+            for &size in &self.part_sizes[..self.part_sizes.len() - 1] {
+                if size != FIVE_MIB {
+                    return Err(StoreError::failed("non-final part must be 5 MiB"));
+                }
+            }
+            self.inner.finish().await?;
+            let mut metrics = self.metrics.lock().unwrap();
+            metrics.multipart_completes += 1;
+            metrics
+                .completed_part_sizes
+                .push(std::mem::take(&mut self.part_sizes));
+            Ok(())
+        })
     }
 
-    async fn abort(&mut self) -> object_store::Result<()> {
+    fn abort(self: Box<Self>) -> BoxFuture<'static, StoreResult<()>> {
         self.metrics.lock().unwrap().multipart_aborts += 1;
-        self.inner.abort().await
+        self.inner.abort()
     }
 }
 
-#[async_trait::async_trait]
-impl ObjectStore for StrictPartStore {
-    async fn put_opts(
-        &self,
-        location: &ObjectPath,
-        payload: PutPayload,
-        opts: PutOptions,
-    ) -> object_store::Result<PutResult> {
+impl Store for StrictPartStore {
+    fn put<'a>(&'a self, path: &'a str, contents: Bytes) -> BoxFuture<'a, StoreResult<()>> {
         self.metrics.lock().unwrap().single_puts += 1;
-        self.inner.put_opts(location, payload, opts).await
+        self.inner.put(path, contents)
     }
 
-    async fn put_multipart_opts(
-        &self,
-        location: &ObjectPath,
-        opts: PutMultipartOptions,
-    ) -> object_store::Result<Box<dyn MultipartUpload>> {
+    fn begin_upload<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Box<dyn Upload>>> {
         self.metrics.lock().unwrap().multipart_starts += 1;
-        let inner = self.inner.put_multipart_opts(location, opts).await?;
-        Ok(Box::new(StrictMultipartUpload {
-            inner,
-            part_sizes: Vec::new(),
-            metrics: self.metrics.clone(),
-        }))
+        let inner = self.inner.clone();
+        let metrics = self.metrics.clone();
+        let path = path.to_owned();
+        Box::pin(async move {
+            let started = inner.begin_upload(&path).await?;
+            Ok(Box::new(StrictMultipartUpload {
+                inner: started,
+                part_sizes: Vec::new(),
+                metrics,
+            }) as Box<dyn Upload>)
+        })
     }
 
-    async fn get_opts(
-        &self,
-        location: &ObjectPath,
-        options: GetOptions,
-    ) -> object_store::Result<GetResult> {
-        self.inner.get_opts(location, options).await
+    fn read<'a>(
+        &'a self,
+        path: &'a str,
+        range: Option<Range<u64>>,
+    ) -> BoxFuture<'a, StoreResult<Bytes>> {
+        self.inner.read(path, range)
     }
 
-    fn delete_stream(
-        &self,
-        locations: BoxStream<'static, object_store::Result<ObjectPath>>,
-    ) -> BoxStream<'static, object_store::Result<ObjectPath>> {
-        self.inner.delete_stream(locations)
+    fn open<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Object>> {
+        self.inner.open(path)
     }
 
-    fn list(
-        &self,
-        prefix: Option<&ObjectPath>,
-    ) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
+    fn head<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Meta>> {
+        self.inner.head(path)
+    }
+
+    fn delete<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<()>> {
+        self.inner.delete(path)
+    }
+
+    fn list<'a>(&'a self, prefix: &'a str) -> BoxFuture<'a, StoreResult<Vec<Meta>>> {
         self.inner.list(prefix)
-    }
-
-    async fn list_with_delimiter(
-        &self,
-        prefix: Option<&ObjectPath>,
-    ) -> object_store::Result<ListResult> {
-        self.inner.list_with_delimiter(prefix).await
-    }
-
-    async fn copy_opts(
-        &self,
-        from: &ObjectPath,
-        to: &ObjectPath,
-        options: CopyOptions,
-    ) -> object_store::Result<()> {
-        self.inner.copy_opts(from, to, options).await
     }
 }
 
@@ -760,6 +699,116 @@ async fn uploads_buffer_small_chunks_into_a_single_put_and_split_large_uploads_i
     }
 
     app.shutdown().await.expect("clean shutdown");
+}
+
+#[derive(Clone, Default)]
+struct FaultyStore {
+    inner: Arc<MemoryStore>,
+    fail_part_write: Arc<AtomicBool>,
+    aborts: Arc<AtomicUsize>,
+}
+
+impl fmt::Display for FaultyStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("FaultyStore")
+    }
+}
+
+struct FaultyUpload {
+    inner: Box<dyn Upload>,
+    fail_part_write: Arc<AtomicBool>,
+    aborts: Arc<AtomicUsize>,
+}
+
+impl Upload for FaultyUpload {
+    fn write<'a>(&'a mut self, chunk: Bytes) -> BoxFuture<'a, StoreResult<()>> {
+        if self.fail_part_write.load(Ordering::SeqCst) {
+            return Box::pin(async {
+                Err(StoreError::failed("the Ludhiana store dropped the part"))
+            });
+        }
+        self.inner.write(chunk)
+    }
+
+    fn finish(self: Box<Self>) -> BoxFuture<'static, StoreResult<()>> {
+        self.inner.finish()
+    }
+
+    fn abort(self: Box<Self>) -> BoxFuture<'static, StoreResult<()>> {
+        self.aborts.fetch_add(1, Ordering::SeqCst);
+        self.inner.abort()
+    }
+}
+
+impl Store for FaultyStore {
+    fn put<'a>(&'a self, path: &'a str, contents: Bytes) -> BoxFuture<'a, StoreResult<()>> {
+        self.inner.put(path, contents)
+    }
+
+    fn begin_upload<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Box<dyn Upload>>> {
+        let inner = self.inner.clone();
+        let fail_part_write = self.fail_part_write.clone();
+        let aborts = self.aborts.clone();
+        let path = path.to_owned();
+        Box::pin(async move {
+            let started = inner.begin_upload(&path).await?;
+            Ok(Box::new(FaultyUpload {
+                inner: started,
+                fail_part_write,
+                aborts,
+            }) as Box<dyn Upload>)
+        })
+    }
+
+    fn read<'a>(
+        &'a self,
+        path: &'a str,
+        range: Option<Range<u64>>,
+    ) -> BoxFuture<'a, StoreResult<Bytes>> {
+        self.inner.read(path, range)
+    }
+
+    fn open<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Object>> {
+        self.inner.open(path)
+    }
+
+    fn head<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Meta>> {
+        self.inner.head(path)
+    }
+
+    fn delete<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<()>> {
+        self.inner.delete(path)
+    }
+
+    fn list<'a>(&'a self, prefix: &'a str) -> BoxFuture<'a, StoreResult<Vec<Meta>>> {
+        self.inner.list(prefix)
+    }
+}
+
+#[tokio::test]
+async fn a_fault_injecting_store_aborts_the_multipart_upload_and_leaves_nothing() {
+    let store = FaultyStore::default();
+    store.fail_part_write.store(true, Ordering::SeqCst);
+    let driver = GodamDisk::with_store(
+        Arc::new(store.clone()),
+        GodamSettings {
+            prefix: "ludhiana/".to_owned(),
+        },
+    )
+    .unwrap();
+
+    let one_mib = 1024 * 1024;
+    let mut upload = driver.begin_upload("exports/broken.bin").await.unwrap();
+    for _ in 0..4 {
+        upload.write(Bytes::from(vec![1u8; one_mib])).await.unwrap();
+    }
+    let err = upload
+        .write(Bytes::from(vec![2u8; one_mib]))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, DiskDriverError::Failed(_)), "{err:?}");
+    assert_eq!(store.aborts.load(Ordering::SeqCst), 1);
+    assert!(store.inner.list("").await.unwrap().is_empty());
 }
 
 #[tokio::test]

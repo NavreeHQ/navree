@@ -74,6 +74,7 @@ mod gcs {
             "private_key": GCS_PRIVATE_KEY,
             "private_key_id": "test-key",
             "client_email": GCS_EMAIL,
+            "token_uri": format!("{}/token", server.url),
         });
         let config = GcsConfig {
             service_account_key: Some(key.to_string().into()),
@@ -81,8 +82,6 @@ mod gcs {
             prefix: Some("site".into()),
             ..GcsConfig::new(BUCKET)
         };
-        // Build the disk first: it installs the TLS crypto provider reqwest
-        // needs.
         let disk = Storage::new(&single_disk("media", config.into()), SIGNING_KEY)
             .unwrap()
             .default_disk();
@@ -94,7 +93,10 @@ mod gcs {
         run(&subject).await;
         assert!(server.keys().is_empty(), "{:?}", server.keys());
         let log = server.log();
-        assert!(log.iter().any(|line| line.contains("?uploads")), "{log:?}");
+        assert!(
+            log.iter().any(|line| line.contains("uploadType=resumable")),
+            "{log:?}"
+        );
         assert!(
             log.iter().any(|line| line.contains("X-Goog-Signature=")),
             "{log:?}"

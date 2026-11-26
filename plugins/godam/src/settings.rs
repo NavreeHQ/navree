@@ -3,7 +3,6 @@
 use std::fmt;
 
 use navree::prelude::BoxError;
-use object_store::path::Path as ObjectPath;
 use serde::Deserialize;
 
 /// Settings read from a `godam` disk's table (`[storage.disks.NAME]`).
@@ -30,7 +29,7 @@ impl GodamSettings {
         self.parse_prefix(disk).map(drop)
     }
 
-    pub(crate) fn parse_prefix(&self, disk: Option<&str>) -> Result<ObjectPath, BoxError> {
+    pub(crate) fn parse_prefix(&self, disk: Option<&str>) -> Result<String, BoxError> {
         let name = disk.unwrap_or("default");
         let invalid = || -> BoxError {
             format!(
@@ -41,7 +40,7 @@ impl GodamSettings {
 
         let raw = self.prefix.as_str();
         if raw.is_empty() {
-            return Ok(ObjectPath::ROOT);
+            return Ok(String::new());
         }
         if raw.len() > 1024
             || raw.starts_with('/')
@@ -66,6 +65,6 @@ impl GodamSettings {
             }
         }
 
-        ObjectPath::parse(trimmed).map_err(|_| invalid())
+        Ok(trimmed.to_owned())
     }
 }

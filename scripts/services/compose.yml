@@ -125,7 +125,7 @@ services:
   # raised from the image's warn so that the log shows how it started;
   # scripts/ci-services.sh prints that log when the server does not answer.
   s3:
-    image: ${S3_IMAGE:-rustfs/rustfs:1.0.4}
+    image: ${S3_IMAGE:-rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2}
     container_name: navree-ci-s3
     ports: ["127.0.0.1:9000:9000"]
     environment:
@@ -135,13 +135,11 @@ services:
     volumes:
       - s3-data:/data
 
-  # Google Cloud Storage. The emulator serves what the driver reads (the XML
-  # API's GET, HEAD, list and DELETE) and takes uploads through signed links;
-  # it does not take the XML API's authenticated PUT, so the suite seeds files
-  # through the JSON API (the driver's writes run on navree-storage's
-  # in-process XML server). scripts/ci-services.sh creates the bucket.
+  # Google Cloud Storage (fake-gcs-server): serves the JSON API (`storage/v1`
+  # and `/upload/storage/v1`) and V4 signed links over plain HTTP on 127.0.0.1.
+  # scripts/ci-services.sh creates the bucket.
   gcs:
-    image: ${GCS_IMAGE:-fsouza/fake-gcs-server:1.56.1}
+    image: ${GCS_IMAGE:-fsouza/fake-gcs-server:1.56.1@sha256:797ce226d62f947c009dc40246b30cfb456b8473d8241407f9d6f2c04e4d69ef}
     container_name: navree-ci-gcs
     ports: ["127.0.0.1:4443:4443"]
     command:
@@ -160,7 +158,7 @@ services:
   # its published development account). scripts/ci-services.sh creates the
   # container.
   azurite:
-    image: ${AZURITE_IMAGE:-mcr.microsoft.com/azure-storage/azurite:3.37.0}
+    image: ${AZURITE_IMAGE:-mcr.microsoft.com/azure-storage/azurite:3.37.0@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5}
     container_name: navree-ci-azurite
     ports: ["127.0.0.1:10000:10000"]
     command:

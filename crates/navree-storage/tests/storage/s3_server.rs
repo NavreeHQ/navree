@@ -1,18 +1,17 @@
-//! An S3 server inside the test process: objects with ranges, listing,
-//! multipart uploads, copies and bulk deletes, path-style, with every
-//! request's SigV4 signature checked (the `Authorization` header, or the
-//! query of a presigned URL, including its signed headers and expiry) by
-//! `navree_crypto::sigv4`, the signer of Navree's own AWS requests. It
-//! lets the s3 driver run the conformance suite without Docker; MinIO runs
-//! the same suite when `NAVREE_TEST_S3_URL` is set.
+//! An S3 and Google Cloud Storage server inside the test process.
 //!
-//! [`S3Server::gcs`] speaks Google Cloud Storage's XML API instead, the one
-//! the gcs driver writes, reads and lists with (it follows S3's): requests
-//! carry the service account's self-signed token (`Authorization: Bearer`,
-//! RS256), signed links are `GOOG4-RSA-SHA256`, both checked against the
-//! test key, and uploads honour `x-goog-content-length-range` and
-//! `x-goog-if-generation-match`. fake-gcs-server reads like GCS but takes no
-//! write the driver makes, so the gcs driver's writes run here.
+//! [`S3Server::start`] speaks S3's path-style REST API: objects with ranges,
+//! listing, multipart uploads, copies and bulk deletes, with every request's
+//! SigV4 signature checked (the `Authorization` header, or the query of a
+//! presigned URL, including its signed headers and expiry) by
+//! `navree_crypto::sigv4`.
+//!
+//! [`S3Server::gcs`] speaks Google Cloud Storage's JSON API (`storage/v1` and
+//! `/upload/storage/v1`, including `uploadType=media` and
+//! `uploadType=resumable`), exchanges RS256 service-account JWT assertions at
+//! `POST /token`, and serves `GOOG4-RSA-SHA256` V4 signed links (verifying the
+//! RSA signature, `X-Goog-SignedHeaders`, `x-goog-content-length-range` and
+//! `x-goog-if-generation-match`).
 
 #![cfg_attr(not(all(feature = "s3", feature = "gcs")), allow(dead_code))]
 
@@ -21,7 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, SecondsFormat, Utc};
 use http::{HeaderMap, Method, StatusCode};
 use navree_crypto::sha256_hex;
 use navree_crypto::sigv4;
@@ -30,6 +29,7 @@ use navree_http::body::{Body, Bytes};
 use navree_http::extract::Request;
 use navree_http::response::{IntoResponse, Response};
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
+use serde_json::json;
 
 /// The access key the server accepts.
 pub const ACCESS_KEY: &str = "navree-test";
@@ -43,9 +43,8 @@ pub const BUCKET: &str = "navree-test";
 pub const GCS_EMAIL: &str = "navree-test@navree-test.iam.gserviceaccount.com";
 /// Its private key (the server checks signatures with its public half).
 pub const GCS_PRIVATE_KEY: &str = include_str!("../fixtures/rsa-2048.pem");
-/// The host the gcs driver signs links for, whatever its endpoint (the
-/// server checks them as Google Cloud Storage does).
-const GCS_HOST: &str = "storage.googleapis.com";
+/// Bearer token issued by `POST /token` on [`S3Server::gcs`].
+const GCS_ACCESS_TOKEN: &str = "gcs-in-process-token";
 
 /// A running server; stops when dropped.
 pub struct S3Server {
@@ -66,8 +65,10 @@ enum Flavor {
 #[derive(Default)]
 struct ServerState {
     flavor: Flavor,
+    base_url: Mutex<String>,
     buckets: Mutex<BTreeMap<String, BTreeMap<String, Object>>>,
     uploads: Mutex<HashMap<String, Upload>>,
+    resumable: Mutex<HashMap<String, ResumableUpload>>,
     next_id: AtomicU64,
     /// Every request, as `METHOD /path?query`.
     log: Mutex<Vec<String>>,
@@ -90,6 +91,13 @@ struct Upload {
     parts: BTreeMap<u32, Bytes>,
 }
 
+struct ResumableUpload {
+    bucket: String,
+    key: String,
+    content_type: Option<String>,
+    buffer: Vec<u8>,
+}
+
 impl S3Server {
     /// Starts a server with the bucket [`BUCKET`].
     pub async fn start() -> Self {
@@ -97,7 +105,7 @@ impl S3Server {
     }
 
     /// Starts a server with the bucket [`BUCKET`] that speaks Google Cloud
-    /// Storage's XML API, for the service account [`GCS_EMAIL`].
+    /// Storage's JSON API and V4 signed URLs, for [`GCS_EMAIL`].
     pub async fn gcs() -> Self {
         Self::start_as(Flavor::Gcs).await
     }
@@ -114,6 +122,7 @@ impl S3Server {
             .insert(BUCKET.to_owned(), BTreeMap::new());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
+        *state.base_url.lock().unwrap() = url.clone();
         let served = state.clone();
         let app = AppRouter::from_handler(move |request: Request| handle(served.clone(), request));
         let task = tokio::spawn(async move {
@@ -170,6 +179,22 @@ async fn handle(state: Arc<ServerState>, request: Request) -> Response {
         .push(format!("{} {raw_path}?{raw_query}", parts.method));
     let query = parse_query(&raw_query);
     let body = navree_http::body::to_bytes(body, usize::MAX).await.unwrap();
+
+    if state.flavor == Flavor::Gcs {
+        if parts.method == Method::POST && raw_path == "/token" {
+            return handle_gcs_token(&body);
+        }
+        if raw_path.starts_with("/upload/storage/v1/b/") || raw_path.starts_with("/storage/v1/b/") {
+            return handle_gcs_json(
+                &state,
+                &parts.method,
+                &raw_path,
+                &query,
+                &parts.headers,
+                body,
+            );
+        }
+    }
 
     let authorized = match state.flavor {
         Flavor::S3 => authorize(&parts.method, &raw_path, &query, &parts.headers, &body),
@@ -345,6 +370,255 @@ async fn handle(state: Arc<ServerState>, request: Request) -> Response {
             "The fake S3 server does not implement this request",
         ),
     }
+}
+
+/// Verifies an RS256 service-account JWT assertion and issues [`GCS_ACCESS_TOKEN`].
+fn handle_gcs_token(body: &[u8]) -> Response {
+    use navree_crypto::jose::{Jws, SigningKey};
+
+    let form = parse_query(std::str::from_utf8(body).unwrap_or_default());
+    let assertion = form
+        .iter()
+        .find(|(k, _)| k == "assertion")
+        .map(|(_, v)| v.as_str());
+    let Some(assertion) = assertion else {
+        return json_error(StatusCode::BAD_REQUEST, "missing assertion");
+    };
+    let Ok(signing_key) = SigningKey::from_pem(GCS_PRIVATE_KEY) else {
+        return json_error(StatusCode::INTERNAL_SERVER_ERROR, "invalid test key");
+    };
+    let verifying_key = signing_key.verifying_key();
+    let Ok(jws) = Jws::parse(assertion) else {
+        return json_error(StatusCode::BAD_REQUEST, "malformed JWS");
+    };
+    if jws.verify(&verifying_key).is_err() {
+        return json_error(StatusCode::UNAUTHORIZED, "invalid JWS signature");
+    }
+    json_response(
+        StatusCode::OK,
+        &json!({
+            "access_token": GCS_ACCESS_TOKEN,
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        }),
+    )
+}
+
+/// Handles Google Cloud Storage JSON API requests (`/storage/v1/b/...` and
+/// `/upload/storage/v1/b/...`).
+fn handle_gcs_json(
+    state: &ServerState,
+    method: &Method,
+    raw_path: &str,
+    query: &[(String, String)],
+    headers: &HeaderMap,
+    body: Bytes,
+) -> Response {
+    let auth = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim);
+    if auth != Some(&format!("Bearer {GCS_ACCESS_TOKEN}")) {
+        return json_error(StatusCode::UNAUTHORIZED, "missing or invalid bearer token");
+    }
+    let param = |name: &str| {
+        query
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.clone())
+    };
+    let decode = |segment: &str| {
+        percent_decode_str(segment)
+            .decode_utf8()
+            .unwrap()
+            .into_owned()
+    };
+
+    if let Some(rest) = raw_path.strip_prefix("/upload/storage/v1/b/") {
+        let Some((bucket_enc, tail)) = rest.split_once('/') else {
+            return json_error(StatusCode::NOT_FOUND, "not found");
+        };
+        if tail != "o" {
+            return json_error(StatusCode::NOT_FOUND, "not found");
+        }
+        let bucket = decode(bucket_enc);
+        if !state.buckets.lock().unwrap().contains_key(&bucket) {
+            return json_error(StatusCode::NOT_FOUND, "bucket not found");
+        }
+        let upload_type = param("uploadType").unwrap_or_default();
+        if let Some(upload_id) = param("upload_id") {
+            match *method {
+                Method::PUT => {
+                    let content_range = headers
+                        .get("content-range")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or_default();
+                    let finishing = !content_range.ends_with("/*");
+                    let mut sessions = state.resumable.lock().unwrap();
+                    let Some(session) = sessions.get_mut(&upload_id) else {
+                        return json_error(StatusCode::NOT_FOUND, "unknown upload session");
+                    };
+                    session.buffer.extend_from_slice(&body);
+                    if !finishing {
+                        return StatusCode::PERMANENT_REDIRECT.into_response();
+                    }
+                    let completed = sessions.remove(&upload_id).unwrap();
+                    drop(sessions);
+                    let payload = Bytes::from(completed.buffer);
+                    store(
+                        state,
+                        &completed.bucket,
+                        &completed.key,
+                        payload,
+                        completed.content_type,
+                    );
+                    let stored = state.buckets.lock().unwrap()[&completed.bucket]
+                        .get(&completed.key)
+                        .cloned()
+                        .unwrap();
+                    return json_response(
+                        StatusCode::OK,
+                        &gcs_object_json(&completed.key, &stored),
+                    );
+                }
+                Method::DELETE => {
+                    state.resumable.lock().unwrap().remove(&upload_id);
+                    return StatusCode::from_u16(499).unwrap().into_response();
+                }
+                _ => return json_error(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
+            }
+        }
+
+        let Some(key) = param("name") else {
+            return json_error(StatusCode::BAD_REQUEST, "missing object name");
+        };
+        match (method, upload_type.as_str()) {
+            (&Method::POST, "media") => {
+                let content_type = headers
+                    .get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .map(str::to_owned);
+                store(state, &bucket, &key, body, content_type);
+                let stored = state.buckets.lock().unwrap()[&bucket]
+                    .get(&key)
+                    .cloned()
+                    .unwrap();
+                json_response(StatusCode::OK, &gcs_object_json(&key, &stored))
+            }
+            (&Method::POST, "resumable") => {
+                let id = format!("resumable-{}", state.next_id.fetch_add(1, Ordering::SeqCst));
+                let content_type = headers
+                    .get("x-upload-content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .map(str::to_owned);
+                state.resumable.lock().unwrap().insert(
+                    id.clone(),
+                    ResumableUpload {
+                        bucket: bucket.clone(),
+                        key,
+                        content_type,
+                        buffer: Vec::new(),
+                    },
+                );
+                let base_url = state.base_url.lock().unwrap().clone();
+                let location = format!(
+                    "{base_url}/upload/storage/v1/b/{bucket_enc}/o?uploadType=resumable&upload_id={id}"
+                );
+                let mut response = StatusCode::OK.into_response();
+                response
+                    .headers_mut()
+                    .insert("location", location.parse().unwrap());
+                response
+            }
+            _ => json_error(StatusCode::BAD_REQUEST, "unsupported uploadType"),
+        }
+    } else if let Some(rest) = raw_path.strip_prefix("/storage/v1/b/") {
+        let Some((bucket_enc, tail)) = rest.split_once('/') else {
+            return json_error(StatusCode::NOT_FOUND, "not found");
+        };
+        let bucket = decode(bucket_enc);
+        if !state.buckets.lock().unwrap().contains_key(&bucket) {
+            return json_error(StatusCode::NOT_FOUND, "bucket not found");
+        }
+        if tail == "o" && *method == Method::GET {
+            let prefix = param("prefix").unwrap_or_default();
+            let buckets = state.buckets.lock().unwrap();
+            let items: Vec<serde_json::Value> = buckets[&bucket]
+                .iter()
+                .filter(|(k, _)| k.starts_with(&prefix))
+                .map(|(k, obj)| gcs_object_json(k, obj))
+                .collect();
+            return json_response(StatusCode::OK, &json!({ "items": items }));
+        }
+        if let Some(key_enc) = tail.strip_prefix("o/") {
+            let key = decode(key_enc);
+            match *method {
+                Method::GET if param("alt").as_deref() == Some("media") => {
+                    let object = state.buckets.lock().unwrap()[&bucket].get(&key).cloned();
+                    match object {
+                        Some(object) => get(&object, headers, false),
+                        None => json_error(StatusCode::NOT_FOUND, "object not found"),
+                    }
+                }
+                Method::GET => {
+                    let object = state.buckets.lock().unwrap()[&bucket].get(&key).cloned();
+                    match object {
+                        Some(object) => {
+                            json_response(StatusCode::OK, &gcs_object_json(&key, &object))
+                        }
+                        None => json_error(StatusCode::NOT_FOUND, "object not found"),
+                    }
+                }
+                Method::DELETE => {
+                    let removed = state
+                        .buckets
+                        .lock()
+                        .unwrap()
+                        .get_mut(&bucket)
+                        .and_then(|objects| objects.remove(&key));
+                    match removed {
+                        Some(_) => StatusCode::NO_CONTENT.into_response(),
+                        None => json_error(StatusCode::NOT_FOUND, "object not found"),
+                    }
+                }
+                _ => json_error(StatusCode::METHOD_NOT_ALLOWED, "unsupported method"),
+            }
+        } else {
+            json_error(StatusCode::NOT_FOUND, "not found")
+        }
+    } else {
+        json_error(StatusCode::NOT_FOUND, "not found")
+    }
+}
+
+fn gcs_object_json(key: &str, object: &Object) -> serde_json::Value {
+    json!({
+        "name": key,
+        "size": object.body.len().to_string(),
+        "updated": object.last_modified.to_rfc3339_opts(SecondsFormat::Millis, true),
+    })
+}
+
+fn json_response(status: StatusCode, body: &serde_json::Value) -> Response {
+    let mut response = (
+        [("content-type", "application/json")],
+        serde_json::to_vec(body).unwrap(),
+    )
+        .into_response();
+    *response.status_mut() = status;
+    response
+}
+
+fn json_error(status: StatusCode, message: &str) -> Response {
+    json_response(
+        status,
+        &json!({
+            "error": {
+                "code": status.as_u16(),
+                "message": message,
+            }
+        }),
+    )
 }
 
 /// Stores an object and returns its ETag.
@@ -621,17 +895,15 @@ fn gcs_preconditions(
     Ok(())
 }
 
-/// Checks a Google Cloud Storage request: a `GOOG4-RSA-SHA256` signed link
-/// (in the query), or the service account's self-signed token (RS256) in
-/// `Authorization: Bearer`. Both are verified with [`GCS_PRIVATE_KEY`]'s
-/// public half.
+/// Checks a Google Cloud Storage V4 `GOOG4-RSA-SHA256` signed link against
+/// [`GCS_PRIVATE_KEY`]'s public half.
 fn authorize_gcs(
     method: &Method,
     raw_path: &str,
     query: &[(String, String)],
     headers: &HeaderMap,
 ) -> Result<(), String> {
-    use navree_crypto::jose::{Algorithm, Jws, SigningKey};
+    use navree_crypto::jose::{Algorithm, SigningKey};
 
     let key = SigningKey::from_pem(GCS_PRIVATE_KEY)
         .map_err(|error| format!("the test key: {error}"))?
@@ -649,15 +921,7 @@ fn authorize_gcs(
             .map(str::trim)
             .unwrap_or("")
     };
-    let Some(signature) = get("X-Goog-Signature") else {
-        let token = header("authorization")
-            .strip_prefix("Bearer ")
-            .ok_or("no bearer token")?;
-        let jws = Jws::parse(token).map_err(|error| format!("the token: {error}"))?;
-        return jws
-            .verify(&key)
-            .map_err(|error| format!("the token's signature: {error}"));
-    };
+    let signature = get("X-Goog-Signature").ok_or("no X-Goog-Signature")?;
     if get("X-Goog-Algorithm") != Some("GOOG4-RSA-SHA256") {
         return Err("unknown algorithm".into());
     }
@@ -694,14 +958,7 @@ fn authorize_gcs(
         .join("&");
     let canonical_headers: String = signed_headers
         .split(';')
-        .map(|name| {
-            let value = if name == "host" {
-                GCS_HOST
-            } else {
-                header(name)
-            };
-            format!("{name}:{value}\n")
-        })
+        .map(|name| format!("{name}:{}\n", header(name)))
         .collect();
     let canonical_request = format!(
         "{method}\n{raw_path}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\nUNSIGNED-PAYLOAD"

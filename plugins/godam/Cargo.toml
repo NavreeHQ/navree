@@ -25,11 +25,9 @@ env = []
 bytes = "1.12.1"
 futures-util = "0.3.34"
 navree = { path = "../../crates/navree", default-features = false, features = ["storage"] }
-object_store = { version = "0.14.2", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 
 [dev-dependencies]
-async-trait = "0.1.92"
 chrono = { version = "0.4.45", features = ["serde"] }
 http = "1.5.0"
 http-body-util = "0.1.5"
