@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_telemetry::{
     AiCall, BroadcastSent, CacheEvent, CacheOperation, EventEmitted, EventKind, ExceptionReported,
     HttpClientRequest, JobFailed, JobProcessed, LogLevel, LogRecord, MailSent, NotificationSent,
@@ -52,7 +52,7 @@ fn every_event() -> Vec<TelemetryEvent> {
         }),
         TelemetryEvent::ScheduledTaskRan(ScheduledTaskRan {
             task: "audit:prune".into(),
-            tick: Utc::now(),
+            tick: Timestamp::now(),
             duration: ms(5),
             error: None,
         }),

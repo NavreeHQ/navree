@@ -6,7 +6,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_kernel::AppContext;
 
 use crate::event::is_event_name;
@@ -232,7 +232,7 @@ impl Telemetry {
         let context =
             TelemetryContext::with_current(TelemetryContext::event_context).unwrap_or_default();
         self.deliver(TelemetryRecord {
-            at: Utc::now(),
+            at: Timestamp::now(),
             context,
             event,
         });
