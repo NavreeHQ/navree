@@ -4,7 +4,7 @@
 mod database;
 mod memory;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_kernel::BoxFuture;
 use serde_json::Value;
@@ -29,9 +29,9 @@ pub struct Lease {
     /// Identifies this execution: writes with another token are refused.
     pub token: Uuid,
     /// The current time.
-    pub now: DateTime<Utc>,
+    pub now: Timestamp,
     /// When the hold runs out.
-    pub until: DateTime<Utc>,
+    pub until: Timestamp,
 }
 
 /// How an execution ends (see [`WorkflowStore::release`]).
@@ -43,9 +43,9 @@ pub enum Release {
     /// The workflow failed with this error.
     Failed(String),
     /// A timer or a step's next attempt: wake at this time.
-    Sleeping(DateTime<Utc>),
+    Sleeping(Timestamp),
     /// An event wait, timing out at this time (`None`: never).
-    Waiting(Option<DateTime<Utc>>),
+    Waiting(Option<Timestamp>),
     /// Run again as soon as possible.
     Pending,
 }
@@ -55,13 +55,13 @@ pub enum Release {
 pub struct DueQuery {
     /// The current time: running runs whose lease ran out before it are
     /// due.
-    pub now: DateTime<Utc>,
+    pub now: Timestamp,
     /// Sleeping and waiting runs whose `wake_at` is at or before this are
     /// due.
-    pub wake_before: DateTime<Utc>,
+    pub wake_before: Timestamp,
     /// Pending runs not touched since this are due (their job was lost);
     /// the store marks them touched at `now`, so the next pass waits again.
-    pub stale_before: DateTime<Utc>,
+    pub stale_before: Timestamp,
     /// At most this many, oldest first.
     pub limit: u64,
 }
@@ -143,7 +143,7 @@ pub trait WorkflowStore: Send + Sync + 'static {
         run_id: Uuid,
         key: &'a str,
         output: &'a Value,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> BoxFuture<'a, StoreResult<bool>>;
 
     /// Cancels an unfinished run; `false` when it was finished or unknown.
@@ -151,7 +151,7 @@ pub trait WorkflowStore: Send + Sync + 'static {
         &'a self,
         uow: Option<&'a Uow>,
         id: Uuid,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> BoxFuture<'a, StoreResult<bool>>;
 
     /// Puts a failed run back to pending and forgets its failed steps, so
@@ -160,10 +160,10 @@ pub trait WorkflowStore: Send + Sync + 'static {
         &'a self,
         uow: Option<&'a Uow>,
         id: Uuid,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> BoxFuture<'a, StoreResult<bool>>;
 
     /// Deletes runs (with their steps) that finished before `before`;
     /// returns how many.
-    fn prune(&self, before: DateTime<Utc>) -> BoxFuture<'_, StoreResult<u64>>;
+    fn prune(&self, before: Timestamp) -> BoxFuture<'_, StoreResult<u64>>;
 }

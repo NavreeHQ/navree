@@ -6,7 +6,7 @@ use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use futures_util::FutureExt;
 use navree_contracts::Backoff;
 use navree_events::Event;
@@ -67,9 +67,9 @@ impl StepOptions {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Suspension {
     /// A timer (or a step's next attempt) ends at this time.
-    Sleep(DateTime<Utc>),
+    Sleep(Timestamp),
     /// An event wait, timing out at this time (`None`: never).
-    Wait(Option<DateTime<Utc>>),
+    Wait(Option<Timestamp>),
     /// The lease is gone (the run was cancelled or taken over): stop
     /// without writing.
     Lost,
@@ -82,7 +82,7 @@ impl Suspension {
     /// problems win, else the run waits until the earliest wake-up.
     fn merge(self, other: Suspension) -> Suspension {
         use Suspension::{Abort, Lost, Sleep, Wait};
-        let earliest = |a: Option<DateTime<Utc>>, b: Option<DateTime<Utc>>| match (a, b) {
+        let earliest = |a: Option<Timestamp>, b: Option<Timestamp>| match (a, b) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         };
@@ -320,7 +320,7 @@ impl WorkflowCtx {
     }
 
     /// Waits until `at` (on the app's clock), durably.
-    pub async fn sleep_until(&self, at: DateTime<Utc>) {
+    pub async fn sleep_until(&self, at: Timestamp) {
         let key = self.next_key("$sleep");
         self.timer(key, at).await;
     }
@@ -334,7 +334,7 @@ impl WorkflowCtx {
         self.timer(key, at).await;
     }
 
-    async fn timer(&self, key: String, at: DateTime<Utc>) {
+    async fn timer(&self, key: String, at: Timestamp) {
         let recorded = self.recorded(&key);
         if recorded
             .as_ref()
@@ -460,12 +460,12 @@ impl WorkflowCtx {
     }
 
     /// The current time on the app's clock, recorded the first time: a
-    /// replay sees the same instant. Use it instead of `Utc::now()` in
+    /// replay sees the same instant. Use it instead of [`Timestamp::now`] in
     /// workflow code.
-    pub async fn now(&self) -> DateTime<Utc> {
+    pub async fn now(&self) -> Timestamp {
         let key = self.next_key("$now");
         if let Some(step) = self.recorded(&key)
-            && let Some(Ok(at)) = step.output.map(serde_json::from_value::<DateTime<Utc>>)
+            && let Some(Ok(at)) = step.output.map(serde_json::from_value::<Timestamp>)
         {
             return at;
         }
@@ -584,7 +584,7 @@ impl WorkflowCtx {
         }
     }
 
-    fn clock(&self) -> DateTime<Utc> {
+    fn clock(&self) -> Timestamp {
         self.inner.engine.clock.now()
     }
 
@@ -627,9 +627,9 @@ fn decode<T: DeserializeOwned>(key: &str, output: Value) -> Result<T, WorkflowsE
     })
 }
 
-/// `duration` as a chrono delta (saturating).
-pub(crate) fn delta(duration: Duration) -> TimeDelta {
-    TimeDelta::from_std(duration).unwrap_or(TimeDelta::MAX)
+/// `duration` as a [`Span`] (saturating).
+pub(crate) fn delta(duration: Duration) -> Span {
+    Span::try_from(duration).unwrap_or(Span::MAX)
 }
 
 /// The message of a caught panic.
@@ -645,8 +645,8 @@ pub(crate) fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
 mod tests {
     use super::*;
 
-    fn at(secs: i64) -> DateTime<Utc> {
-        DateTime::from_timestamp(secs, 0).unwrap()
+    fn at(secs: i64) -> Timestamp {
+        Timestamp::from_secs(secs).unwrap()
     }
 
     #[test]

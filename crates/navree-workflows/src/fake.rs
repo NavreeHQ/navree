@@ -4,7 +4,7 @@
 use std::any::type_name;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -103,7 +103,7 @@ impl FakeState {
 
 /// A recorded start as a run: pending, or cancelled.
 fn as_run(started: &StartedRun) -> WorkflowRun {
-    let now = Utc::now();
+    let now = Timestamp::now();
     WorkflowRun {
         id: started.id,
         workflow: started.workflow.to_owned(),

@@ -83,7 +83,7 @@ fn run_id(args: &[String]) -> Result<Uuid, BoxError> {
     Uuid::parse_str(text).map_err(|_| format!("`{text}` is not a run id").into())
 }
 
-fn time(at: chrono::DateTime<chrono::Utc>) -> String {
+fn time(at: navree_datetime::Timestamp) -> String {
     at.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
@@ -271,7 +271,7 @@ async fn prune_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxErro
         return Ok(());
     }
     let workflows = ctx.get::<Workflows>().await?;
-    let before = workflows.now() - chrono::TimeDelta::days(i64::from(days));
+    let before = workflows.now() - navree_datetime::Span::days(i64::from(days));
     let pruned = workflows.prune(before).await?;
     println!("Pruned {pruned} workflow run(s) finished more than {days} day(s) ago.");
     Ok(())

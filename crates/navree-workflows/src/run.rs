@@ -4,7 +4,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -112,13 +112,13 @@ pub struct WorkflowRun {
     /// The deduplication key it was started with, if any.
     pub key: Option<String>,
     /// When a sleeping run wakes, or a waiting run times out.
-    pub wake_at: Option<DateTime<Utc>>,
+    pub wake_at: Option<Timestamp>,
     /// When the run started.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the run last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// When the run finished.
-    pub finished_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<Timestamp>,
 }
 
 /// What a step record is.
@@ -230,16 +230,16 @@ pub struct WorkflowStep {
     /// How many times the step ran.
     pub attempts: u32,
     /// When a timer ends, a wait times out or a retry runs.
-    pub wake_at: Option<DateTime<Utc>>,
+    pub wake_at: Option<Timestamp>,
     /// The event a wait is for.
     pub event: Option<String>,
     /// The filter of a wait (an [`EventMatch`](crate::EventMatch) as JSON).
     #[schema(value_type = Option<Object>)]
     pub filter: Option<Value>,
     /// When the step was first reached.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// A run with its steps (what `GET /api/workflows/runs/{id}` returns).

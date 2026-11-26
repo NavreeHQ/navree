@@ -659,8 +659,8 @@ impl AutomationStore for DatabaseAutomationStore {
                     automation.version.map(i64::from).into(),
                     automation.trigger_event.clone().into(),
                     automation.template.clone().into(),
-                    automation.created_at.timestamp_millis().into(),
-                    automation.updated_at.timestamp_millis().into(),
+                    automation.created_at.as_millis().into(),
+                    automation.updated_at.as_millis().into(),
                 ],
             );
             self.execute_in(uow, stmt).await?;
@@ -690,7 +690,7 @@ impl AutomationStore for DatabaseAutomationStore {
                     automation.version.map(i64::from).into(),
                     automation.trigger_event.clone().into(),
                     automation.template.clone().into(),
-                    automation.updated_at.timestamp_millis().into(),
+                    automation.updated_at.as_millis().into(),
                     automation.id.to_string().into(),
                 ],
             );
@@ -803,7 +803,7 @@ impl AutomationStore for DatabaseAutomationStore {
                     i64::from(version.version).into(),
                     graph_text(&version.definition)?.into(),
                     uuid_text(version.published_by),
-                    version.created_at.timestamp_millis().into(),
+                    version.created_at.as_millis().into(),
                 ],
             );
             self.execute_in(uow, stmt).await?;
@@ -868,7 +868,7 @@ impl AutomationStore for DatabaseAutomationStore {
                     uuid_text(enrollment.workspace_id),
                     enrollment.subject.clone().into(),
                     enrollment.run_id.to_string().into(),
-                    enrollment.created_at.timestamp_millis().into(),
+                    enrollment.created_at.as_millis().into(),
                 ],
             );
             self.execute_in(uow, stmt).await?;

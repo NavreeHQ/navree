@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use futures_util::FutureExt;
 use navree_contracts::{Clock, Dispatcher, JobEnvelope, JobOptions};
 use navree_db::{Db, Uow};
@@ -92,7 +92,7 @@ impl Engine {
         }
     }
 
-    pub(crate) fn now(&self) -> DateTime<Utc> {
+    pub(crate) fn now(&self) -> Timestamp {
         self.clock.now()
     }
 
@@ -159,7 +159,7 @@ impl Engine {
         self: &Arc<Self>,
         uow: Option<&Uow>,
         run_id: Uuid,
-        at: Option<DateTime<Utc>>,
+        at: Option<Timestamp>,
     ) -> Result<(), WorkflowsError> {
         match uow {
             Some(uow) => {
@@ -189,7 +189,7 @@ impl Engine {
     pub(crate) fn wake(
         self: &Arc<Self>,
         run_id: Uuid,
-        at: Option<DateTime<Utc>>,
+        at: Option<Timestamp>,
     ) -> BoxFuture<'_, Result<(), WorkflowsError>> {
         Box::pin(async move {
             let app = self.app()?;

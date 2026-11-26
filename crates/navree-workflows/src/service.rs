@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{Page, PageQuery, Uow};
 use serde_json::Value;
 use uuid::Uuid;
@@ -286,7 +286,7 @@ impl Workflows {
 
     /// Deletes runs that finished before `before` (with their steps);
     /// returns how many.
-    pub async fn prune(&self, before: DateTime<Utc>) -> Result<u64, WorkflowsError> {
+    pub async fn prune(&self, before: Timestamp) -> Result<u64, WorkflowsError> {
         match &self.inner {
             Inner::Engine(engine) => engine.store.prune(before).await,
             Inner::Fake(_) => Ok(0),
@@ -294,10 +294,10 @@ impl Workflows {
     }
 
     /// The current time on the clock runs use (the app's `dyn Clock`).
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         match &self.inner {
             Inner::Engine(engine) => engine.now(),
-            Inner::Fake(_) => Utc::now(),
+            Inner::Fake(_) => Timestamp::now(),
         }
     }
 }

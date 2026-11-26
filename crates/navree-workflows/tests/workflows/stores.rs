@@ -99,7 +99,7 @@ async fn timers_and_retries(h: Harness) {
     let sleeper = h.start(Onboarding { user_id: 7 }).await;
     let run = workflows.run(sleeper).await.unwrap();
     assert_eq!(run.status, RunStatus::Sleeping);
-    assert_eq!(run.wake_at, Some(start() + chrono::TimeDelta::days(3)));
+    assert_eq!(run.wake_at, Some(start() + navree_datetime::Span::days(3)));
     assert_eq!(h.advance(DAY).await, 0);
     assert_eq!(h.advance(2 * DAY).await, 1);
     assert_eq!(h.status(sleeper).await, RunStatus::Completed);
@@ -213,7 +213,7 @@ async fn cancellation_keys_and_listing(h: Harness) {
     // The cancelled run finished at the start; nothing else did.
     h.clock.advance(DAY);
     let pruned = workflows
-        .prune(start() + chrono::TimeDelta::seconds(1))
+        .prune(start() + navree_datetime::Span::seconds(1))
         .await
         .unwrap();
     assert_eq!(pruned, 1);

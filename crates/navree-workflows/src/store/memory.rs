@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_kernel::BoxFuture;
 use serde_json::Value;
@@ -25,7 +25,7 @@ pub struct MemoryWorkflowStore {
 struct Entry {
     run: WorkflowRun,
     /// The execution holding it: its token and when the hold runs out.
-    lease: Option<(Uuid, DateTime<Utc>)>,
+    lease: Option<(Uuid, Timestamp)>,
     /// An event resolved a wait while the run was running.
     wake_requested: bool,
     /// In the order they were reached.
@@ -248,7 +248,7 @@ impl WorkflowStore for MemoryWorkflowStore {
 
     fn due(&self, query: DueQuery) -> BoxFuture<'_, StoreResult<Vec<Uuid>>> {
         let mut state = self.lock();
-        let mut due: Vec<(DateTime<Utc>, Uuid)> = state
+        let mut due: Vec<(Timestamp, Uuid)> = state
             .values()
             .filter_map(|entry| {
                 let run = &entry.run;
@@ -305,7 +305,7 @@ impl WorkflowStore for MemoryWorkflowStore {
         run_id: Uuid,
         key: &'a str,
         output: &'a Value,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> BoxFuture<'a, StoreResult<bool>> {
         let open = self.lock().get(&run_id).is_some_and(|entry| {
             !entry.run.status.is_finished()
@@ -350,7 +350,7 @@ impl WorkflowStore for MemoryWorkflowStore {
         &'a self,
         uow: Option<&'a Uow>,
         id: Uuid,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> BoxFuture<'a, StoreResult<bool>> {
         let open = self
             .lock()
@@ -376,7 +376,7 @@ impl WorkflowStore for MemoryWorkflowStore {
         &'a self,
         uow: Option<&'a Uow>,
         id: Uuid,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> BoxFuture<'a, StoreResult<bool>> {
         let failed = self
             .lock()
@@ -398,7 +398,7 @@ impl WorkflowStore for MemoryWorkflowStore {
         Box::pin(async move { Ok(failed) })
     }
 
-    fn prune(&self, before: DateTime<Utc>) -> BoxFuture<'_, StoreResult<u64>> {
+    fn prune(&self, before: Timestamp) -> BoxFuture<'_, StoreResult<u64>> {
         let mut state = self.lock();
         let len = state.len();
         state.retain(|_, entry| entry.run.finished_at.is_none_or(|at| at >= before));
