@@ -50,10 +50,10 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{
-    DateTime, Datelike, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, Offset, TimeDelta,
-    TimeZone, Timelike, Utc, Weekday,
+use navree_datetime::{
+    Date, DateTime, Offset, Span, Time, Timestamp, Weekday, Zone, civil,
 };
+use navree_time::Tz;
 
 /// The longest expression accepted, in bytes.
 pub const MAX_EXPRESSION_LEN: usize = 256;
@@ -61,17 +61,138 @@ pub const MAX_EXPRESSION_LEN: usize = 256;
 /// How many years ahead the search for a next run looks.
 const SEARCH_YEARS: i32 = 400;
 
+/// A clock a [`CronExpression`] can be evaluated on: [`Zone`], [`Offset`],
+/// [`navree_time::Zone`], [`Tz`], or a shared reference to any of them.
+#[allow(private_bounds)]
+pub trait CronZone: cron_zone::Sealed {}
+
+mod cron_zone {
+    use navree_datetime::{DateTime, Disambiguation, ErrorKind, Offset, Timestamp, Zone};
+    use navree_time::{LocalTime, Tz};
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(super) enum CronLocal {
+        Gap,
+        Single(Timestamp),
+        Ambiguous(Timestamp, Timestamp),
+    }
+
+    pub(super) trait Sealed {
+        fn local_at(&self, at: Timestamp) -> DateTime;
+        fn offset_seconds_at(&self, at: Timestamp) -> i64;
+        fn resolve_local(&self, local: DateTime) -> CronLocal;
+    }
+
+    impl Sealed for Zone {
+        fn local_at(&self, at: Timestamp) -> DateTime {
+            at.in_zone(*self).date_time()
+        }
+
+        fn offset_seconds_at(&self, at: Timestamp) -> i64 {
+            i64::from(self.offset_at(at).seconds())
+        }
+
+        fn resolve_local(&self, local: DateTime) -> CronLocal {
+            match self.to_timestamp(local, Disambiguation::Reject) {
+                Ok(at) => CronLocal::Single(at),
+                Err(err) if err.kind() == ErrorKind::Ambiguous => {
+                    match (
+                        self.to_timestamp(local, Disambiguation::Earlier),
+                        self.to_timestamp(local, Disambiguation::Later),
+                    ) {
+                        (Ok(first), Ok(second)) => CronLocal::Ambiguous(first, second),
+                        (Ok(only), Err(_)) | (Err(_), Ok(only)) => CronLocal::Single(only),
+                        (Err(_), Err(_)) => CronLocal::Gap,
+                    }
+                }
+                Err(_) => CronLocal::Gap,
+            }
+        }
+    }
+
+    impl Sealed for Offset {
+        fn local_at(&self, at: Timestamp) -> DateTime {
+            at.in_zone(Zone::fixed(*self)).date_time()
+        }
+
+        fn offset_seconds_at(&self, _at: Timestamp) -> i64 {
+            i64::from(self.seconds())
+        }
+
+        fn resolve_local(&self, local: DateTime) -> CronLocal {
+            match Zone::fixed(*self).to_timestamp(local, Disambiguation::Reject) {
+                Ok(at) => CronLocal::Single(at),
+                Err(_) => CronLocal::Gap,
+            }
+        }
+    }
+
+    impl Sealed for navree_time::Zone {
+        fn local_at(&self, at: Timestamp) -> DateTime {
+            self.as_datetime_zone().local_at(at)
+        }
+
+        fn offset_seconds_at(&self, at: Timestamp) -> i64 {
+            self.as_datetime_zone().offset_seconds_at(at)
+        }
+
+        fn resolve_local(&self, local: DateTime) -> CronLocal {
+            self.as_datetime_zone().resolve_local(local)
+        }
+    }
+
+    impl Sealed for Tz {
+        fn local_at(&self, at: Timestamp) -> DateTime {
+            self.local(at).date_time()
+        }
+
+        fn offset_seconds_at(&self, at: Timestamp) -> i64 {
+            i64::from(self.offset_at(at).total_seconds())
+        }
+
+        fn resolve_local(&self, local: DateTime) -> CronLocal {
+            match Tz::resolve_local(*self, local) {
+                LocalTime::None => CronLocal::Gap,
+                LocalTime::Single((at, _)) => CronLocal::Single(at),
+                LocalTime::Ambiguous((first, _), (second, _)) => {
+                    CronLocal::Ambiguous(first, second)
+                }
+            }
+        }
+    }
+
+    impl<Z: Sealed + ?Sized> Sealed for &Z {
+        fn local_at(&self, at: Timestamp) -> DateTime {
+            (**self).local_at(at)
+        }
+
+        fn offset_seconds_at(&self, at: Timestamp) -> i64 {
+            (**self).offset_seconds_at(at)
+        }
+
+        fn resolve_local(&self, local: DateTime) -> CronLocal {
+            (**self).resolve_local(local)
+        }
+    }
+}
+
+impl CronZone for Zone {}
+impl CronZone for Offset {}
+impl CronZone for navree_time::Zone {}
+impl CronZone for Tz {}
+impl<Z: CronZone + ?Sized> CronZone for &Z {}
+
 /// A parsed cron expression. See the [crate documentation](crate) for the
 /// accepted language and the daylight saving time rules.
 ///
 /// ```
-/// use chrono::{TimeZone, Utc};
+/// use navree_datetime::{Timestamp, Zone};
 /// use navree_schedule::CronExpression;
 ///
 /// let cron: CronExpression = "*/15 9-17 * * MON-FRI".parse().unwrap();
-/// let after = Utc.with_ymd_and_hms(2026, 10, 26, 9, 7, 0).unwrap();
-/// let next = cron.next_after(after, &Utc).unwrap();
-/// assert_eq!(next, Utc.with_ymd_and_hms(2026, 10, 26, 9, 15, 0).unwrap());
+/// let after = Timestamp::utc(2026, 10, 26, 9, 7, 0).unwrap();
+/// let next = cron.next_after(after, Zone::UTC).unwrap();
+/// assert_eq!(next, Timestamp::utc(2026, 10, 26, 9, 15, 0).unwrap());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CronExpression {
@@ -571,34 +692,35 @@ impl CronExpression {
     /// Whether the wall-clock time `local` (seconds are ignored) matches
     /// the expression. This is the plain match; it knows nothing about
     /// daylight saving time.
-    pub fn matches_local(&self, local: NaiveDateTime) -> bool {
-        self.minutes >> local.minute() & 1 == 1
-            && self.hours >> local.hour() & 1 == 1
+    pub fn matches_local(&self, local: DateTime) -> bool {
+        let time = local.time();
+        self.minutes >> time.minute() & 1 == 1
+            && self.hours >> time.hour() & 1 == 1
             && self.day_matches(local.date())
     }
 
-    fn day_matches(&self, date: NaiveDate) -> bool {
-        if self.months >> date.month() & 1 == 0 {
+    fn day_matches(&self, date: Date) -> bool {
+        let month = date.month_number();
+        if self.months >> month & 1 == 0 {
             return false;
         }
-        let day = date.day();
-        let weekday = date.weekday().num_days_from_sunday();
-        let month_length = days_in_month(date.year(), date.month());
+        let day = u32::from(date.day());
+        let weekday = date.weekday().days_from_sunday();
+        let month_length = u32::from(civil::days_in_month(date.year(), month));
 
         let dom = &self.dom;
         let dom_matches = dom.days >> day & 1 == 1
             || (dom.last && day == month_length)
-            || (dom.last_weekday
-                && day == last_weekday_of(date.year(), date.month(), month_length))
+            || (dom.last_weekday && day == last_weekday_of(date.year(), month, month_length))
             || (dom.nearest_weekday != 0
                 && (day.saturating_sub(2).max(1)..=(day + 2).min(month_length)).any(|pattern| {
                     dom.nearest_weekday >> pattern & 1 == 1
-                        && nearest_weekday(date.year(), date.month(), month_length, pattern) == day
+                        && nearest_weekday(date.year(), month, month_length, pattern) == day
                 }));
 
         let dow = &self.dow;
         let dow_matches = dow.every >> weekday & 1 == 1
-            || dow.nth[weekday as usize] >> ((day - 1) / 7 + 1) & 1 == 1
+            || dow.nth[usize::from(weekday)] >> ((day - 1) / 7 + 1) & 1 == 1
             || (dow.last >> weekday & 1 == 1 && day + 7 > month_length);
 
         if self.dom.star || self.dow.star {
@@ -613,12 +735,13 @@ impl CronExpression {
 
     /// The first wall-clock time at or after `from` (seconds are ignored)
     /// that matches, looking at most [`SEARCH_YEARS`] ahead.
-    fn next_local(&self, from: NaiveDateTime) -> Option<NaiveDateTime> {
+    fn next_local(&self, from: DateTime) -> Option<DateTime> {
         let mut date = from.date();
         let last_year = date.year().checked_add(SEARCH_YEARS)?;
-        let mut earliest = Some((from.hour(), from.minute()));
+        let time = from.time();
+        let mut earliest = Some((u32::from(time.hour()), u32::from(time.minute())));
         while date.year() <= last_year {
-            if self.months >> date.month() & 1 == 0 {
+            if self.months >> date.month_number() & 1 == 0 {
                 date = first_of_next_month(date)?;
                 earliest = None;
                 continue;
@@ -626,10 +749,12 @@ impl CronExpression {
             if self.day_matches(date) {
                 let (hour, minute) = earliest.unwrap_or((0, 0));
                 if let Some((hour, minute)) = self.time_from(hour, minute) {
-                    return Some(date.and_time(NaiveTime::from_hms_opt(hour, minute, 0)?));
+                    let hour = u8::try_from(hour).ok()?;
+                    let minute = u8::try_from(minute).ok()?;
+                    return Some(date.at(Time::new(hour, minute, 0).ok()?));
                 }
             }
-            date = date.succ_opt()?;
+            date = date.tomorrow()?;
             earliest = None;
         }
         None
@@ -663,30 +788,23 @@ impl CronExpression {
     /// expression runs a skipped local time once, at the first minute after
     /// the gap, and a repeated one once, the first time; a wildcard
     /// expression runs at every real minute whose local time matches.
-    pub fn next_after<Tz: TimeZone>(
-        &self,
-        after: DateTime<Utc>,
-        zone: &Tz,
-    ) -> Option<DateTime<Utc>> {
+    pub fn next_after<Z: CronZone>(&self, after: Timestamp, zone: Z) -> Option<Timestamp> {
         let next = if self.wildcard_time {
-            self.next_on_the_wall_clock(after, zone)
+            self.next_on_the_wall_clock(after, &zone)
         } else {
-            self.next_fixed_time(after, zone)
+            self.next_fixed_time(after, &zone)
         };
-        debug_assert!(next.is_none_or(|run| run > after && self.is_due(run, zone)));
+        debug_assert!(next.is_none_or(|run| run > after && self.is_due(run, &zone)));
         next
     }
 
-    fn next_fixed_time<Tz: TimeZone>(
-        &self,
-        after: DateTime<Utc>,
-        zone: &Tz,
-    ) -> Option<DateTime<Utc>> {
-        let local = after.with_timezone(zone).naive_local();
-        let mut from = local
-            .with_second(0)
-            .and_then(|t| t.with_nanosecond(0))
-            .unwrap_or(local);
+    fn next_fixed_time<Z: CronZone>(&self, after: Timestamp, zone: &Z) -> Option<Timestamp> {
+        let local = zone.local_at(after);
+        let time = local.time();
+        let mut from = DateTime::new(
+            local.date(),
+            Time::new(time.hour(), time.minute(), 0).unwrap_or(time),
+        );
         // Candidates before `after` exist only in the second pass of a
         // repeated hour or among times skipped by one gap, so a few
         // hundred steps are far more than ever needed.
@@ -696,7 +814,7 @@ impl CronExpression {
             if instant > after {
                 return Some(instant);
             }
-            from = candidate.checked_add_signed(TimeDelta::minutes(1))?;
+            from = candidate.add(Span::minutes(1))?;
         }
         None
     }
@@ -705,30 +823,30 @@ impl CronExpression {
     /// search jumps to the next matching local time while the UTC offset
     /// stays the same, and looks at the minute where the offset changes,
     /// because the local clock jumps there.
-    fn next_on_the_wall_clock<Tz: TimeZone>(
+    fn next_on_the_wall_clock<Z: CronZone>(
         &self,
-        after: DateTime<Utc>,
-        zone: &Tz,
-    ) -> Option<DateTime<Utc>> {
+        after: Timestamp,
+        zone: &Z,
+    ) -> Option<Timestamp> {
         let offset_at = |seconds: i64| -> Option<i64> {
-            let utc = DateTime::from_timestamp(seconds, 0)?.naive_utc();
-            Some(i64::from(
-                zone.offset_from_utc_datetime(&utc).fix().local_minus_utc(),
-            ))
+            let utc = Timestamp::from_secs(seconds).ok()?;
+            Some(zone.offset_seconds_at(utc))
         };
-        let mut t = after.timestamp().div_euclid(60) * 60 + 60;
+        let mut t = after.as_secs().div_euclid(60) * 60 + 60;
         // A jump never crosses a day, so a clock change is never skipped.
         let day = 24 * 3600;
         // Each pass either returns, moves to a clock change, or gives up
         // after the 400 years `next_local` looks at.
         for _ in 0..1_000_000 {
             let offset = offset_at(t)?;
-            let local = DateTime::from_timestamp(t + offset, 0)?.naive_utc();
+            let local = Timestamp::from_secs(t.checked_add(offset)?)
+                .ok()?
+                .date_time_utc();
             if self.matches_local(local) {
-                return DateTime::from_timestamp(t, 0);
+                return Timestamp::from_secs(t).ok();
             }
             let target = self.next_local(local)?;
-            let target_t = t + (target - local).num_seconds();
+            let target_t = t.checked_add((target.in_utc() - local.in_utc()).as_seconds())?;
             let mut cursor = t;
             loop {
                 let next = target_t.min(cursor + day);
@@ -747,7 +865,7 @@ impl CronExpression {
                     break;
                 }
                 if next == target_t {
-                    return DateTime::from_timestamp(next, 0);
+                    return Timestamp::from_secs(next).ok();
                 }
                 cursor = next;
             }
@@ -764,27 +882,32 @@ impl CronExpression {
     /// A wildcard expression is due at every real minute whose local time
     /// matches: in both passes of a repeated hour, and never for a time
     /// inside a gap.
-    pub fn is_due<Tz: TimeZone>(&self, tick: DateTime<Utc>, zone: &Tz) -> bool {
-        let local = tick.with_timezone(zone).naive_local();
+    pub fn is_due<Z: CronZone>(&self, tick: Timestamp, zone: Z) -> bool {
+        let local = zone.local_at(tick);
         if self.wildcard_time {
             return self.matches_local(local);
         }
         if self.matches_local(local) {
-            return match zone.from_local_datetime(&local) {
-                LocalResult::Ambiguous(earliest, _) => earliest.to_utc() == tick,
-                _ => true,
+            return match zone.resolve_local(local) {
+                cron_zone::CronLocal::Ambiguous(earliest, _) => earliest == tick,
+                cron_zone::CronLocal::Single(_) | cron_zone::CronLocal::Gap => true,
             };
         }
-        let Some(before) = tick.checked_sub_signed(TimeDelta::minutes(1)) else {
+        let Some(before) = tick.checked_sub(Span::minutes(1)) else {
             return false;
         };
-        let previous = before.with_timezone(zone).naive_local();
-        let mut skipped = previous + TimeDelta::minutes(1);
+        let previous = zone.local_at(before);
+        let Some(mut skipped) = previous.add(Span::minutes(1)) else {
+            return false;
+        };
         while skipped < local {
             if self.matches_local(skipped) {
                 return true;
             }
-            skipped += TimeDelta::minutes(1);
+            let Some(next) = skipped.add(Span::minutes(1)) else {
+                break;
+            };
+            skipped = next;
         }
         false
     }
@@ -794,47 +917,41 @@ fn is_blank(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c')
 }
 
-fn days_in_month(year: i32, month: u32) -> u32 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        _ if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
-        _ => 28,
-    }
-}
-
-fn first_of_next_month(date: NaiveDate) -> Option<NaiveDate> {
-    if date.month() == 12 {
-        NaiveDate::from_ymd_opt(date.year().checked_add(1)?, 1, 1)
+fn first_of_next_month(date: Date) -> Option<Date> {
+    if date.month_number() == 12 {
+        Date::new(date.year().checked_add(1)?, 1, 1).ok()
     } else {
-        NaiveDate::from_ymd_opt(date.year(), date.month() + 1, 1)
+        Date::new(date.year(), date.month_number() + 1, 1).ok()
     }
 }
 
-fn is_weekday(date: NaiveDate) -> bool {
-    !matches!(date.weekday(), Weekday::Sat | Weekday::Sun)
+fn is_weekday(date: Date) -> bool {
+    !matches!(date.weekday(), Weekday::Saturday | Weekday::Sunday)
 }
 
 /// The last Monday-to-Friday day of the month.
-fn last_weekday_of(year: i32, month: u32, month_length: u32) -> u32 {
-    let mut day = month_length;
-    while let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
+fn last_weekday_of(year: i32, month: u8, month_length: u32) -> u32 {
+    let mut day = month_length as u8;
+    while let Ok(date) = Date::new(year, month, day) {
         if is_weekday(date) || day == 1 {
             break;
         }
         day -= 1;
     }
-    day
+    u32::from(day)
 }
 
 /// The day `dW` resolves to: the weekday nearest to `day`, staying in the
 /// month (a Saturday moves back to Friday, or on to Monday for the 1st; a
 /// Sunday moves on to Monday, or back to Friday for the last day).
-fn nearest_weekday(year: i32, month: u32, month_length: u32, day: u32) -> u32 {
-    let Some(date) = NaiveDate::from_ymd_opt(year, month, day) else {
+fn nearest_weekday(year: i32, month: u8, month_length: u32, day: u32) -> u32 {
+    let Ok(day_u8) = u8::try_from(day) else {
         return 0;
     };
-    match date.weekday().num_days_from_sunday() {
+    let Ok(date) = Date::new(year, month, day_u8) else {
+        return 0;
+    };
+    match date.weekday().days_from_sunday() {
         6 if day > 1 => day - 1,
         6 => day + 2,
         0 if day < month_length => day + 1,
@@ -845,11 +962,10 @@ fn nearest_weekday(year: i32, month: u32, month_length: u32, day: u32) -> u32 {
 
 /// The instant `local` happens on `zone`'s clock: the first one when it
 /// happens twice, and the first minute after the gap when it is skipped.
-fn instant_of<Tz: TimeZone>(zone: &Tz, local: NaiveDateTime) -> Option<DateTime<Utc>> {
-    match zone.from_local_datetime(&local) {
-        LocalResult::Single(at) => Some(at.to_utc()),
-        LocalResult::Ambiguous(first, _) => Some(first.to_utc()),
-        LocalResult::None => gap_end(zone, local),
+fn instant_of<Z: CronZone>(zone: &Z, local: DateTime) -> Option<Timestamp> {
+    match zone.resolve_local(local) {
+        cron_zone::CronLocal::Single(at) | cron_zone::CronLocal::Ambiguous(at, _) => Some(at),
+        cron_zone::CronLocal::Gap => gap_end(zone, local),
     }
 }
 
@@ -857,12 +973,12 @@ fn instant_of<Tz: TimeZone>(zone: &Tz, local: NaiveDateTime) -> Option<DateTime<
 /// for a `local` inside a gap. Binary search over instants: offsets stay
 /// within 26 hours of zero, so the clock is behind `local` 26 hours before
 /// `local` read as UTC, and ahead of it 26 hours after.
-fn gap_end<Tz: TimeZone>(zone: &Tz, local: NaiveDateTime) -> Option<DateTime<Utc>> {
+fn gap_end<Z: CronZone>(zone: &Z, local: DateTime) -> Option<Timestamp> {
     let reads = |seconds: i64| -> Option<bool> {
-        let utc = DateTime::from_timestamp(seconds, 0)?;
-        Some(utc.with_timezone(zone).naive_local() >= local)
+        let utc = Timestamp::from_secs(seconds).ok()?;
+        Some(zone.local_at(utc) >= local)
     };
-    let centre = local.and_utc().timestamp();
+    let centre = local.in_utc().as_secs();
     let (mut behind, mut ahead) = (centre - 26 * 3600, centre + 26 * 3600);
     if reads(behind)? || !reads(ahead)? {
         return None;
@@ -876,7 +992,7 @@ fn gap_end<Tz: TimeZone>(zone: &Tz, local: NaiveDateTime) -> Option<DateTime<Utc
         }
     }
     let whole_minute = ahead.div_euclid(60) * 60 + if ahead.rem_euclid(60) == 0 { 0 } else { 60 };
-    DateTime::from_timestamp(whole_minute, 0)
+    Timestamp::from_secs(whole_minute).ok()
 }
 
 #[cfg(test)]

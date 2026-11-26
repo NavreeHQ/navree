@@ -1,5 +1,3 @@
-use navree_time::Tz;
-
 use super::*;
 
 fn tz(name: &str) -> Tz {
@@ -10,10 +8,8 @@ fn cron(text: &str) -> CronExpression {
     text.parse().unwrap_or_else(|e| panic!("`{text}`: {e}"))
 }
 
-fn at(text: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(text)
-        .unwrap()
-        .with_timezone(&Utc)
+fn at(text: &str) -> Timestamp {
+    Timestamp::parse_rfc3339(text).unwrap()
 }
 
 fn next(text: &str, after: &str, zone: Tz) -> Option<String> {
@@ -142,24 +138,36 @@ fn next_runs_in_utc() {
     let utc = Tz::UTC;
     assert_eq!(
         next("*/15 * * * *", "2026-10-26T09:07:30Z", utc).unwrap(),
-        "2026-10-26T09:15:00+00:00"
+        "2026-10-26T09:15:00Z"
+    );
+    assert_eq!(
+        cron("*/15 * * * *").next_after(at("2026-10-26T09:07:30Z"), Zone::UTC),
+        Some(at("2026-10-26T09:15:00Z"))
+    );
+    assert_eq!(
+        cron("*/15 * * * *").next_after(at("2026-10-26T09:07:30Z"), navree_time::Zone::UTC),
+        Some(at("2026-10-26T09:15:00Z"))
+    );
+    assert_eq!(
+        cron("*/15 * * * *").next_after(at("2026-10-26T09:07:30Z"), Offset::UTC),
+        Some(at("2026-10-26T09:15:00Z"))
     );
     // Strictly after: a start on a match gives the next one.
     assert_eq!(
         next("*/15 * * * *", "2026-10-26T09:15:00Z", utc).unwrap(),
-        "2026-10-26T09:30:00+00:00"
+        "2026-10-26T09:30:00Z"
     );
     assert_eq!(
         next("0 6 * * MON-FRI", "2026-10-30T07:00:00Z", utc).unwrap(),
-        "2026-11-02T06:00:00+00:00"
+        "2026-11-02T06:00:00Z"
     );
     assert_eq!(
         next("@yearly", "2026-10-30T07:00:00Z", utc).unwrap(),
-        "2027-01-01T00:00:00+00:00"
+        "2027-01-01T00:00:00Z"
     );
     assert_eq!(
         next("@weekly", "2026-10-25T00:00:00Z", utc).unwrap(),
-        "2026-11-01T00:00:00+00:00"
+        "2026-11-01T00:00:00Z"
     );
 }
 
@@ -169,16 +177,16 @@ fn day_of_month_and_week_combine_as_or_unless_plus() {
     // 2026-11-01 is a Sunday. "1st or any Monday".
     assert_eq!(
         next("0 0 1 * MON", "2026-10-31T00:00:00Z", utc).unwrap(),
-        "2026-11-01T00:00:00+00:00"
+        "2026-11-01T00:00:00Z"
     );
     assert_eq!(
         next("0 0 1 * MON", "2026-11-01T00:00:00Z", utc).unwrap(),
-        "2026-11-02T00:00:00+00:00"
+        "2026-11-02T00:00:00Z"
     );
     // "The 1st that is also a Monday": Monday 1 February 2027 is the next.
     assert_eq!(
         next("0 0 1 * +MON", "2026-10-31T00:00:00Z", utc).unwrap(),
-        "2027-02-01T00:00:00+00:00"
+        "2027-02-01T00:00:00Z"
     );
 }
 
@@ -187,41 +195,41 @@ fn last_nth_and_nearest_weekday() {
     let utc = Tz::UTC;
     assert_eq!(
         next("0 0 L * *", "2026-02-01T00:00:00Z", utc).unwrap(),
-        "2026-02-28T00:00:00+00:00"
+        "2026-02-28T00:00:00Z"
     );
     assert_eq!(
         next("0 0 L * *", "2028-02-01T00:00:00Z", utc).unwrap(),
-        "2028-02-29T00:00:00+00:00"
+        "2028-02-29T00:00:00Z"
     );
     // 2026-05-31 is a Sunday: the last weekday is Friday the 29th.
     assert_eq!(
         next("0 0 LW 5 *", "2026-05-01T00:00:00Z", utc).unwrap(),
-        "2026-05-29T00:00:00+00:00"
+        "2026-05-29T00:00:00Z"
     );
     // 2026-08-15 is a Saturday: 15W is Friday the 14th.
     assert_eq!(
         next("0 0 15W 8 *", "2026-08-01T00:00:00Z", utc).unwrap(),
-        "2026-08-14T00:00:00+00:00"
+        "2026-08-14T00:00:00Z"
     );
     // 2026-08-01 is a Saturday: 1W moves on to Monday the 3rd.
     assert_eq!(
         next("0 0 1W 8 *", "2026-07-31T00:00:00Z", utc).unwrap(),
-        "2026-08-03T00:00:00+00:00"
+        "2026-08-03T00:00:00Z"
     );
     // The last Friday of October 2026 is the 30th.
     assert_eq!(
         next("0 0 * 10 5L", "2026-10-01T00:00:00Z", utc).unwrap(),
-        "2026-10-30T00:00:00+00:00"
+        "2026-10-30T00:00:00Z"
     );
     // The second Tuesday of November 2026 is the 10th.
     assert_eq!(
         next("0 0 * 11 TUE#2", "2026-11-01T00:00:00Z", utc).unwrap(),
-        "2026-11-10T00:00:00+00:00"
+        "2026-11-10T00:00:00Z"
     );
     // 7 is Sunday, also as `7L`.
     assert_eq!(
         next("0 0 * 11 7L", "2026-11-01T00:00:00Z", utc).unwrap(),
-        "2026-11-29T00:00:00+00:00"
+        "2026-11-29T00:00:00Z"
     );
 }
 
@@ -240,7 +248,7 @@ fn never_matching_expressions_have_no_next_run() {
     let next = leap_monday
         .next_after(at("2026-01-01T00:00:00Z"), &utc)
         .unwrap();
-    assert_eq!(next.to_rfc3339(), "2044-02-29T00:00:00+00:00");
+    assert_eq!(next.to_rfc3339(), "2044-02-29T00:00:00Z");
 }
 
 #[test]
@@ -249,21 +257,21 @@ fn spring_forward_runs_a_skipped_time_once_after_the_gap() {
     // New York, 2026-03-08: 02:00 EST jumps to 03:00 EDT (07:00Z).
     assert_eq!(
         next("30 2 * * *", "2026-03-07T12:00:00Z", new_york).unwrap(),
-        "2026-03-08T07:00:00+00:00"
+        "2026-03-08T07:00:00Z"
     );
     // The skipped 02:30 runs at 03:00 EDT; the next day's at 02:30 EDT.
     assert_eq!(
         next("30 2 * * *", "2026-03-08T07:00:00Z", new_york).unwrap(),
-        "2026-03-09T06:30:00+00:00"
+        "2026-03-09T06:30:00Z"
     );
     // Several skipped fixed times run once.
     let fixed = cron("0,15,30,45 2 * * *");
     let first = fixed
         .next_after(at("2026-03-08T06:59:00Z"), &new_york)
         .unwrap();
-    assert_eq!(first.to_rfc3339(), "2026-03-08T07:00:00+00:00");
+    assert_eq!(first.to_rfc3339(), "2026-03-08T07:00:00Z");
     let second = fixed.next_after(first, &new_york).unwrap();
-    assert_eq!(second.to_rfc3339(), "2026-03-09T06:00:00+00:00");
+    assert_eq!(second.to_rfc3339(), "2026-03-09T06:00:00Z");
     // A wildcard expression catches nothing up: `*/15` in the hour 2 does
     // not exist on that night.
     let every_15 = cron("*/15 2 * * *");
@@ -272,17 +280,17 @@ fn spring_forward_runs_a_skipped_time_once_after_the_gap() {
             .next_after(at("2026-03-08T06:59:00Z"), &new_york)
             .unwrap()
             .to_rfc3339(),
-        "2026-03-09T06:00:00+00:00"
+        "2026-03-09T06:00:00Z"
     );
     // A time at the end of the gap and one inside it still run once there.
     let both = cron("0,30 2,3 * * *");
     let first = both
         .next_after(at("2026-03-08T06:30:00Z"), &new_york)
         .unwrap();
-    assert_eq!(first.to_rfc3339(), "2026-03-08T07:00:00+00:00");
+    assert_eq!(first.to_rfc3339(), "2026-03-08T07:00:00Z");
     assert_eq!(
         both.next_after(first, &new_york).unwrap().to_rfc3339(),
-        "2026-03-08T07:30:00+00:00"
+        "2026-03-08T07:30:00Z"
     );
 }
 
@@ -293,16 +301,16 @@ fn fall_back_runs_a_repeated_time_once_the_first_time() {
     // 01:30 happens at 05:30Z (EDT) and 06:30Z (EST): only the first runs.
     assert_eq!(
         next("30 1 * * *", "2026-11-01T04:00:00Z", new_york).unwrap(),
-        "2026-11-01T05:30:00+00:00"
+        "2026-11-01T05:30:00Z"
     );
     assert_eq!(
         next("30 1 * * *", "2026-11-01T05:30:00Z", new_york).unwrap(),
-        "2026-11-02T06:30:00+00:00"
+        "2026-11-02T06:30:00Z"
     );
     // A start inside the second pass.
     assert_eq!(
         next("10 1 * * *", "2026-11-01T06:05:00Z", new_york).unwrap(),
-        "2026-11-02T06:10:00+00:00"
+        "2026-11-02T06:10:00Z"
     );
 }
 
@@ -312,12 +320,12 @@ fn zones_without_dst_and_london() {
     let london = tz("Europe/London");
     assert_eq!(
         next("0 9 * * *", "2026-10-26T02:00:00Z", kolkata).unwrap(),
-        "2026-10-26T03:30:00+00:00"
+        "2026-10-26T03:30:00Z"
     );
     // London 2026-03-29: 01:00 GMT jumps to 02:00 BST (01:00Z); 01:30 is skipped.
     assert_eq!(
         next("30 1 * * *", "2026-03-28T12:00:00Z", london).unwrap(),
-        "2026-03-29T01:00:00+00:00"
+        "2026-03-29T01:00:00Z"
     );
 }
 
@@ -336,7 +344,7 @@ fn is_due_agrees_with_next_after() {
     ] {
         let expr = cron(text);
         let start = at(start);
-        let end = start + TimeDelta::days(3);
+        let end = start + Span::days(3);
         let mut expected = Vec::new();
         let mut cursor = start;
         while let Some(run) = expr.next_after(cursor, &zone) {
@@ -347,12 +355,12 @@ fn is_due_agrees_with_next_after() {
             cursor = run;
         }
         let mut due = Vec::new();
-        let mut tick = start + TimeDelta::minutes(1);
+        let mut tick = start + Span::minutes(1);
         while tick < end {
             if expr.is_due(tick, &zone) {
                 due.push(tick);
             }
-            tick += TimeDelta::minutes(1);
+            tick += Span::minutes(1);
         }
         assert_eq!(due, expected, "{text} in {zone}");
     }
@@ -360,23 +368,23 @@ fn is_due_agrees_with_next_after() {
 
 /// Every real minute in `[from, to)` at which `cron` is due, by asking
 /// `is_due` of each one.
-fn due_minutes(cron: &CronExpression, zone: Tz, from: &str, to: &str) -> Vec<DateTime<Utc>> {
+fn due_minutes(cron: &CronExpression, zone: Tz, from: &str, to: &str) -> Vec<Timestamp> {
     let (mut tick, to) = (at(from), at(to));
     let mut due = Vec::new();
     while tick < to {
         if cron.is_due(tick, &zone) {
             due.push(tick);
         }
-        tick += TimeDelta::minutes(1);
+        tick += Span::minutes(1);
     }
     due
 }
 
 /// The runs `next_after` finds in `[from, to)`.
-fn runs(cron: &CronExpression, zone: Tz, from: &str, to: &str) -> Vec<DateTime<Utc>> {
+fn runs(cron: &CronExpression, zone: Tz, from: &str, to: &str) -> Vec<Timestamp> {
     let (from, to) = (at(from), at(to));
     let mut runs = Vec::new();
-    let mut cursor = from - TimeDelta::minutes(1);
+    let mut cursor = from - Span::minutes(1);
     while let Some(run) = cron.next_after(cursor, &zone) {
         if run >= to {
             break;
@@ -435,10 +443,10 @@ fn wildcard_expressions_run_on_every_real_minute_whose_clock_matches() {
                     let (mut t, end) = (at(from), at(to));
                     let mut matching = Vec::new();
                     while t < end {
-                        if expr.matches_local(t.with_timezone(&zone).naive_local()) {
+                        if expr.matches_local(zone.local(t).date_time()) {
                             matching.push(t);
                         }
-                        t += TimeDelta::minutes(1);
+                        t += Span::minutes(1);
                     }
                     matching
                 };
@@ -460,7 +468,7 @@ fn every_minute_never_pauses_and_hourly_runs_every_real_hour() {
             let all = runs(&cron("* * * * *"), zone, from, to);
             assert_eq!(all.len(), 360, "{zone}, {from}");
             assert!(
-                all.windows(2).all(|w| w[1] - w[0] == TimeDelta::minutes(1)),
+                all.windows(2).all(|w| w[1] - w[0] == Span::minutes(1)),
                 "{zone}, {from}: a pause"
             );
             // Every quarter of an hour on the wall clock: no gap longer
@@ -469,7 +477,7 @@ fn every_minute_never_pauses_and_hourly_runs_every_real_hour() {
             assert!(
                 quarters
                     .windows(2)
-                    .all(|w| w[1] - w[0] <= TimeDelta::minutes(45)),
+                    .all(|w| w[1] - w[0] <= Span::minutes(45)),
                 "{zone}, {from}: {quarters:?}"
             );
         }
@@ -508,7 +516,7 @@ fn wildcard_expressions_do_not_catch_up_a_gap() {
     );
     let at_local: Vec<_> = half
         .iter()
-        .map(|t| t.with_timezone(&new_york).format("%H:%M").to_string())
+        .map(|t| new_york.local(*t).format("%H:%M").to_string())
         .collect();
     // 00:30 EST, 01:30 EST, then 03:30 EDT (not 03:00).
     assert_eq!(at_local, ["00:30", "01:30", "03:30", "04:30"]);
@@ -520,7 +528,7 @@ fn wildcard_expressions_do_not_catch_up_a_gap() {
     );
     let at_local: Vec<_> = hourly
         .iter()
-        .map(|t| t.with_timezone(&new_york).format("%H:%M").to_string())
+        .map(|t| new_york.local(*t).format("%H:%M").to_string())
         .collect();
     assert_eq!(at_local, ["00:00", "01:00", "03:00", "04:00"]);
 }

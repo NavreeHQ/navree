@@ -1,6 +1,6 @@
 //! Properties of the parser and the next-run search.
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_schedule::{CronExpression, MAX_EXPRESSION_LEN};
 use navree_time::Tz;
 use proptest::prelude::*;
@@ -20,8 +20,8 @@ fn zone() -> impl Strategy<Value = Tz> {
 }
 
 /// Seconds since the epoch between 2020 and 2040.
-fn start() -> impl Strategy<Value = DateTime<Utc>> {
-    (1_577_836_800_i64..2_208_988_800).prop_map(|s| DateTime::from_timestamp(s, 0).unwrap())
+fn start() -> impl Strategy<Value = Timestamp> {
+    (1_577_836_800_i64..2_208_988_800).prop_map(|s| Timestamp::from_secs(s).unwrap())
 }
 
 fn numeric(min: u32, max: u32) -> impl Strategy<Value = String> {
@@ -126,14 +126,14 @@ proptest! {
                 break;
             };
             prop_assert!(run > cursor, "{} is not after {}", run, cursor);
-            prop_assert_eq!(run.timestamp() % 60, 0);
+            prop_assert_eq!(run.as_secs() % 60, 0);
             prop_assert!(cron.is_due(run, &zone), "{} in {} is not due at {}", text, zone, run);
             // Nothing due in between, when the gap is short enough to scan.
-            if run - cursor <= TimeDelta::days(3) {
-                let mut minute = DateTime::from_timestamp(cursor.timestamp().div_euclid(60) * 60 + 60, 0).unwrap();
+            if run - cursor <= Span::days(3) {
+                let mut minute = Timestamp::from_secs(cursor.as_secs().div_euclid(60) * 60 + 60).unwrap();
                 while minute < run {
                     prop_assert!(!cron.is_due(minute, &zone), "{} in {}: {} is due before {}", text, zone, minute, run);
-                    minute += TimeDelta::minutes(1);
+                    minute += Span::minutes(1);
                 }
             }
             cursor = run;
@@ -153,7 +153,7 @@ fn the_search_is_bounded() {
         "0 0 W * *",
     ] {
         if let Ok(cron) = CronExpression::parse(text) {
-            let start = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+            let start = Timestamp::from_secs(1_800_000_000).unwrap();
             let _ = cron.next_after(start, &utc);
         }
     }
@@ -166,7 +166,7 @@ fn the_search_is_bounded() {
 }
 
 /// Starts within three hours of a clock change, in zones that have them.
-fn near_a_clock_change() -> impl Strategy<Value = (Tz, DateTime<Utc>)> {
+fn near_a_clock_change() -> impl Strategy<Value = (Tz, Timestamp)> {
     const CHANGES: &[(&str, i64)] = &[
         ("America/New_York", 1_772_953_200),    // 2026-03-08T07:00:00Z
         ("America/New_York", 1_793_512_800),    // 2026-11-01T06:00:00Z
@@ -179,7 +179,7 @@ fn near_a_clock_change() -> impl Strategy<Value = (Tz, DateTime<Utc>)> {
     (prop::sample::select(CHANGES), -3 * 3600_i64..3 * 3600).prop_map(|((zone, change), delta)| {
         (
             zone.parse::<Tz>().unwrap(),
-            DateTime::from_timestamp(change + delta, 0).unwrap(),
+            Timestamp::from_secs(change + delta).unwrap(),
         )
     })
 }
@@ -195,7 +195,7 @@ proptest! {
         (zone, start) in near_a_clock_change(),
     ) {
         let cron = CronExpression::parse(&text).unwrap();
-        let end = start + TimeDelta::hours(6);
+        let end = start + Span::hours(6);
         let mut found = Vec::new();
         let mut cursor = start;
         while let Some(run) = cron.next_after(cursor, &zone) {
@@ -206,12 +206,12 @@ proptest! {
             cursor = run;
         }
         let mut due = Vec::new();
-        let mut tick = DateTime::from_timestamp(start.timestamp().div_euclid(60) * 60 + 60, 0).unwrap();
+        let mut tick = Timestamp::from_secs(start.as_secs().div_euclid(60) * 60 + 60).unwrap();
         while tick < end {
             if cron.is_due(tick, &zone) {
                 due.push(tick);
             }
-            tick += TimeDelta::minutes(1);
+            tick += Span::minutes(1);
         }
         prop_assert_eq!(found, due, "{} in {}", text, zone);
     }

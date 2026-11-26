@@ -44,7 +44,14 @@ async fn runs_are_reported_with_their_outcome() {
     );
     assert_eq!(runs[0].task, "report");
     assert_eq!(runs[0].error, None);
-    assert_eq!(runs[0].tick, at("2026-10-25T04:00:00Z"));
+    assert_eq!(
+        runs[0]
+            .tick
+            .to_rfc3339()
+            .parse::<navree_datetime::Timestamp>()
+            .unwrap(),
+        at("2026-10-25T04:00:00Z")
+    );
     assert_eq!(runs[1].task, "sync");
     assert_eq!(runs[1].error.as_deref(), Some("connection refused"));
     assert_eq!(counter.get(), 1);

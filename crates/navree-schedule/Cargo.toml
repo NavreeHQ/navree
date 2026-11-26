@@ -25,10 +25,10 @@ test-postgres = ["navree-db/postgres"]
 test-mysql = ["navree-db/mysql"]
 
 [dependencies]
-chrono = { workspace = true }
 futures-util = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }

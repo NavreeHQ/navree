@@ -1,7 +1,7 @@
 //! [`LocalRun`]: what a scheduled run is for, and on which clock.
 
-use chrono::{DateTime, NaiveDateTime, Utc};
 use navree_contracts::ZoneLevel;
+use navree_datetime::{DateTime, Timestamp};
 use navree_time::Zone;
 use uuid::Uuid;
 
@@ -32,9 +32,9 @@ pub struct LocalRun {
     /// The zone the frequency was read on (`UTC` for plain tasks).
     pub zone: Zone,
     /// The tick, UTC.
-    pub tick: DateTime<Utc>,
+    pub tick: Timestamp,
     /// The tick on the zone's clock.
-    pub local: NaiveDateTime,
+    pub local: DateTime,
 }
 
 impl LocalRun {

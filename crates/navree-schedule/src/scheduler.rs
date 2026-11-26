@@ -5,9 +5,9 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Instant;
 
-use chrono::{DateTime, DurationRound, TimeDelta, Timelike, Utc};
 use futures_util::future::join_all;
 use navree_contracts::{Clock, ZoneLevel};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{Db, Executor};
 use navree_kernel::{AppContext, BoxError, CommandFn, WeakAppContext};
 use navree_telemetry::{
@@ -29,7 +29,7 @@ pub struct RunOutcome {
     /// The task name.
     pub task: String,
     /// The tick (the minute the task was due at).
-    pub tick: DateTime<Utc>,
+    pub tick: Timestamp,
     /// What happened.
     pub status: RunStatus,
 }
@@ -68,7 +68,7 @@ pub struct TaskInfo {
     pub expr: String,
     /// The first due minute after the time given to `list` (`None` for
     /// tasks that run per owner, whose zones differ).
-    pub next_run: Option<DateTime<Utc>>,
+    pub next_run: Option<Timestamp>,
     /// Whether it skips ticks while an earlier run is still running.
     pub without_overlapping: bool,
     /// The clock the expression is read on: `UTC`, a zone name, or
@@ -262,10 +262,10 @@ impl Scheduler {
     /// A task that runs per owner is due once for each owner whose local
     /// clock matches; when listing the owners fails, the task is skipped
     /// for this tick (and the error logged).
-    pub async fn tick(&self, now: DateTime<Utc>) -> Result<Vec<RunOutcome>, ScheduleError> {
+    pub async fn tick(&self, now: Timestamp) -> Result<Vec<RunOutcome>, ScheduleError> {
         let app = self.app.upgrade().ok_or(ScheduleError::AppDropped)?;
         let tick = minute_of(now);
-        if tick.minute() == 0 {
+        if tick.date_time_utc().time().minute() == 0 {
             self.prune(tick).await;
         }
         let mut owners: HashMap<ZoneLevel, Vec<(Uuid, Zone)>> = HashMap::new();
@@ -273,12 +273,12 @@ impl Scheduler {
         for task in &self.tasks {
             match task.zone {
                 TaskZone::Utc => {
-                    if task.cron.is_due(tick, &Utc) {
+                    if task.cron.is_due(tick, Zone::UTC) {
                         due.push((task.clone(), self.run(task, tick, None, Zone::UTC)));
                     }
                 }
                 TaskZone::Fixed(zone) => {
-                    if task.cron.is_due(tick, &zone.tz()) {
+                    if task.cron.is_due(tick, zone) {
                         due.push((task.clone(), self.run(task, tick, None, zone)));
                     }
                 }
@@ -287,7 +287,7 @@ impl Scheduler {
                         continue;
                     };
                     for (owner, zone) in list {
-                        if task.cron.is_due(tick, &zone.tz()) {
+                        if task.cron.is_due(tick, zone) {
                             due.push((
                                 task.clone(),
                                 self.run(task, tick, Some((level, owner)), zone),
@@ -307,7 +307,7 @@ impl Scheduler {
     fn run(
         &self,
         task: &Task,
-        tick: DateTime<Utc>,
+        tick: Timestamp,
         owner: Option<(ZoneLevel, Uuid)>,
         zone: Zone,
     ) -> Run {
@@ -322,7 +322,7 @@ impl Scheduler {
                 level: owner.map(|(level, _)| level),
                 zone,
                 tick,
-                local: zone.local(tick).naive_local(),
+                local: zone.local(tick).date_time(),
             },
         }
     }
@@ -352,7 +352,7 @@ impl Scheduler {
 
     /// The current time on the scheduler's clock (the app's `dyn Clock`,
     /// else the system clock).
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         self.clock.now()
     }
 
@@ -367,8 +367,8 @@ impl Scheduler {
             .upgrade()
             .ok_or(ScheduleError::AppDropped)?
             .tracker();
-        let minute = TimeDelta::minutes(1);
-        let mut last: Option<DateTime<Utc>> = None;
+        let minute = Span::minutes(1);
+        let mut last: Option<Timestamp> = None;
         loop {
             let now = self.clock.now();
             let mut next = minute_of(now) + minute;
@@ -393,16 +393,15 @@ impl Scheduler {
 
     /// Every task, in registration order (modules in dependency order),
     /// with its next due minute after `now`.
-    pub fn list(&self, now: DateTime<Utc>) -> Vec<TaskInfo> {
+    pub fn list(&self, now: Timestamp) -> Vec<TaskInfo> {
         self.tasks
             .iter()
             .map(|task| {
                 let (next_run, zone) = match task.zone {
-                    TaskZone::Utc => (task.cron.next_after(now, &Utc), "UTC".to_owned()),
-                    TaskZone::Fixed(zone) => (
-                        task.cron.next_after(now, &zone.tz()),
-                        zone.name().to_owned(),
-                    ),
+                    TaskZone::Utc => (task.cron.next_after(now, Zone::UTC), "UTC".to_owned()),
+                    TaskZone::Fixed(zone) => {
+                        (task.cron.next_after(now, zone), zone.name().to_owned())
+                    }
                     TaskZone::PerOwner(level) => (None, format!("per {level} (local)")),
                 };
                 TaskInfo {
@@ -425,7 +424,7 @@ impl Scheduler {
     }
 
     /// Deletes runs older than [`RUN_RETENTION`] (once an hour, from `tick`).
-    async fn prune(&self, tick: DateTime<Utc>) {
+    async fn prune(&self, tick: Timestamp) {
         match store::prune(self.executor(), tick - RUN_RETENTION).await {
             Ok(0) => {}
             Ok(deleted) => {
@@ -443,7 +442,7 @@ impl Scheduler {
         app: &AppContext,
         task: Arc<Task>,
         run: Run,
-        tick: DateTime<Utc>,
+        tick: Timestamp,
     ) -> Result<RunOutcome, ScheduleError> {
         let conn = self.executor();
         let name = run.name.clone();
@@ -494,7 +493,10 @@ impl Scheduler {
             telemetry.emit_with(EventKind::ScheduledTaskRan, || {
                 TelemetryEvent::ScheduledTaskRan(ScheduledTaskRan {
                     task: name.clone(),
-                    tick,
+                    tick: tick
+                        .to_rfc3339()
+                        .parse()
+                        .expect("a Timestamp formats as RFC 3339"),
                     duration: elapsed,
                     error: error.clone(),
                 })
@@ -530,8 +532,8 @@ impl fmt::Debug for Scheduler {
 }
 
 /// `now` truncated to the minute.
-fn minute_of(now: DateTime<Utc>) -> DateTime<Utc> {
-    now.duration_trunc(TimeDelta::minutes(1)).unwrap_or(now)
+fn minute_of(now: Timestamp) -> Timestamp {
+    Timestamp::from_secs(now.as_secs().div_euclid(60) * 60).unwrap_or(now)
 }
 
 /// What a validated task runs.
@@ -547,7 +549,7 @@ async fn execute(
     task: Arc<Task>,
     app: AppContext,
     name: String,
-    tick: DateTime<Utc>,
+    tick: Timestamp,
 ) -> Result<(), BoxError> {
     match &task.body {
         Body::Run(f) => f(app, format!("{name}@{}", tick.to_rfc3339())).await,
@@ -556,11 +558,11 @@ async fn execute(
 }
 
 /// `schedule_runs` rows are kept this long (pruned at the top of each hour).
-pub const RUN_RETENTION: TimeDelta = TimeDelta::days(7);
+pub const RUN_RETENTION: Span = Span::days(7);
 
 /// A `running` row older than this no longer blocks a `without_overlapping`
 /// task (its process probably crashed).
-const OVERLAP_EXPIRY: TimeDelta = TimeDelta::hours(24);
+const OVERLAP_EXPIRY: Span = Span::hours(24);
 
 /// The longest task name (`schedule_runs.task` is `VARCHAR(191)`).
 const MAX_NAME_LEN: usize = 191;
@@ -639,9 +641,7 @@ mod tests {
 
     #[test]
     fn minute_of_truncates_seconds_and_nanos() {
-        let now = DateTime::parse_from_rfc3339("2026-10-25T02:30:59.999Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        assert_eq!(minute_of(now).to_rfc3339(), "2026-10-25T02:30:00+00:00");
+        let now = Timestamp::parse_rfc3339("2026-10-25T02:30:59.999Z").unwrap();
+        assert_eq!(minute_of(now).to_rfc3339(), "2026-10-25T02:30:00Z");
     }
 }

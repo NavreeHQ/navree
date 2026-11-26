@@ -91,14 +91,14 @@ async fn ran_at(
     scheduler: &navree_schedule::Scheduler,
     from: &str,
     to: &str,
-) -> std::collections::BTreeMap<String, Vec<chrono::DateTime<chrono::Utc>>> {
+) -> std::collections::BTreeMap<String, Vec<navree_datetime::Timestamp>> {
     let mut ran = std::collections::BTreeMap::<String, Vec<_>>::new();
     let mut minute = at(from);
     while minute < at(to) {
         for outcome in scheduler.tick(minute).await.unwrap() {
             ran.entry(outcome.task).or_default().push(minute);
         }
-        minute += chrono::TimeDelta::minutes(1);
+        minute += navree_datetime::Span::minutes(1);
     }
     ran
 }

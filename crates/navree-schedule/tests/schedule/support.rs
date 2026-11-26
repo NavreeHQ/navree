@@ -5,8 +5,8 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use chrono::{DateTime, Utc};
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, Db, DbOptions, Executor, Statement};
 use navree_kernel::{App, AppBuilder, AppContext, BoxError, Module, ModuleBuilder, Navree};
 use navree_schedule::{ModuleBuilderScheduleExt, Schedule, ScheduleModule, Scheduler};
@@ -22,10 +22,8 @@ pub async fn within<T>(f: impl std::future::Future<Output = T>) -> T {
 }
 
 /// `2026-10-25T02:30:00Z`-style UTC time.
-pub fn at(time: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(time)
-        .expect("an RFC 3339 time")
-        .with_timezone(&Utc)
+pub fn at(time: &str) -> Timestamp {
+    Timestamp::parse_rfc3339(time).expect("an RFC 3339 time")
 }
 
 /// A module that schedules whatever `f` declares.
@@ -123,9 +121,9 @@ pub async fn scheduler(app: &App) -> Arc<Scheduler> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunRow {
     pub task: String,
-    pub tick: DateTime<Utc>,
-    pub started_at: DateTime<Utc>,
-    pub finished_at: Option<DateTime<Utc>>,
+    pub tick: Timestamp,
+    pub started_at: Timestamp,
+    pub finished_at: Option<Timestamp>,
     pub status: String,
     pub error: Option<String>,
 }

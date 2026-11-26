@@ -1,7 +1,7 @@
 //! The `schedule_runs` table: its migrations (a TimescaleDB hypertable on
 //! `tick`) and the statements the scheduler runs.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{Hypertable, KeyStrategy, Migration, Schema, SchemaResult};
 use navree_db::{DbError, Executor, Statement, prune_time_series};
 
@@ -54,8 +54,8 @@ impl Migration for CreateScheduleRuns {
 pub(crate) async fn claim<E: Executor + ?Sized>(
     executor: &E,
     task: &str,
-    tick: DateTime<Utc>,
-    started_at: DateTime<Utc>,
+    tick: Timestamp,
+    started_at: Timestamp,
 ) -> Result<bool, DbError> {
     // MySQL's `INSERT IGNORE` skips a duplicate key (and only that, here:
     // every column is bound and checked by the table).
@@ -80,8 +80,8 @@ pub(crate) async fn claim<E: Executor + ?Sized>(
 pub(crate) async fn finish<E: Executor + ?Sized>(
     executor: &E,
     task: &str,
-    tick: DateTime<Utc>,
-    finished_at: DateTime<Utc>,
+    tick: Timestamp,
+    finished_at: Timestamp,
     error: Option<&str>,
 ) -> Result<(), DbError> {
     let status = if error.is_some() { FAILED } else { SUCCEEDED };
@@ -106,15 +106,15 @@ pub(crate) async fn finish<E: Executor + ?Sized>(
 pub(crate) async fn running_elsewhere<E: Executor + ?Sized>(
     executor: &E,
     task: &str,
-    tick: DateTime<Utc>,
-    since: DateTime<Utc>,
+    tick: Timestamp,
+    since: Timestamp,
 ) -> Result<bool, DbError> {
     let statement = Statement::portable(
         format!("SELECT started_at FROM {RUNS_TABLE} WHERE task = ? AND status = ? AND tick <> ?"),
         [task.into(), RUNNING.into(), tick.into()],
     );
     for row in executor.fetch_all(&statement).await? {
-        let started_at: DateTime<Utc> = row.get("started_at")?;
+        let started_at: Timestamp = row.get("started_at")?;
         if started_at > since {
             return Ok(true);
         }
@@ -127,7 +127,7 @@ pub(crate) async fn running_elsewhere<E: Executor + ?Sized>(
 /// before `before` go as whole chunks.
 pub(crate) async fn prune<E: Executor + ?Sized>(
     executor: &E,
-    before: DateTime<Utc>,
+    before: Timestamp,
 ) -> Result<u64, DbError> {
     prune_time_series(executor, RUNS_TABLE, "tick", before).await
 }

@@ -197,15 +197,13 @@ fn list_table(tasks: &[TaskInfo]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
 
     use super::*;
 
     #[test]
     fn list_table_aligns_columns() {
-        let next = DateTime::parse_from_rfc3339("2026-10-26T02:30:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let next = Timestamp::parse_rfc3339("2026-10-26T02:30:00Z").unwrap();
         let table = list_table(&[
             TaskInfo {
                 name: "report".to_owned(),

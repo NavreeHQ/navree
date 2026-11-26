@@ -115,7 +115,7 @@ async fn a_time_skipped_by_dst_runs_right_after_the_gap() {
         if !scheduler.tick(minute).await.unwrap().is_empty() {
             due_at.push(minute);
         }
-        minute += chrono::TimeDelta::minutes(1);
+        minute += navree_datetime::Span::minutes(1);
     }
     assert_eq!(due_at, [at("2026-03-08T07:00:00Z")]);
     assert_eq!(runs.get(), 1);
@@ -395,7 +395,7 @@ async fn utc_tasks_see_a_local_run_without_owner() {
                     let record = record.clone();
                     async move {
                         let run = LocalRun::current().expect("inside a scheduled run");
-                        assert_eq!(run.tick, run.local.and_utc());
+                        assert_eq!(run.tick, run.local.in_utc());
                         record
                             .0
                             .lock()
