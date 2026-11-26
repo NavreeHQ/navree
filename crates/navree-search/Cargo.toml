@@ -42,13 +42,13 @@ fuzzing = []
 ai = ["dep:navree-ai"]
 
 [dependencies]
-chrono = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 navree-access = { workspace = true }
 navree-ai = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }

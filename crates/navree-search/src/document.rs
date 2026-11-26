@@ -104,12 +104,16 @@ fn date_millis(text: &str) -> Option<i64> {
         return None;
     }
     if bytes.len() == 10 {
-        let date = chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok()?;
-        return Some(date.and_hms_opt(0, 0, 0)?.and_utc().timestamp_millis());
+        let date = navree_datetime::Date::parse("%Y-%m-%d", text).ok()?;
+        return Some(
+            date.at(navree_datetime::Time::MIDNIGHT)
+                .in_utc()
+                .as_millis(),
+        );
     }
-    chrono::DateTime::parse_from_rfc3339(text)
+    navree_datetime::Timestamp::parse_rfc3339(text)
         .ok()
-        .map(|dt| dt.timestamp_millis())
+        .map(navree_datetime::Timestamp::as_millis)
 }
 
 #[cfg(test)]
