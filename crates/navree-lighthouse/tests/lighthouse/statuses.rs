@@ -2,6 +2,7 @@
 //! (two apps sharing a database with different release labels), ignoring
 //! and reopening.
 
+use navree_datetime::{Span, Timestamp};
 use navree_lighthouse::{IgnoreFor, IssueFilter, IssueStatus};
 use navree_testing::TestApp;
 
@@ -153,7 +154,7 @@ async fn an_issue_ignored_until_a_time_reopens_after_it() {
     store
         .ignore(
             issue.id,
-            IgnoreFor::Until(chrono::Utc::now() - chrono::TimeDelta::seconds(1)),
+            IgnoreFor::Until(Timestamp::now() - Span::seconds(1)),
             None,
         )
         .await

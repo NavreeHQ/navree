@@ -84,7 +84,7 @@ fn timeline_chart(timeline: &[TimelinePoint]) -> Node {
     }
     Chart::bar("Requests and errors")
         .hide_title()
-        .times(timeline.iter().map(|point| point.at.naive_utc()))
+        .times(timeline.iter().map(|point| point.at.date_time_utc()))
         .series(Series::new(
             "Requests",
             timeline.iter().map(|point| point.count),

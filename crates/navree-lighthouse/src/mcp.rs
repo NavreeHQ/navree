@@ -24,8 +24,8 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use navree_access::Subject as _;
+use navree_datetime::Timestamp;
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_mcp::{
@@ -252,7 +252,7 @@ pub struct IgnoreIssueArgs {
     /// Ignore it until then (RFC 3339).
     #[validate(skip)]
     #[serde(default)]
-    pub until: Option<DateTime<Utc>>,
+    pub until: Option<Timestamp>,
     /// Ignore it for this many more occurrences (at least 1).
     #[validate(skip)]
     #[serde(default)]

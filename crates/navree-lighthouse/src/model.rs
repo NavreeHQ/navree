@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -206,9 +206,9 @@ pub struct Issue {
     /// Distinct users among the stored occurrences.
     pub users: i64,
     /// When it first happened.
-    pub first_seen: DateTime<Utc>,
+    pub first_seen: Timestamp,
     /// When it last happened.
-    pub last_seen: DateTime<Utc>,
+    pub last_seen: Timestamp,
     /// The issue's page on the dashboard.
     pub url: String,
 }

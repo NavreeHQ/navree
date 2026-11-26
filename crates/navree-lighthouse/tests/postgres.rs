@@ -15,7 +15,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, Db, DbOptions, Executor, Migrator, Pool, Statement};
 use navree_lighthouse::{IssueFilter, IssueStatus, Lighthouse, LighthouseModule, Period, Report};
 use navree_telemetry::{EventContext, RequestHandled, Telemetry, TelemetryEvent, TelemetryRecord};
@@ -86,7 +86,7 @@ async fn process(scratch: &Scratch, server: &str) -> TestApp {
 
 fn handled(id: &str, status: u16) -> TelemetryRecord {
     TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context: EventContext {
             request_id: Some(id.to_owned()),
             ..EventContext::default()

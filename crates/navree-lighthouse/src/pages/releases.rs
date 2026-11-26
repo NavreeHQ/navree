@@ -229,6 +229,8 @@ pub(crate) async fn page(
 
 #[cfg(test)]
 mod tests {
+    use navree_datetime::Timestamp;
+
     use super::*;
 
     #[test]
@@ -240,9 +242,9 @@ mod tests {
             url: None,
             notes: None,
             source: "api".to_owned(),
-            deployed_at: chrono::Utc::now(),
-            first_seen: chrono::Utc::now(),
-            last_seen: chrono::Utc::now(),
+            deployed_at: Timestamp::now(),
+            first_seen: Timestamp::now(),
+            last_seen: Timestamp::now(),
             introduced: 2,
             regressed: 0,
             current: true,

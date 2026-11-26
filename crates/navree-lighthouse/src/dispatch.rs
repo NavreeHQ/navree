@@ -5,8 +5,8 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::Dispatcher;
+use navree_datetime::{Span, Timestamp};
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{AppContext, BoxError};
 use navree_mail::Mailer;
@@ -139,7 +139,7 @@ impl Alerter {
             issue,
             environment: self.environment.clone(),
             release: self.release.clone(),
-            at: Utc::now(),
+            at: Timestamp::now(),
             test,
         }
     }
@@ -153,7 +153,7 @@ impl Alerter {
         if alert.issue.status == IssueStatus::Ignored || alert.issue.level == Level::Info {
             return Ok(0);
         }
-        let cooldown = TimeDelta::minutes(i64::from(self.tuning.cooldown_minutes()));
+        let cooldown = Span::minutes(i64::from(self.tuning.cooldown_minutes()));
         let subject = alert.issue.id.to_string();
         if self
             .store
@@ -163,7 +163,7 @@ impl Alerter {
             return Ok(0);
         }
         let mut sent = 0;
-        let now = Utc::now();
+        let now = Timestamp::now();
         for channel in self.channels() {
             if !self.wants(channel.as_ref(), &alert, now) {
                 continue;
@@ -192,7 +192,7 @@ impl Alerter {
     /// Whether `channel` gets `alert` at `now`: not while it is muted, and
     /// for the kinds the dashboard set for it, else the kinds its
     /// configuration asks for.
-    fn wants(&self, channel: &dyn AlertChannel, alert: &Alert, now: DateTime<Utc>) -> bool {
+    fn wants(&self, channel: &dyn AlertChannel, alert: &Alert, now: Timestamp) -> bool {
         let state = self.tuning.channel(channel.name());
         if state.muted_at(now) {
             return false;
@@ -214,7 +214,7 @@ impl Alerter {
 
     /// The channels as the dashboard shows them.
     pub(crate) fn channel_infos(&self) -> Vec<ChannelInfo> {
-        let now = Utc::now();
+        let now = Timestamp::now();
         self.channels()
             .iter()
             .map(|channel| {
@@ -256,7 +256,7 @@ impl Alerter {
 
     /// The issue test alerts and kind probes are about.
     fn probe_issue(&self) -> Issue {
-        let now = Utc::now();
+        let now = Timestamp::now();
         Issue {
             id: Uuid::nil(),
             title: "Test alert from Lighthouse".to_owned(),

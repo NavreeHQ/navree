@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::{TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_lighthouse::entity::{issue, occurrence, sample};
 use navree_lighthouse::{IssueFilter, IssueStatus};
 use navree_orm::Model as _;
@@ -23,7 +23,7 @@ async fn prune_deletes_what_is_older_than_the_retention_and_keeps_open_issues() 
         .issue
         .clone();
     let conn = store.db();
-    let old = Utc::now() - TimeDelta::days(30);
+    let old = Timestamp::now() - Span::days(30);
 
     // An old resolved issue with an old occurrence, and an old trace.
     let resolved_id = Uuid::now_v7();
@@ -157,7 +157,7 @@ async fn old_sample(store: &navree_lighthouse::LighthouseStore) -> Uuid {
                 id,
                 kind: "request".into(),
                 name: "GET /old".into(),
-                at: Utc::now() - TimeDelta::days(40),
+                at: Timestamp::now() - Span::days(40),
                 duration_ms: 1.0,
                 status: Some(200),
                 outcome: "ok".into(),
@@ -186,7 +186,7 @@ async fn the_scheduler_prunes_daily_at_prune_at() {
     use navree_contracts::{Clock, FixedClock};
     use navree_schedule::{ScheduleModule, Scheduler};
 
-    let at = |h, m| chrono::TimeZone::with_ymd_and_hms(&Utc, 2026, 10, 27, h, m, 0).unwrap();
+    let at = |h, m| Timestamp::utc(2026, 10, 27, h, m, 0).unwrap();
     let clock = Arc::new(FixedClock::new(at(3, 9)));
     let app = builder()
         .config("lighthouse.prune_at", "03:10")
@@ -234,7 +234,7 @@ async fn options_in_code_schedule_the_command_itself() {
     let task = app
         .get::<Scheduler>()
         .await
-        .list(Utc::now())
+        .list(Timestamp::now())
         .into_iter()
         .find(|task| task.name == "lighthouse:prune")
         .expect("the command is scheduled");

@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_db::{Db, Executor, Statement};
 use navree_lighthouse::{IssueFilter, IssueKind, Period};
 use navree_telemetry::{
@@ -24,7 +24,7 @@ fn in_request(id: &str) -> EventContext {
 
 fn handled(id: &str, route: &str, status: u16, ms: u64) -> TelemetryRecord {
     TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context: in_request(id),
         event: TelemetryEvent::RequestHandled(RequestHandled {
             method: "GET".into(),
@@ -42,7 +42,7 @@ fn handled(id: &str, route: &str, status: u16, ms: u64) -> TelemetryRecord {
 
 fn query(id: &str, sql: &str) -> TelemetryRecord {
     TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context: in_request(id),
         event: TelemetryEvent::QueryExecuted(QueryExecuted {
             sql: sql.into(),
@@ -57,7 +57,7 @@ fn query(id: &str, sql: &str) -> TelemetryRecord {
 
 fn exception(id: &str) -> TelemetryRecord {
     TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context: in_request(id),
         event: TelemetryEvent::ExceptionReported(ExceptionReported {
             message: "deal not found".into(),

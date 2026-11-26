@@ -1,7 +1,7 @@
 //! The Issues list and an issue's page, with the forms that resolve,
 //! ignore and reopen it.
 
-use chrono::{TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_http::AppError;
 use navree_http::response::{IntoResponse, Response};
 use navree_ui::charts::{Chart, Series};
@@ -44,7 +44,7 @@ fn ignore_for(duration: &str) -> Result<IgnoreFor, AppError> {
         None if duration.is_empty() || duration == "forever" => Ok(IgnoreFor::Forever),
         Some(("hours", hours)) => number(hours)
             .filter(|hours| *hours <= 24 * 366)
-            .map(|hours| IgnoreFor::Until(Utc::now() + TimeDelta::hours(hours)))
+            .map(|hours| IgnoreFor::Until(Timestamp::now() + Span::hours(hours)))
             .ok_or_else(|| AppError::bad_request("choose how long to ignore the issue")),
         Some(("occurrences", count)) => number(count)
             .map(IgnoreFor::Occurrences)
@@ -443,7 +443,7 @@ pub(crate) async fn detail(
     } else {
         Chart::bar("Events per hour over the last 7 days")
             .hide_title()
-            .times(detail.timeline.iter().map(|point| point.at.naive_utc()))
+            .times(detail.timeline.iter().map(|point| point.at.date_time_utc()))
             .series(Series::new(
                 "Events",
                 detail.timeline.iter().map(|point| point.count),

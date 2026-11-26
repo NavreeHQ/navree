@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_http::AppError;
 use navree_http::response::{IntoResponse, Response};
 use navree_ui::charts::{Annotation, Chart, Series, Sparkline};
@@ -198,7 +198,7 @@ fn requests_chart(overview: &Overview) -> Node {
     }
     let mut chart = Chart::bar("Requests and exceptions")
         .hide_title()
-        .times(overview.timeline.iter().map(|point| point.at.naive_utc()))
+        .times(overview.timeline.iter().map(|point| point.at.date_time_utc()))
         .series(Series::new(
             "Requests",
             overview.timeline.iter().map(|point| point.count),
@@ -213,7 +213,7 @@ fn requests_chart(overview: &Overview) -> Node {
         .height(180);
     // A deploy is a line only inside the chart.
     let first = overview.timeline[0].at;
-    let length = TimeDelta::seconds(
+    let length = Span::seconds(
         i64::from(overview.period.resolution())
             * i64::try_from(overview.timeline.len()).unwrap_or(0),
     );
@@ -223,7 +223,7 @@ fn requests_chart(overview: &Overview) -> Node {
         .filter(|marker| marker.at >= first && marker.at <= first + length)
     {
         chart = chart.annotation(Annotation::event(
-            marker.at.naive_utc(),
+            marker.at.date_time_utc(),
             format!("Release {}", marker.name),
         ));
     }

@@ -5,6 +5,7 @@
 use std::sync::{Arc, Mutex};
 
 use http::Method;
+use navree_datetime::Timestamp;
 use navree_http_client::{FakeResponse, FakeServer, HttpClient};
 use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
@@ -117,7 +118,7 @@ async fn the_cooldown_holds_back_a_second_alert_of_a_kind() {
         issue,
         environment: "test".into(),
         release: "r1".into(),
-        at: chrono::Utc::now(),
+        at: Timestamp::now(),
         test: false,
     };
     assert_eq!(lighthouse.raise_alert(alert).await.unwrap(), 0);
@@ -253,7 +254,7 @@ async fn a_job_moving_to_the_failed_jobs_raises_failed_job() {
     let app = builder.build().await;
     let telemetry = navree_telemetry::Telemetry::from_app(app.ctx()).await;
     telemetry.record(navree_telemetry::TelemetryRecord {
-        at: chrono::Utc::now(),
+        at: Timestamp::now(),
         context: navree_telemetry::EventContext {
             job_id: Some("j9".into()),
             ..Default::default()
@@ -449,7 +450,7 @@ async fn a_failed_delivery_keeps_the_destinations_out_of_everything_stored() {
         "https://ops.acme.test/*",
         FakeResponse::connection_failed(),
     );
-    let clock = Arc::new(navree_contracts::FixedClock::new(chrono::Utc::now()));
+    let clock = Arc::new(navree_contracts::FixedClock::new(Timestamp::now()));
     let app = builder()
         .config("queue.driver", "memory")
         .config("lighthouse.alerts.slack.webhook_url", SLACK_URL)

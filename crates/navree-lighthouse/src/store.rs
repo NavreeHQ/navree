@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span as TimeSpan, Timestamp};
 use navree_db::{Db, DbError, Uow, prune_time_series};
 use navree_orm::{Assignment, ConflictUpdate, Filter, Model as _, OrmError, Record, col, table};
 use serde::{Deserialize, Serialize};
@@ -144,7 +144,7 @@ pub struct Occurrence {
     /// The issue.
     pub issue_id: Uuid,
     /// When it happened.
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
     /// Its level.
     pub level: String,
     /// The message.
@@ -205,9 +205,9 @@ pub struct AlertRecord {
     /// The last error.
     pub error: Option<String>,
     /// When it was raised.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it was delivered.
-    pub delivered_at: Option<DateTime<Utc>>,
+    pub delivered_at: Option<Timestamp>,
 }
 
 /// Everything about one issue.
@@ -233,15 +233,15 @@ pub struct IssueDetail {
     /// The environment of the latest occurrence.
     pub environment: Option<String>,
     /// When it was resolved.
-    pub resolved_at: Option<DateTime<Utc>>,
+    pub resolved_at: Option<Timestamp>,
     /// The release current when it was resolved in the next release.
     pub resolved_in_release: Option<String>,
     /// Ignored until then.
-    pub ignored_until: Option<DateTime<Utc>>,
+    pub ignored_until: Option<Timestamp>,
     /// Ignored for this many more occurrences.
     pub ignore_remaining: Option<i64>,
     /// When it last came back.
-    pub regressed_at: Option<DateTime<Utc>>,
+    pub regressed_at: Option<Timestamp>,
     /// The comment of the last status change.
     pub comment: Option<String>,
     /// Distinct workspaces among the stored occurrences.
@@ -258,7 +258,7 @@ pub struct IssueDetail {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TimelinePoint {
     /// The bucket's start.
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
     /// Requests (or occurrences, on an issue's timeline).
     pub count: i64,
     /// Exceptions (requests answering 4xx or 5xx, on a route's timeline).
@@ -281,7 +281,7 @@ pub struct FeedItem {
     /// Where (the route, or the issue's culprit).
     pub culprit: String,
     /// When.
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
 }
 
 /// The overview's figures for a period.
@@ -367,7 +367,7 @@ pub struct SampleSummary {
     /// The endpoint or job type.
     pub name: String,
     /// When it finished.
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
     /// How long it took (ms).
     pub duration_ms: f64,
     /// The response status.
@@ -505,7 +505,7 @@ pub enum IgnoreFor {
     /// Until someone reopens it.
     Forever,
     /// Until this time; the next occurrence after it reopens the issue.
-    Until(DateTime<Utc>),
+    Until(Timestamp),
     /// For this many more occurrences.
     Occurrences(i64),
 }
@@ -552,7 +552,7 @@ fn is_retryable(error: &LighthouseError) -> bool {
 
 /// Aggregate rows of one key merged over a period: the key, the summed
 /// values, and (count, errors) per bucket.
-type Merged = (String, Values, BTreeMap<DateTime<Utc>, (i64, i64)>);
+type Merged = (String, Values, BTreeMap<Timestamp, (i64, i64)>);
 
 impl LighthouseStore {
     pub(crate) fn new(
@@ -617,7 +617,7 @@ impl LighthouseStore {
         batch: Batch,
         labels: &Labels,
     ) -> Result<Vec<Candidate>, LighthouseError> {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let mut attempt = 0;
         let (mut candidates, touched) = loop {
             attempt += 1;
@@ -658,7 +658,7 @@ impl LighthouseStore {
                 continue;
             }
             let since = bucket_start(
-                now - TimeDelta::minutes(i64::from(spike.minutes) - 1),
+                now - TimeSpan::minutes(i64::from(spike.minutes) - 1),
                 MINUTE,
             );
             // Written already: a failed read here must not make the
@@ -685,7 +685,7 @@ impl LighthouseStore {
     async fn issue_count_since(
         &self,
         fingerprint: &str,
-        since: DateTime<Utc>,
+        since: Timestamp,
     ) -> Result<i64, LighthouseError> {
         let rows = aggregate::Model::query()
             .where_(aggregate::Model::KIND.eq(kind::ISSUE))
@@ -859,8 +859,8 @@ impl LighthouseStore {
         &self,
         fingerprints: &[String],
     ) -> Result<HashMap<String, Vec<i64>>, LighthouseError> {
-        let now = Utc::now();
-        let start = bucket_start(now, HOUR) - TimeDelta::hours(23);
+        let now = Timestamp::now();
+        let start = bucket_start(now, HOUR) - TimeSpan::hours(23);
         let mut out: HashMap<String, Vec<i64>> = HashMap::new();
         let hashes: Vec<String> = fingerprints.iter().map(|f| key_hash(f)).collect();
         for chunk in hashes.chunks(CHUNK) {
@@ -872,7 +872,7 @@ impl LighthouseStore {
                 .get(&self.db)
                 .await?;
             for row in rows {
-                let index = ((row.bucket - start).num_hours()).clamp(0, 23) as usize;
+                let index = ((row.bucket - start).as_hours()).clamp(0, 23) as usize;
                 out.entry(row.key_hash.clone())
                     .or_insert_with(|| vec![0; 24])[index] += row.count;
             }
@@ -908,8 +908,8 @@ impl LighthouseStore {
             .first(&self.db)
             .await?
             .map(|record| occurrence_of(record.into_inner()));
-        let now = Utc::now();
-        let start = bucket_start(now, HOUR) - TimeDelta::hours(7 * 24 - 1);
+        let now = Timestamp::now();
+        let start = bucket_start(now, HOUR) - TimeSpan::hours(7 * 24 - 1);
         let rows = aggregate::Model::query()
             .where_(aggregate::Model::KIND.eq(kind::ISSUE))
             .where_(aggregate::Model::RESOLUTION.eq(HOUR))
@@ -919,13 +919,13 @@ impl LighthouseStore {
             .await?;
         let mut timeline: Vec<TimelinePoint> = (0..7 * 24)
             .map(|i| TimelinePoint {
-                at: start + TimeDelta::hours(i),
+                at: start + TimeSpan::hours(i),
                 count: 0,
                 errors: 0,
             })
             .collect();
         for aggregate in rows {
-            let index = (aggregate.bucket - start).num_hours().clamp(0, 7 * 24 - 1) as usize;
+            let index = (aggregate.bucket - start).as_hours().clamp(0, 7 * 24 - 1) as usize;
             timeline[index].count += aggregate.count;
         }
         let alerts = self.alerts_for(Some(id)).await?;
@@ -1022,7 +1022,7 @@ impl LighthouseStore {
         comment: Option<String>,
     ) -> Result<Issue, LighthouseError> {
         self.issue_row(id).await?;
-        let now = Utc::now();
+        let now = Timestamp::now();
         let (status, release) = if in_next_release {
             (
                 IssueStatus::ResolvedInNextRelease,
@@ -1076,7 +1076,7 @@ impl LighthouseStore {
                     issue::Model::IGNORED_UNTIL.set(until),
                     issue::Model::IGNORE_REMAINING.set(remaining),
                     issue::Model::COMMENT.set(comment),
-                    issue::Model::UPDATED_AT.set(Utc::now()),
+                    issue::Model::UPDATED_AT.set(Timestamp::now()),
                 ],
             )
             .await?;
@@ -1087,7 +1087,7 @@ impl LighthouseStore {
     pub async fn reopen(&self, id: Uuid) -> Result<Issue, LighthouseError> {
         self.issue_row(id).await?;
         let mut columns = reopen_columns();
-        columns.push(issue::Model::UPDATED_AT.set(Utc::now()));
+        columns.push(issue::Model::UPDATED_AT.set(Timestamp::now()));
         issue::Model::query()
             .where_key(id)
             .update(&self.db, columns)
@@ -1127,7 +1127,7 @@ impl LighthouseStore {
         period: Period,
         key: Option<&str>,
     ) -> Result<Vec<Merged>, LighthouseError> {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let resolution = period.resolution();
         let start = period_start(now, period);
         let mut query = aggregate::Model::query()
@@ -1181,20 +1181,20 @@ impl LighthouseStore {
         let exception_count: i64 = exceptions.iter().map(|(_, values, _)| values.count).sum();
         let failed_jobs: i64 = jobs.iter().map(|(_, values, _)| values.extra).sum();
         let open_issues = self.open_issue_count().await?;
-        let now = Utc::now();
+        let now = Timestamp::now();
         let mut timeline = empty_timeline(now, period);
         let start = period_start(now, period);
         let step = i64::from(period.resolution());
         for (_, _, points) in &requests {
             for (at, (count, _)) in points {
-                let index = ((*at - start).num_seconds() / step).clamp(0, timeline.len() as i64 - 1)
+                let index = ((*at - start).as_seconds() / step).clamp(0, timeline.len() as i64 - 1)
                     as usize;
                 timeline[index].count += count;
             }
         }
         for (_, _, points) in &exceptions {
             for (at, (count, _)) in points {
-                let index = ((*at - start).num_seconds() / step).clamp(0, timeline.len() as i64 - 1)
+                let index = ((*at - start).as_seconds() / step).clamp(0, timeline.len() as i64 - 1)
                     as usize;
                 timeline[index].errors += count;
             }
@@ -1285,20 +1285,20 @@ impl LighthouseStore {
             .next()
             .map(|(_, values, points)| (values, points))
             .unwrap_or_default();
-        let now = Utc::now();
+        let now = Timestamp::now();
         let start = period_start(now, period);
         let step = i64::from(period.resolution());
         let mut timeline = empty_timeline(now, period);
         for (at, (count, errors)) in points {
             let index =
-                ((at - start).num_seconds() / step).clamp(0, timeline.len() as i64 - 1) as usize;
+                ((at - start).as_seconds() / step).clamp(0, timeline.len() as i64 - 1) as usize;
             timeline[index].count += count;
             timeline[index].errors += errors;
         }
         let slowest = sample::Model::query()
             .where_(sample::Model::KIND.eq("request"))
             .where_(sample::Model::NAME.eq(endpoint))
-            .where_(sample::Model::AT.gte(now - TimeDelta::minutes(period.minutes())))
+            .where_(sample::Model::AT.gte(now - TimeSpan::minutes(period.minutes())))
             .order_by_desc(sample::Model::DURATION_MS)
             .limit(20)
             .get(&self.db)
@@ -1390,12 +1390,12 @@ impl LighthouseStore {
     /// hypertables, the days entirely before the cutoff go as whole chunks
     /// (see [`prune_time_series`]).
     pub async fn prune(&self, days: u32) -> Result<PruneSummary, LighthouseError> {
-        let now = Utc::now();
-        let cutoff = now - TimeDelta::days(i64::from(days.max(1)));
+        let now = Timestamp::now();
+        let cutoff = now - TimeSpan::days(i64::from(days.max(1)));
         let db = &self.db;
         let samples = prune_time_series(db, SAMPLES_TABLE, "at", cutoff).await?;
         let occurrences = prune_time_series(db, OCCURRENCES_TABLE, "at", cutoff).await?;
-        let minute_cutoff = cutoff.max(now - TimeDelta::days(2));
+        let minute_cutoff = cutoff.max(now - TimeSpan::days(2));
         let aggregates = prune_time_series(db, AGGREGATES_TABLE, "bucket", cutoff).await?
             + aggregate::Model::query()
                 .where_(aggregate::Model::RESOLUTION.eq(MINUTE))
@@ -1433,7 +1433,7 @@ impl LighthouseStore {
         &self,
         subject: &str,
         kind: AlertKind,
-        since: DateTime<Utc>,
+        since: Timestamp,
     ) -> Result<bool, LighthouseError> {
         Ok(alert::Model::query()
             .where_(alert::Model::SUBJECT_KEY.eq(subject))
@@ -1494,7 +1494,7 @@ impl LighthouseStore {
         attempts: i32,
         last_attempt: bool,
     ) -> Result<(), LighthouseError> {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let mut columns = vec![alert::Model::ATTEMPTS.set(attempts)];
         match result {
             Ok(()) => columns.extend([
@@ -1522,7 +1522,7 @@ async fn write_rows(
     uow: &Uow,
     batch: &Batch,
     labels: &Labels,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<(Vec<Candidate>, Vec<issue::Model>), LighthouseError> {
     let mut candidates = Vec::new();
     let mut touched: Vec<issue::Model> = Vec::new();
@@ -1716,10 +1716,10 @@ async fn count_existing(
     uow: &Uow,
     mut current: issue::Model,
     n: i64,
-    last_at: DateTime<Utc>,
+    last_at: Timestamp,
     level: Level,
     labels: &Labels,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<(issue::Model, bool), LighthouseError> {
     // An existing issue. The counts are one relative statement, so
     // processes writing at once never lose each other's hits.
@@ -1821,7 +1821,7 @@ enum StatusChange {
 fn status_change(
     issue: &issue::Model,
     n: i64,
-    last_at: DateTime<Utc>,
+    last_at: Timestamp,
     release: &str,
 ) -> StatusChange {
     match IssueStatus::parse(&issue.status).unwrap_or(IssueStatus::Open) {
@@ -1901,19 +1901,19 @@ fn route_stats(endpoint: String, values: &Values, period: Period) -> RouteStats 
 }
 
 /// The first bucket of `period`.
-pub(crate) fn period_start(now: DateTime<Utc>, period: Period) -> DateTime<Utc> {
+pub(crate) fn period_start(now: Timestamp, period: Period) -> Timestamp {
     let resolution = period.resolution();
     let buckets = period.minutes() * 60 / i64::from(resolution);
-    bucket_start(now, resolution) - TimeDelta::seconds(i64::from(resolution) * (buckets - 1))
+    bucket_start(now, resolution) - TimeSpan::seconds(i64::from(resolution) * (buckets - 1))
 }
 
-fn empty_timeline(now: DateTime<Utc>, period: Period) -> Vec<TimelinePoint> {
+fn empty_timeline(now: Timestamp, period: Period) -> Vec<TimelinePoint> {
     let resolution = i64::from(period.resolution());
     let buckets = period.minutes() * 60 / resolution;
     let start = period_start(now, period);
     (0..buckets)
         .map(|i| TimelinePoint {
-            at: start + TimeDelta::seconds(resolution * i),
+            at: start + TimeSpan::seconds(resolution * i),
             count: 0,
             errors: 0,
         })
@@ -2074,7 +2074,7 @@ mod tests {
     }
 
     async fn issue_with(db: &Db, status: IssueStatus, remaining: Option<i64>) -> issue::Model {
-        let at = Utc::now() - TimeDelta::hours(1);
+        let at = Timestamp::now() - TimeSpan::hours(1);
         let model = issue::Model {
             id: Uuid::now_v7(),
             fingerprint: format!("fp-{}", Uuid::now_v7()),
@@ -2118,10 +2118,10 @@ mod tests {
             &uow,
             read.clone(),
             n,
-            Utc::now(),
+            Timestamp::now(),
             level,
             &labels(),
-            Utc::now(),
+            Timestamp::now(),
         )
         .await
         .unwrap();
@@ -2143,7 +2143,7 @@ mod tests {
         let read = issue_with(&db, IssueStatus::Resolved, None).await;
         // Another process saw the same resolved issue, reopened it as a
         // regression and committed, after this one read it.
-        let earlier = Utc::now() - TimeDelta::minutes(1);
+        let earlier = Timestamp::now() - TimeSpan::minutes(1);
         issue::Model::query()
             .where_key(read.id)
             .update(
@@ -2164,8 +2164,8 @@ mod tests {
         let row = stored(&db, read.id).await;
         assert_eq!(row.count, 13, "both processes' hits are counted");
         assert_eq!(
-            row.regressed_at.map(|at| at.timestamp()),
-            Some(earlier.timestamp()),
+            row.regressed_at.map(|at| at.as_secs()),
+            Some(earlier.as_secs()),
             "regressed_at is not moved"
         );
     }

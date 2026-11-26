@@ -3,8 +3,8 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use http::Method;
+use navree_datetime::Timestamp;
 use navree_http::{ApiMeta, AppError, Controller, Json, Path, Query, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde::Deserialize;
@@ -131,7 +131,7 @@ pub struct ResolveInput {
 #[serde(default, deny_unknown_fields)]
 pub struct IgnoreInput {
     /// Ignored until then.
-    pub until: Option<DateTime<Utc>>,
+    pub until: Option<Timestamp>,
     /// Ignored for this many more occurrences.
     pub occurrences: Option<i64>,
     /// A comment kept on the issue.

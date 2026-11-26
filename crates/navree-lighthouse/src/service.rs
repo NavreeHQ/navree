@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_telemetry::{
     EventKind, Interest, Telemetry, TelemetryContext, TelemetryEvent, TelemetryRecord,
@@ -215,7 +215,7 @@ impl Lighthouse {
         }
         if let Some(engine) = &self.engine {
             mark_reported();
-            engine.send(Input::Report(Box::new((report, context, Utc::now()))));
+            engine.send(Input::Report(Box::new((report, context, Timestamp::now()))));
         }
     }
 
