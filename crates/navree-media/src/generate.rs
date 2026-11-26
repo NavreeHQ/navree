@@ -2,7 +2,7 @@
 //! next to the original.
 
 use bytes::Bytes;
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_storage::{Disk, StorageError};
 #[cfg(feature = "ffmpeg")]
 use serde_json::{Map, Value};
@@ -114,7 +114,7 @@ impl Media {
             }
             item.conversions.insert(conversion.name.clone(), generated);
         }
-        item.updated_at = Utc::now();
+        item.updated_at = Timestamp::now();
         Ok(item)
     }
 
@@ -161,7 +161,7 @@ impl Media {
                 width: dimensions.map(|(w, _)| w),
                 height: dimensions.map(|(_, h)| h),
                 variants: Vec::new(),
-                generated_at: Utc::now(),
+                generated_at: Timestamp::now(),
             });
         }
         let duration = item.metadata.get("duration").and_then(Value::as_f64);
@@ -304,7 +304,7 @@ async fn store_image(
         width: Some(image.width),
         height: Some(image.height),
         variants,
-        generated_at: Utc::now(),
+        generated_at: Timestamp::now(),
     })
 }
 

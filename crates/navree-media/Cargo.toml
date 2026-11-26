@@ -35,7 +35,6 @@ test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 bytes = { workspace = true }
-chrono = { workspace = true }
 fast_image_resize = { workspace = true }
 futures-util = { workspace = true }
 html5ever = { workspace = true }
@@ -45,6 +44,7 @@ infer = { workspace = true }
 mime_guess = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }

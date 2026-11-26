@@ -1,8 +1,8 @@
 //! The `Media` service on memory rows and disks: adding, validating,
 //! converting, presenting, ordering, deleting and regenerating.
 
-use chrono::{Duration, Utc};
 use image::ImageFormat;
+use navree_datetime::{Span, Timestamp};
 use navree_media::{MediaError, MediaQuery, MediaSource, Regenerate, StoreKind};
 use serde_json::json;
 
@@ -300,13 +300,13 @@ async fn public_disks_give_public_urls() {
     assert_eq!(json["width"], 900);
     let temporary = s
         .media
-        .temporary_url(&item, Utc::now() + Duration::minutes(5))
+        .temporary_url(&item, Timestamp::now() + Span::minutes(5))
         .await
         .unwrap();
     assert!(temporary.contains("expires="), "{temporary}");
     let temporary = s
         .media
-        .temporary_conversion_url(&item, "thumb", Utc::now() + Duration::minutes(5))
+        .temporary_conversion_url(&item, "thumb", Timestamp::now() + Span::minutes(5))
         .await
         .unwrap();
     assert!(temporary.contains("wide-thumb.png"), "{temporary}");

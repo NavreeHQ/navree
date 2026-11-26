@@ -5359,7 +5359,6 @@ name = "navree-media"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "fast_image_resize",
  "futures-util",
  "html5ever",
@@ -5369,6 +5368,7 @@ dependencies = [
  "mime_guess",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-http-client",

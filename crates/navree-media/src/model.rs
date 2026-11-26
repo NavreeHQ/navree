@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::Model;
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -62,9 +62,9 @@ pub struct MediaRecord {
     /// The position in the collection, from 1.
     pub order_column: i32,
     /// When it was added.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl From<MediaRecord> for MediaItem {

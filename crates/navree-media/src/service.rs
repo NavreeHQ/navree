@@ -5,8 +5,8 @@ use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use navree_contracts::{Dispatcher, JobEnvelope};
+use navree_datetime::{Span, Timestamp};
 use navree_db::Uow;
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::WeakAppContext;
@@ -397,7 +397,7 @@ impl Media {
         current.name = item.name.clone();
         current.custom_properties = item.custom_properties.clone();
         current.order = item.order;
-        current.updated_at = Utc::now();
+        current.updated_at = Timestamp::now();
         self.inner.store.update(uow.into(), &current).await?;
         Ok(current)
     }
@@ -412,7 +412,7 @@ impl Media {
         for (position, id) in ids.iter().enumerate() {
             let mut item = self.find_or_fail(*id).await?;
             item.order = i32::try_from(position + 1).unwrap_or(i32::MAX);
-            item.updated_at = Utc::now();
+            item.updated_at = Timestamp::now();
             self.inner.store.update(uow, &item).await?;
         }
         Ok(())
@@ -577,7 +577,7 @@ impl Media {
     pub async fn temporary_url(
         &self,
         item: &MediaItem,
-        expires_at: DateTime<Utc>,
+        expires_at: Timestamp,
     ) -> Result<String, MediaError> {
         Ok(self
             .disk(&item.disk)?
@@ -590,7 +590,7 @@ impl Media {
         &self,
         item: &MediaItem,
         conversion: &str,
-        expires_at: DateTime<Utc>,
+        expires_at: Timestamp,
     ) -> Result<String, MediaError> {
         let path = self.file_of(item, conversion)?;
         Ok(self
@@ -627,8 +627,9 @@ impl Media {
         match self.public_url(disk, path) {
             Ok(url) => Ok(url),
             Err(MediaError::NoPublicUrl { .. }) => {
-                let ttl = i64::try_from(self.inner.options.url_ttl_secs).unwrap_or(i64::MAX);
-                let expires = Utc::now() + chrono::Duration::seconds(ttl);
+                let ttl = Duration::from_secs(self.inner.options.url_ttl_secs);
+                let span = Span::try_from(ttl).unwrap_or(Span::MAX);
+                let expires = Timestamp::now().checked_add(span).unwrap_or(Timestamp::MAX);
                 Ok(self.disk(disk)?.temporary_url(path, expires).await?)
             }
             Err(error) => Err(error),
@@ -1140,7 +1141,7 @@ impl PendingMedia {
             )
             .await?;
         let order = existing.iter().map(|item| item.order).max().unwrap_or(0) + 1;
-        let now = Utc::now();
+        let now = Timestamp::now();
         let mut item = MediaItem {
             id,
             model_type: self.model_type,
