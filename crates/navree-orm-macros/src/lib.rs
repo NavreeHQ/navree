@@ -41,9 +41,9 @@ mod test;
 ///     pub stage: Stage,                  // stored as its serde name
 ///     #[model(cast = "json")]
 ///     pub meta: Option<DealMeta>,        // stored as JSON, NULL as None
-///     pub created_at: DateTime<Utc>,
-///     pub updated_at: DateTime<Utc>,
-///     pub deleted_at: Option<DateTime<Utc>>,
+///     pub created_at: Timestamp,
+///     pub updated_at: Timestamp,
+///     pub deleted_at: Option<Timestamp>,
 /// }
 ///
 /// Deal::query().where_(Deal::STAGE.eq(Stage::Won)).get(&db).await?;
@@ -89,8 +89,8 @@ mod test;
 /// pub struct Event {
 ///     pub id: ObjectId,                  // stored as `_id`; generated when all zeros
 ///     pub kind: String,
-///     pub created_at: DateTime<Utc>,
-///     pub updated_at: DateTime<Utc>,
+///     pub created_at: Timestamp,
+///     pub updated_at: Timestamp,
 /// }
 /// ```
 ///
