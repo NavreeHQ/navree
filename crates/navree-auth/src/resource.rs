@@ -1,8 +1,8 @@
 //! [`UserResource`], the API representation of a user, and
 //! [`UserResourceExtension`]s that add app-specific fields to it.
 
-use navree_datetime::Timestamp;
 use navree_contracts::{BoxError, BoxFuture};
+use navree_datetime::Timestamp;
 use navree_openapi::{ComponentProperties, Schema, ToSchema};
 use serde::Serialize;
 use serde_json::{Map, Value};

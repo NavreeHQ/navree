@@ -15,8 +15,8 @@ use std::time::{Duration, SystemTime};
 
 use ::http::{Method, StatusCode};
 use bytes::Bytes;
-use navree_datetime::Timestamp;
 use futures_util::TryStreamExt;
+use navree_datetime::Timestamp;
 use navree_kernel::BoxFuture;
 use serde::Deserialize;
 use serde::de::{self, Deserializer};
@@ -362,13 +362,12 @@ fn to_meta(resource: ObjectResource, fallback_path: Option<&str>) -> Result<Meta
         },
     };
     check_key(&path)?;
-    let last_modified = Timestamp::parse_rfc3339(&resource.updated)
-        .map_err(|_| {
-            Error::new(
-                ErrorKind::Answer,
-                "an object's `updated` timestamp is not RFC 3339",
-            )
-        })?;
+    let last_modified = Timestamp::parse_rfc3339(&resource.updated).map_err(|_| {
+        Error::new(
+            ErrorKind::Answer,
+            "an object's `updated` timestamp is not RFC 3339",
+        )
+    })?;
     Ok(Meta {
         path,
         size: resource.size,

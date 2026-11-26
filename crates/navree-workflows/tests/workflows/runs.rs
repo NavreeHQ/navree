@@ -95,7 +95,10 @@ async fn a_failed_step_is_retried_after_its_backoff() {
     let workflows = h.workflows().await;
     let run = workflows.run(id).await.unwrap();
     assert_eq!(run.status, RunStatus::Sleeping);
-    assert_eq!(run.wake_at, Some(start() + navree_datetime::Span::seconds(10)));
+    assert_eq!(
+        run.wake_at,
+        Some(start() + navree_datetime::Span::seconds(10))
+    );
     let details = workflows.details(id).await.unwrap();
     assert_eq!(details.steps[0].status, StepStatus::Retrying);
     assert_eq!(details.steps[0].attempts, 1);

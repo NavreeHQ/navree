@@ -114,9 +114,7 @@ impl ValueKind {
             Self::Int => text.parse::<i64>().is_ok(),
             Self::Money => crate::form::Money::parse(text).is_some(),
             Self::Float | Self::Decimal => text.parse::<f64>().is_ok_and(f64::is_finite),
-            Self::Date | Self::DateTime => {
-                navree_datetime::Date::parse("%Y-%m-%d", text).is_ok()
-            }
+            Self::Date | Self::DateTime => navree_datetime::Date::parse("%Y-%m-%d", text).is_ok(),
             Self::Bool => matches!(text, "true" | "false"),
             Self::Uuid => uuid::Uuid::parse_str(text).is_ok(),
         }

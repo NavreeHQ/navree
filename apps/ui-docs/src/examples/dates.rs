@@ -328,9 +328,7 @@ fn date_picker_thumb() -> DatePicker {
 fn date_picker_default() -> Field {
     Field::new("due", "Due date")
         .help("Type it as 11/30/2026, or pick it.")
-        .control(
-            DatePicker::new("due").today(Date::new(2026, 11, 3).unwrap_or_default()),
-        )
+        .control(DatePicker::new("due").today(Date::new(2026, 11, 3).unwrap_or_default()))
 }
 
 fn date_picker_options() -> Field {
@@ -507,9 +505,8 @@ fn time_picker_thumb() -> TimePicker {
 }
 
 fn time_picker_default() -> Field {
-    Field::new("starts", "Starts at").control(
-        TimePicker::new("starts").value(Time::new(14, 30, 0).unwrap_or_default()),
-    )
+    Field::new("starts", "Starts at")
+        .control(TimePicker::new("starts").value(Time::new(14, 30, 0).unwrap_or_default()))
 }
 
 fn time_picker_clocks() -> impl IntoIterator<Item = (&'static str, TimePicker)> {
@@ -540,10 +537,7 @@ fn time_picker_rules() -> Field {
             TimeRules::new()
                 .min(at(9))
                 .max(at(17))
-                .unavailable(
-                    at(12),
-                    Time::new(12, 59, 0).unwrap_or_default(),
-                )
+                .unavailable(at(12), Time::new(12, 59, 0).unwrap_or_default())
                 .step_minutes(15),
         ),
     )

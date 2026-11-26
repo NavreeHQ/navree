@@ -118,19 +118,17 @@ impl Moment {
             let text = text.trim();
             return Zoned::parse_rfc3339(text)
                 .map(Moment::Zoned)
-                .or_else(|_| {
-                    DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", text).map(Moment::Naive)
-                })
-                .or_else(|_| {
-                    DateTime::parse("%Y-%m-%d %H:%M:%S%.f", text).map(Moment::Naive)
-                })
+                .or_else(|_| DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", text).map(Moment::Naive))
+                .or_else(|_| DateTime::parse("%Y-%m-%d %H:%M:%S%.f", text).map(Moment::Naive))
                 .or_else(|_| Date::parse("%Y-%m-%d", text).map(Moment::Date))
                 .ok();
         }
         let seconds = (value.kind() == ValueKind::Number && value.is_integer())
             .then(|| value.as_i64())
             .flatten()?;
-        Timestamp::from_secs(seconds).ok().map(|at| Moment::Zoned(at.in_zone(Zone::fixed(Offset::UTC))))
+        Timestamp::from_secs(seconds)
+            .ok()
+            .map(|at| Moment::Zoned(at.in_zone(Zone::fixed(Offset::UTC))))
     }
 
     fn date(&self) -> Date {

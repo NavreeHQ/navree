@@ -447,9 +447,7 @@ fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
     let lord_howe = zone("Australia/Lord_Howe");
     // Southern summer (+11:00) vs southern winter (+10:30): a 30-minute shift.
     assert_eq!(
-        lord_howe
-            .offset_at(utc("2026-01-15T12:00:00Z"))
-            .seconds(),
+        lord_howe.offset_at(utc("2026-01-15T12:00:00Z")).seconds(),
         11 * 3600
     );
     assert_eq!(
@@ -457,9 +455,7 @@ fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
         "+11:00"
     );
     assert_eq!(
-        lord_howe
-            .offset_at(utc("2026-07-15T12:00:00Z"))
-            .seconds(),
+        lord_howe.offset_at(utc("2026-07-15T12:00:00Z")).seconds(),
         10 * 3600 + 1800
     );
     assert_eq!(
@@ -467,15 +463,11 @@ fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
         "+10:30"
     );
     assert_eq!(
-        lord_howe
-            .tz()
-            .resolve_local(local("2026-10-04T02:15")),
+        lord_howe.tz().resolve_local(local("2026-10-04T02:15")),
         LocalTime::None
     );
     assert!(matches!(
-        lord_howe
-            .tz()
-            .resolve_local(local("2026-04-05T01:45")),
+        lord_howe.tz().resolve_local(local("2026-04-05T01:45")),
         LocalTime::Ambiguous(_, _)
     ));
 
@@ -489,11 +481,7 @@ fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
         "2400-07-15T00:00:00Z",
     ] {
         let at = utc(stamp);
-        assert_eq!(
-            kolkata.offset_at(at).seconds(),
-            5 * 3600 + 1800,
-            "{stamp}"
-        );
+        assert_eq!(kolkata.offset_at(at).seconds(), 5 * 3600 + 1800, "{stamp}");
         assert_eq!(kolkata.tz().abbreviation(at), "IST", "{stamp}");
     }
 }

@@ -27,7 +27,10 @@ fn check_valid(number: PhoneNumber) {
         assert_eq!(region.calling_code(), number.country_code());
     }
     if let Some(extension) = number.extension() {
-        assert!(extension.bytes().all(|b| b.is_ascii_digit()), "{extension:?}");
+        assert!(
+            extension.bytes().all(|b| b.is_ascii_digit()),
+            "{extension:?}"
+        );
     }
     for how in [
         PhoneFormat::E164,

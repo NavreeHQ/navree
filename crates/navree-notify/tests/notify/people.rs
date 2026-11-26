@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_mail::TemplateMail;
 use navree_notify::{

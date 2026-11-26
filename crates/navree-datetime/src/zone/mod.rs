@@ -495,11 +495,9 @@ mod tests {
 
     #[test]
     fn the_alias_table_is_in_the_order_it_is_searched_in() {
-        assert!(
-            ALIASES.windows(2).all(|pair| {
-                rules::cmp_ignoring_ascii_case(pair[0].0, pair[1].0) == Ordering::Less
-            })
-        );
+        assert!(ALIASES.windows(2).all(|pair| {
+            rules::cmp_ignoring_ascii_case(pair[0].0, pair[1].0) == Ordering::Less
+        }));
     }
 
     #[test]

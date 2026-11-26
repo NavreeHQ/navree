@@ -733,9 +733,7 @@ impl FromValue for Zoned {
             Value::TimestampTz(at) => Ok(*at),
             Value::Timestamp(at) => Ok(at.in_zone(Zone::fixed(Offset::UTC))),
             Value::DateTime(at) => Ok(at.in_utc().in_zone(Zone::fixed(Offset::UTC))),
-            Value::String(s) => {
-                parse_date_time(s).ok_or_else(|| ValueError::new("Zoned", &value))
-            }
+            Value::String(s) => parse_date_time(s).ok_or_else(|| ValueError::new("Zoned", &value)),
             _ => Err(ValueError::new("Zoned", &value)),
         }
     }
@@ -897,8 +895,7 @@ mod tests {
             [1.5]
         );
         assert_eq!(Value::from(None::<Vec<f32>>), Value::Null(Kind::Vector));
-        let at = Timestamp::parse_rfc3339("2026-10-28T09:30:00Z")
-            .unwrap();
+        let at = Timestamp::parse_rfc3339("2026-10-28T09:30:00Z").unwrap();
         assert_eq!(
             Value::Timestamp(at).to_json(),
             serde_json::json!("2026-10-28T09:30:00Z")

@@ -227,10 +227,7 @@ async fn integer_time_columns_lose_whole_chunks_too() {
             &db,
             "ticks",
             "id, at_ms",
-            vec![
-                uuid::Uuid::now_v7().into(),
-                day(n).as_millis().into(),
-            ],
+            vec![uuid::Uuid::now_v7().into(), day(n).as_millis().into()],
         )
         .await;
     }
@@ -363,10 +360,7 @@ async fn pruning_runs_on_transactions_and_the_db() {
             &db,
             "ticks",
             "id, at_ms",
-            vec![
-                uuid::Uuid::now_v7().into(),
-                day(n).as_millis().into(),
-            ],
+            vec![uuid::Uuid::now_v7().into(), day(n).as_millis().into()],
         )
         .await;
     }

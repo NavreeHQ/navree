@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use std::fmt;
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use navree_contracts::AuditKind;
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use navree_orm::Model as _;
 use serde::Serialize;

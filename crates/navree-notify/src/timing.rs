@@ -305,20 +305,37 @@ mod tests {
     fn daily_digests_go_out_at_the_next_local_nine() {
         let kolkata = zone("Asia/Kolkata");
         // 08:00 in Kolkata: today 09:00 there.
-        let next =
-            Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &kolkata, nine(), Weekday::Monday);
+        let next = Digest::Daily.next_at(
+            at("2026-10-29T02:30:00Z"),
+            &kolkata,
+            nine(),
+            Weekday::Monday,
+        );
         assert_eq!(next, Some(at("2026-10-29T03:30:00Z")));
         // 09:00 exactly: tomorrow.
-        let next =
-            Digest::Daily.next_at(at("2026-10-29T03:30:00Z"), &kolkata, nine(), Weekday::Monday);
+        let next = Digest::Daily.next_at(
+            at("2026-10-29T03:30:00Z"),
+            &kolkata,
+            nine(),
+            Weekday::Monday,
+        );
         assert_eq!(next, Some(at("2026-10-30T03:30:00Z")));
         // The same instant is still yesterday evening in New York.
         let new_york = zone("America/New_York");
-        let next =
-            Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &new_york, nine(), Weekday::Monday);
+        let next = Digest::Daily.next_at(
+            at("2026-10-29T02:30:00Z"),
+            &new_york,
+            nine(),
+            Weekday::Monday,
+        );
         assert_eq!(next, Some(at("2026-10-29T13:00:00Z")));
         assert_eq!(
-            Digest::Off.next_at(at("2026-10-29T02:30:00Z"), &kolkata, nine(), Weekday::Monday),
+            Digest::Off.next_at(
+                at("2026-10-29T02:30:00Z"),
+                &kolkata,
+                nine(),
+                Weekday::Monday
+            ),
             None
         );
     }
@@ -337,11 +354,16 @@ mod tests {
     fn hourly_digests_go_out_at_the_next_local_hour() {
         let kolkata = zone("Asia/Kolkata");
         // 10:15 in Kolkata (+05:30): 11:00 there, 05:30 UTC.
-        let next =
-            Digest::Hourly.next_at(at("2026-10-29T04:45:00Z"), &kolkata, nine(), Weekday::Monday);
+        let next = Digest::Hourly.next_at(
+            at("2026-10-29T04:45:00Z"),
+            &kolkata,
+            nine(),
+            Weekday::Monday,
+        );
         assert_eq!(next, Some(at("2026-10-29T05:30:00Z")));
         let utc = Zone::UTC;
-        let next = Digest::Hourly.next_at(at("2026-10-29T04:00:00Z"), &utc, nine(), Weekday::Monday);
+        let next =
+            Digest::Hourly.next_at(at("2026-10-29T04:00:00Z"), &utc, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-10-29T05:00:00Z")));
     }
 
@@ -349,13 +371,16 @@ mod tests {
     fn weekly_digests_go_out_on_the_next_chosen_day() {
         let utc = Zone::UTC;
         // Thursday 29 October 2026: Monday 2 November 09:00.
-        let next = Digest::Weekly.next_at(at("2026-10-29T12:00:00Z"), &utc, nine(), Weekday::Monday);
+        let next =
+            Digest::Weekly.next_at(at("2026-10-29T12:00:00Z"), &utc, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-11-02T09:00:00Z")));
         // Monday 08:00: the same day.
-        let next = Digest::Weekly.next_at(at("2026-11-02T08:00:00Z"), &utc, nine(), Weekday::Monday);
+        let next =
+            Digest::Weekly.next_at(at("2026-11-02T08:00:00Z"), &utc, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-11-02T09:00:00Z")));
         // Monday 10:00: the next Monday.
-        let next = Digest::Weekly.next_at(at("2026-11-02T10:00:00Z"), &utc, nine(), Weekday::Monday);
+        let next =
+            Digest::Weekly.next_at(at("2026-11-02T10:00:00Z"), &utc, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-11-09T09:00:00Z")));
     }
 

@@ -205,11 +205,7 @@ async fn conditions_become_filter_documents() {
     assert_eq!(
         titles(
             mongo,
-            q().where_date(
-                Deal::CLOSES_ON,
-                "=",
-                Date::new(2026, 6, 1).unwrap()
-            )
+            q().where_date(Deal::CLOSES_ON, "=", Date::new(2026, 6, 1).unwrap())
         )
         .await,
         ["Expansion"]

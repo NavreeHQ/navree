@@ -108,8 +108,8 @@ impl WebhookSource for Slack {
 
 #[cfg(test)]
 mod tests {
-    use navree_datetime::Timestamp;
     use http::HeaderValue;
+    use navree_datetime::Timestamp;
 
     use super::*;
     use crate::sources::block_on;

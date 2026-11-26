@@ -20,8 +20,8 @@ mod gcs {
     //! the in-process server that speaks the XML API and checks signatures
     //! (`drivers::gcs`).
 
-    use navree_datetime::{Span, Timestamp};
     use futures_util::TryStreamExt;
+    use navree_datetime::{Span, Timestamp};
     use navree_storage::{Disk, GcsConfig, Storage, StorageError};
     use serde_json::json;
     use wiremock::matchers::{method, path};

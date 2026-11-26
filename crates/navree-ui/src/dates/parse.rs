@@ -253,7 +253,9 @@ fn part(digits: &str) -> Result<u32, DateParseError> {
 fn build(year: i32, month: u32, day: u32) -> Result<Date, DateParseError> {
     let month = u8::try_from(month).map_err(|_| DateParseError::NotADate)?;
     let day = u8::try_from(day).map_err(|_| DateParseError::NotADate)?;
-    Date::new(year, month, day).ok().ok_or(DateParseError::NotADate)
+    Date::new(year, month, day)
+        .ok()
+        .ok_or(DateParseError::NotADate)
 }
 
 impl DateLocale {
@@ -355,13 +357,7 @@ impl DateLocale {
         }
     }
 
-    fn numeric(
-        &self,
-        a: &str,
-        b: &str,
-        c: &str,
-        today: Date,
-    ) -> Result<Date, DateParseError> {
+    fn numeric(&self, a: &str, b: &str, c: &str, today: Date) -> Result<Date, DateParseError> {
         let (year, month, day) = if a.len() == 4 {
             (a, b, c)
         } else {
@@ -375,13 +371,7 @@ impl DateLocale {
         build(year_of(year, today)?, month, day)
     }
 
-    fn named(
-        &self,
-        a: &str,
-        b: &str,
-        month: u32,
-        today: Date,
-    ) -> Result<Date, DateParseError> {
+    fn named(&self, a: &str, b: &str, month: u32, today: Date) -> Result<Date, DateParseError> {
         let (year, day) = match (a.len(), b.len()) {
             (4, 4) => return Err(DateParseError::Unreadable),
             (4, _) => (a, b),
@@ -522,7 +512,9 @@ impl DateLocale {
                 hour += 12;
             }
         }
-        Time::new(hour, minute, second).ok().ok_or(TimeParseError::OutOfRange)
+        Time::new(hour, minute, second)
+            .ok()
+            .ok_or(TimeParseError::OutOfRange)
     }
 }
 

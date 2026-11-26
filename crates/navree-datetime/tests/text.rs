@@ -11,8 +11,7 @@ use navree_datetime::{
 
 fn recorded(file: &str) -> Vec<serde_json::Value> {
     let path = format!("{}/tests/golden/{file}", env!("CARGO_MANIFEST_DIR"));
-    let content =
-        std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"));
+    let content = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"));
     content
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -179,7 +178,10 @@ fn display_matches_chrono_for_every_value() {
             other => panic!("unexpected type `{other}` in {line}"),
         }
     }
-    assert!(checked > 8_000, "expected full display corpus, checked {checked}");
+    assert!(
+        checked > 8_000,
+        "expected full display corpus, checked {checked}"
+    );
 
     let kolkata = Zone::named("Asia/Calcutta").expect("Asia/Kolkata");
     assert_eq!(kolkata.to_string(), "Asia/Kolkata");
@@ -242,7 +244,10 @@ fn rfc3339_matches_chrono_for_every_option() {
             );
         }
     }
-    assert!(checked > 4_000, "expected full rfc3339 corpus, checked {checked}");
+    assert!(
+        checked > 4_000,
+        "expected full rfc3339 corpus, checked {checked}"
+    );
 }
 
 #[test]
@@ -271,7 +276,10 @@ fn rfc2822_matches_chrono() {
             );
         }
     }
-    assert!(checked > 1_800, "expected full rfc2822 corpus, checked {checked}");
+    assert!(
+        checked > 1_800,
+        "expected full rfc2822 corpus, checked {checked}"
+    );
 }
 
 fn check_formatted(formatted: navree_datetime::Formatted<'_>, line: &serde_json::Value) {
@@ -506,7 +514,10 @@ fn everything_chrono_accepted_is_accepted_as_the_same_value() {
     );
 
     assert_eq!(
-        " asia/calcutta ".parse::<Zone>().expect("legacy alias").name(),
+        " asia/calcutta "
+            .parse::<Zone>()
+            .expect("legacy alias")
+            .name(),
         "Asia/Kolkata"
     );
     assert_eq!("gmt".parse::<Zone>().expect("GMT alias"), Zone::UTC);
@@ -608,7 +619,11 @@ fn a_leap_second_is_read_as_the_last_nanosecond_of_its_minute() {
         "23:59:60.123456789",
         "23:59:60.999999999",
     ] {
-        assert_eq!(sample.parse::<Time>().expect(sample), end_of_day, "{sample}");
+        assert_eq!(
+            sample.parse::<Time>().expect(sample),
+            end_of_day,
+            "{sample}"
+        );
         assert_eq!(
             Time::parse("%H:%M:%S%.f", sample).expect(sample),
             end_of_day,
@@ -620,7 +635,9 @@ fn a_leap_second_is_read_as_the_last_nanosecond_of_its_minute() {
     let day = Date::new(2016, 12, 31).expect("2016-12-31");
     let expected_wall = day.at(end_of_day);
     assert_eq!(
-        "2016-12-31T23:59:60.500".parse::<DateTime>().expect("wall leap"),
+        "2016-12-31T23:59:60.500"
+            .parse::<DateTime>()
+            .expect("wall leap"),
         expected_wall
     );
     assert_eq!(
@@ -645,15 +662,15 @@ fn a_leap_second_is_read_as_the_last_nanosecond_of_its_minute() {
     let zoned = Zoned::parse_rfc3339("2017-01-01T05:29:60.800+05:30").expect("zoned leap");
     assert_eq!(zoned.timestamp(), expected_instant);
     assert_eq!(zoned.offset(), Offset::east(19_800).expect("+05:30"));
-    assert_eq!(
-        zoned.to_string(),
-        "2017-01-01 05:29:59.999999999 +05:30"
-    );
+    assert_eq!(zoned.to_string(), "2017-01-01 05:29:59.999999999 +05:30");
 
     let rfc2822_zoned =
         Zoned::parse_rfc2822("Sun, 1 Jan 2017 05:29:60 +0530").expect("zoned rfc2822 leap");
     assert_eq!(rfc2822_zoned.timestamp(), expected_instant);
-    assert_eq!(rfc2822_zoned.offset(), Offset::east(19_800).expect("+05:30"));
+    assert_eq!(
+        rfc2822_zoned.offset(),
+        Offset::east(19_800).expect("+05:30")
+    );
 
     let pattern_zoned = Zoned::parse("%d/%m/%Y %H:%M:%S %z", "01/01/2017 05:29:60 +0530")
         .expect("zoned pattern leap");
@@ -663,7 +680,10 @@ fn a_leap_second_is_read_as_the_last_nanosecond_of_its_minute() {
         .into_iter()
         .filter(|line| text(line, "via") != "serde" && is_leap(line))
         .count();
-    assert!(leap_rows >= 20, "expected leap rows in golden corpus, got {leap_rows}");
+    assert!(
+        leap_rows >= 20,
+        "expected leap rows in golden corpus, got {leap_rows}"
+    );
 }
 
 #[test]
@@ -674,10 +694,7 @@ fn pattern_check_refuses_what_chrono_refused() {
         let pat = text(&line, "value");
         match text(&line, "out") {
             "ok" => assert!(pattern::check(pat).is_ok(), "expected ok for `{pat}`"),
-            "BadFormat" => assert!(
-                pattern::check(pat).is_err(),
-                "expected refusal for `{pat}`"
-            ),
+            "BadFormat" => assert!(pattern::check(pat).is_err(), "expected refusal for `{pat}`"),
             other => panic!("unexpected outcome `{other}` in {line}"),
         }
     }

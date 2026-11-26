@@ -16,12 +16,12 @@ use std::time::Duration;
 
 use ::http::Method;
 use ::http::header::{HeaderName, HeaderValue};
-use navree_datetime::Timestamp;
 use navree_crypto::sha256_hex;
 use navree_crypto::sigv4::{
     self, ALGORITHM, UNSIGNED_PAYLOAD, canonical_path, canonical_query, canonical_request,
     decode_query, scope, signature, uri_encode,
 };
+use navree_datetime::Timestamp;
 use url::Url;
 
 use crate::cloud::http::Request;

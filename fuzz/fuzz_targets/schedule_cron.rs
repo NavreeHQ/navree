@@ -72,12 +72,14 @@ fuzz_target!(|data: &[u8]| {
         if cron.follows_wall_clock() {
             // Nothing is due between `after` and the next run (checked for
             // a few minutes: the search is exhaustive on a fixed offset).
-            let mut minute =
-                after.checked_add(Span::seconds(60 - after.as_secs().rem_euclid(60)));
+            let mut minute = after.checked_add(Span::seconds(60 - after.as_secs().rem_euclid(60)));
             for _ in 0..16 {
                 match minute {
                     Some(m) if m < next => {
-                        assert!(!cron.is_due(m, &Zone::UTC), "{cron}: {m} is due before {next}");
+                        assert!(
+                            !cron.is_due(m, &Zone::UTC),
+                            "{cron}: {m} is due before {next}"
+                        );
                         minute = m.checked_add(Span::minutes(1));
                     }
                     _ => break,

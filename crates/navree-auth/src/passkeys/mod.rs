@@ -41,9 +41,9 @@ pub(crate) mod webauthn;
 
 use std::fmt;
 
-use navree_datetime::Timestamp;
 use navree_contracts::AuditKind;
 use navree_crypto::{constant_time_eq, random_token, sha256_hex};
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use navree_orm::{Model as _, Record};
 use serde::{Deserialize, Serialize};

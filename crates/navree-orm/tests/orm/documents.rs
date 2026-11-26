@@ -7,8 +7,8 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::{ChangeEvent, ChangeOp, Uow};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_orm::ir::{
@@ -636,8 +636,8 @@ async fn documents_stream_through_cursors_and_pages() {
 /// agree.
 #[tokio::test]
 async fn timestamps_keep_the_precision_of_the_store() {
-    let at = Timestamp::utc(2026, 10, 27, 9, 30, 0).unwrap()
-        + navree_datetime::Span::nanos(123_456_789);
+    let at =
+        Timestamp::utc(2026, 10, 27, 9, 30, 0).unwrap() + navree_datetime::Span::nanos(123_456_789);
     let app = TestApp::builder()
         .override_value::<dyn Clock>(Arc::new(FixedClock::new(at)))
         .build()

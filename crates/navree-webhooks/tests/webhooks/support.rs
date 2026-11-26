@@ -6,8 +6,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, Db};
 use navree_events::{Event, EventBus, EventsModule};
 use navree_http_client::{FakeServer, HttpClient, HttpClientModule};
@@ -86,8 +86,7 @@ impl Module for DealsModule {
 
 /// 2026-10-26T08:00:00Z.
 pub fn start() -> Timestamp {
-    Timestamp::parse_rfc3339("2026-10-26T08:00:00Z")
-        .unwrap()
+    Timestamp::parse_rfc3339("2026-10-26T08:00:00Z").unwrap()
 }
 
 /// A test app with the outgoing stack and its fakes.

@@ -444,10 +444,7 @@ mod tests {
             value::<DateTime>(),
             json!({"type": "string", "format": "date-time"})
         );
-        assert_eq!(
-            value::<Date>(),
-            json!({"type": "string", "format": "date"})
-        );
+        assert_eq!(value::<Date>(), json!({"type": "string", "format": "date"}));
         assert_eq!(value::<Time>(), json!({"type": "string"}));
         assert_eq!(value::<Value>(), json!({}));
     }

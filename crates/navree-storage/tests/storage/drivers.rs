@@ -109,8 +109,8 @@ mod s3 {
     use std::collections::BTreeMap;
     use std::time::Duration;
 
-    use navree_datetime::Timestamp;
     use navree_contracts::{HealthCheck, HealthStatus};
+    use navree_datetime::Timestamp;
     use navree_kernel::Navree;
     use navree_storage::{
         Disk, DiskConfig, S3Config, Storage, StorageError, StorageModule, StorageOptions,
@@ -199,7 +199,10 @@ mod s3 {
 
         let http = Http::network();
         let url = disk
-            .temporary_url("logo.png", Timestamp::now() + navree_datetime::Span::minutes(1))
+            .temporary_url(
+                "logo.png",
+                Timestamp::now() + navree_datetime::Span::minutes(1),
+            )
             .await
             .unwrap();
         assert!(url.contains("/navree-test/tenants/agra/logo.png?"), "{url}");
@@ -235,7 +238,10 @@ mod s3 {
         let server = S3Server::start().await;
         let disk = disk(config(&server));
         let url = disk
-            .temporary_url("a b.txt", Timestamp::now() + navree_datetime::Span::hours(1))
+            .temporary_url(
+                "a b.txt",
+                Timestamp::now() + navree_datetime::Span::hours(1),
+            )
             .await
             .unwrap();
         assert!(
@@ -261,7 +267,10 @@ mod s3 {
         );
         // An expiry that has already passed is refused rather than extended.
         let past_err = disk
-            .temporary_url("a.txt", Timestamp::now() - navree_datetime::Span::seconds(1))
+            .temporary_url(
+                "a.txt",
+                Timestamp::now() - navree_datetime::Span::seconds(1),
+            )
             .await
             .unwrap_err();
         assert!(

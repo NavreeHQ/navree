@@ -391,7 +391,11 @@ async fn the_file_store_survives_a_restart() {
     {
         let store = SqliteStore::open(&path).await.unwrap();
         store
-            .insert(vec![entry_at(Timestamp::now(), None, dump("before the restart"))])
+            .insert(vec![entry_at(
+                Timestamp::now(),
+                None,
+                dump("before the restart"),
+            )])
             .await
             .unwrap();
         store.add_tags("x".into(), vec!["t".into()]).await.unwrap();

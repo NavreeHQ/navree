@@ -5,9 +5,9 @@ use std::any::TypeId;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 
-use navree_datetime::Date;
 use navree_access::{CREATE, DELETE, READ, Subject, UPDATE};
 use navree_contracts::Dispatcher;
+use navree_datetime::Date;
 use navree_db::{PageMeta, PageQuery};
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, ModuleId};
@@ -793,7 +793,9 @@ impl<R: Resource> Handle<R> {
             (FieldKind::Boolean, value) => values::boolean(&value).map(Json::Bool).unwrap_or(value),
             (FieldKind::DateTime, Json::String(text)) if !text.trim().is_empty() => {
                 match values::datetime(&Json::String(text.clone()), tz_offset) {
-                    Some(at) => Json::String(at.to_rfc3339_with(navree_datetime::Precision::Secs, true)),
+                    Some(at) => {
+                        Json::String(at.to_rfc3339_with(navree_datetime::Precision::Secs, true))
+                    }
                     None => Json::String(text),
                 }
             }
@@ -1720,10 +1722,7 @@ fn group_key(row: &Row, column: &str, shape: Shape) -> String {
 }
 
 /// `from..to` (either end optional) or a preset, relative to `today`.
-pub(crate) fn date_range(
-    text: &str,
-    today: Date,
-) -> Option<(Option<Date>, Option<Date>)> {
+pub(crate) fn date_range(text: &str, today: Date) -> Option<(Option<Date>, Option<Date>)> {
     let text = text.trim();
     let parse = |s: &str| -> Option<Option<Date>> {
         let s = s.trim();

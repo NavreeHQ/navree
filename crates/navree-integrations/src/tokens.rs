@@ -5,8 +5,8 @@
 
 use std::time::Duration;
 
-use navree_datetime::{Span, Timestamp};
 use http::Method;
+use navree_datetime::{Span, Timestamp};
 use navree_orm::{Model as _, Record};
 use serde_json::Value;
 use uuid::Uuid;
@@ -159,8 +159,7 @@ impl Runtime {
     ) -> Result<String, IntegrationsError> {
         let key = (model.id, subject.to_owned());
         let usable = |(token, expires): &(String, Option<Timestamp>)| {
-            let fresh =
-                expires.is_none_or(|at| at > self.now() + Span::seconds(FRESH_MARGIN_SECS));
+            let fresh = expires.is_none_or(|at| at > self.now() + Span::seconds(FRESH_MARGIN_SECS));
             let rejected = matches!(want, Want::Replace(stale) if stale == token);
             (fresh && !rejected && *want != Want::Fresh).then(|| token.clone())
         };

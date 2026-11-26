@@ -206,7 +206,9 @@ fn keys_and_timestamps_are_reachable_by_column() {
     event.set_key(id);
     assert_eq!(event.id, id);
     assert!(
-        event.touch_timestamp("occurred_at", Timestamp::now()).is_err(),
+        event
+            .touch_timestamp("occurred_at", Timestamp::now())
+            .is_err(),
         "not a timestamp column"
     );
 

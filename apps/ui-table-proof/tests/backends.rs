@@ -58,12 +58,8 @@ macro_rules! seed {
                 },
                 stage: ["lead", "won", "lost"][usize::try_from(id % 3).unwrap_or(0)].to_owned(),
                 amount: (id % 5 != 0).then_some((id % 7) * 100),
-                closed_on: (id % 4 != 0).then(|| {
-                    Date::new(2026, 1, 1)
-                        .unwrap()
-                        .add_days(id % 10)
-                        .unwrap()
-                }),
+                closed_on: (id % 4 != 0)
+                    .then(|| Date::new(2026, 1, 1).unwrap().add_days(id % 10).unwrap()),
                 active: id % 2 == 0,
                 company_id: (id % 6 != 0).then_some(id % 3 + 1),
                 version: 1,

@@ -1,9 +1,9 @@
 //! [`NotifyOptions`]: configuration section `notify`.
 
-use navree_datetime::{Time, Weekday};
 use navree_config::__private::{selector_error, selector_name};
 use navree_config::{ConfigSection, ConfigTable, DriverName, DriverNameError};
 use navree_contracts::Secret;
+use navree_datetime::{Time, Weekday};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::Channel;

@@ -380,11 +380,7 @@ mod tests {
 
     #[test]
     fn fields_without_the_attribute_stay_out() {
-        assert!(
-            field(quote!(pub updated_at: Timestamp))
-                .unwrap()
-                .is_none()
-        );
+        assert!(field(quote!(pub updated_at: Timestamp)).unwrap().is_none());
     }
 
     #[test]

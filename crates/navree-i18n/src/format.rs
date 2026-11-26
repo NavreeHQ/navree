@@ -229,8 +229,7 @@ impl Formats {
         let Some(formatter) = formatter else {
             return fallback();
         };
-        let Ok(icu_date) =
-            Date::try_new_gregorian(date.year(), date.month_number(), date.day())
+        let Ok(icu_date) = Date::try_new_gregorian(date.year(), date.month_number(), date.day())
         else {
             return fallback();
         };

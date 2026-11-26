@@ -98,7 +98,8 @@ pub(crate) fn excel_date(serial: f64, is_1904: bool) -> Cell {
     };
     // A cast saturates, as the milliseconds of a date in range never do.
     let milliseconds = (days * 86_400_000.0).round() as i64;
-    let at = Date::new(1899, 12, 30).ok()
+    let at = Date::new(1899, 12, 30)
+        .ok()
         .map(|day| day.at(Time::MIDNIGHT))
         .zip(Span::try_millis(milliseconds))
         .and_then(|(epoch, since)| epoch.add(since))
@@ -329,8 +330,10 @@ mod tests {
         assert_eq!(
             at(excel_date(45943.541, false)),
             Some(
-                day(2025, 10, 13)
-                    .at(Time::new(12, 59, 2).unwrap().with_nanos(400_000_000).unwrap())
+                day(2025, 10, 13).at(Time::new(12, 59, 2)
+                    .unwrap()
+                    .with_nanos(400_000_000)
+                    .unwrap())
             )
         );
         // Out of range, the number stays.

@@ -3,8 +3,8 @@
 //! every name the examples need in scope, so that each example compiles.
 //! Not API: hidden from the docs, and it may change at any time.
 
-pub use navree_datetime::{Span, Timestamp};
 pub use indexmap::IndexMap;
+pub use navree_datetime::{Span, Timestamp};
 pub use navree_db::{Db, PageQuery, Uow};
 pub use uuid::Uuid;
 

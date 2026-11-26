@@ -334,11 +334,7 @@ pub(crate) fn midnight(date: Date) -> Timestamp {
 
 /// The buckets of a trend ending at `today`: (label, first day, day after
 /// the last), oldest first.
-pub(crate) fn buckets(
-    interval: Interval,
-    count: u32,
-    today: Date,
-) -> Vec<(String, Date, Date)> {
+pub(crate) fn buckets(interval: Interval, count: u32, today: Date) -> Vec<(String, Date, Date)> {
     let mut out = Vec::new();
     match interval {
         Interval::Day => {
@@ -351,7 +347,8 @@ pub(crate) fn buckets(
             }
         }
         Interval::Week => {
-            let Some(monday) = today.add_days(-i64::from(today.weekday().days_from_monday())) else {
+            let Some(monday) = today.add_days(-i64::from(today.weekday().days_from_monday()))
+            else {
                 return out;
             };
             for back in (0..count).rev() {
@@ -462,11 +459,7 @@ mod tests {
         let weeks = buckets(Interval::Week, 2, today);
         assert_eq!(weeks[1].1, Date::new(2026, 10, 26).unwrap());
         assert_eq!(weeks[0].1, Date::new(2026, 10, 19).unwrap());
-        let months = buckets(
-            Interval::Month,
-            3,
-            Date::new(2026, 1, 15).unwrap(),
-        );
+        let months = buckets(Interval::Month, 3, Date::new(2026, 1, 15).unwrap());
         let labels: Vec<&str> = months.iter().map(|b| b.0.as_str()).collect();
         assert_eq!(labels, ["2025-11", "2025-12", "2026-01"]);
         assert_eq!(months[2].2, Date::new(2026, 2, 1).unwrap());

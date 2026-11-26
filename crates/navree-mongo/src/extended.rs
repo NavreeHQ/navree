@@ -99,8 +99,7 @@ mod tests {
 
     #[test]
     fn dates_read_every_extended_form() {
-        let at = Timestamp::parse_rfc3339("2026-10-27T09:30:00.250Z")
-            .unwrap();
+        let at = Timestamp::parse_rfc3339("2026-10-27T09:30:00.250Z").unwrap();
         for json in [
             serde_json::json!({ "at": { "$date": "2026-10-27T09:30:00.250Z" } }),
             serde_json::json!({ "at": { "$date": { "$numberLong": "1793093400250" } } }),
@@ -117,8 +116,7 @@ mod tests {
     #[test]
     fn values_round_trip_through_bson() {
         let stamp = Stamp {
-            at: Timestamp::parse_rfc3339("2026-10-27T09:30:00.250Z")
-                .unwrap(),
+            at: Timestamp::parse_rfc3339("2026-10-27T09:30:00.250Z").unwrap(),
             until: None,
             by: Some(ObjectId::new()),
         };

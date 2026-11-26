@@ -14,8 +14,8 @@
 
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use http::HeaderMap;
+use navree_datetime::Timestamp;
 use navree_webhooks::{Paddle, Stripe, Tolerance, VerifyError};
 
 use crate::provider::WebhookError;
@@ -82,8 +82,8 @@ pub(crate) fn verify_paddle(
 
 #[cfg(test)]
 mod tests {
-    use navree_datetime::Timestamp;
     use http::HeaderValue;
+    use navree_datetime::Timestamp;
     use sha2::{Digest, Sha256};
 
     use super::*;

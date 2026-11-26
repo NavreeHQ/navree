@@ -6,9 +6,9 @@ use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use navree_datetime::{Span, Timestamp};
 use futures_util::FutureExt;
 use navree_contracts::Backoff;
+use navree_datetime::{Span, Timestamp};
 use navree_events::Event;
 use navree_kernel::{AppContext, BoxError};
 use serde::Serialize;

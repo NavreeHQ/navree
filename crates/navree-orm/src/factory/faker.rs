@@ -915,11 +915,7 @@ mod tests {
         for _ in 0..100 {
             let at = fake.date_time_between(start, end);
             assert!(at >= start && at <= end);
-            assert_eq!(
-                at.subsec_nanos() % 1_000,
-                0,
-                "microsecond precision"
-            );
+            assert_eq!(at.subsec_nanos() % 1_000, 0, "microsecond precision");
         }
         let day = fake.date_between(
             Date::new(2026, 1, 1).unwrap(),

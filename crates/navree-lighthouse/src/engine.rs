@@ -243,8 +243,7 @@ impl Unit {
                 Span {
                     kind: span.kind.to_owned(),
                     label: span.label.clone(),
-                    start_ms: ((begin - start).as_micros().unwrap_or(0) as f64 / 1000.0)
-                        .max(0.0),
+                    start_ms: ((begin - start).as_micros().unwrap_or(0) as f64 / 1000.0).max(0.0),
                     duration_ms: span.duration_ms,
                     failed: span.failed,
                 }
@@ -394,13 +393,7 @@ impl Counts {
         }
     }
 
-    fn observe(
-        &self,
-        now: Timestamp,
-        kind: &'static str,
-        key: &str,
-        observation: &Observation,
-    ) {
+    fn observe(&self, now: Timestamp, kind: &'static str, key: &str, observation: &Observation) {
         self.shards
             .of(&(kind, key))
             .observe(now, kind, key, observation);
@@ -764,13 +757,7 @@ impl Engine {
         self.exception_hit(exception, &culprit, &Origin::default(), None, now);
     }
 
-    fn query(
-        &self,
-        at: Timestamp,
-        context: EventContext,
-        query: &QueryExecuted,
-        now: Timestamp,
-    ) {
+    fn query(&self, at: Timestamp, context: EventContext, query: &QueryExecuted, now: Timestamp) {
         // Lighthouse's own tables are read and written by Lighthouse: the
         // dashboard, the API, the commands and the settings, as well as the
         // writer. Only the writer runs as internal work, so a read that runs
@@ -844,13 +831,7 @@ impl Engine {
         self.count_query(&pending, &self.labels.process, now);
     }
 
-    fn call(
-        &self,
-        at: Timestamp,
-        context: EventContext,
-        call: HttpClientRequest,
-        now: Timestamp,
-    ) {
+    fn call(&self, at: Timestamp, context: EventContext, call: HttpClientRequest, now: Timestamp) {
         let pending = PendingCall {
             at,
             context: context.clone(),
@@ -1072,13 +1053,7 @@ impl Engine {
         Value::Object(details)
     }
 
-    fn finish_job(
-        &self,
-        at: Timestamp,
-        context: &EventContext,
-        job: JobEnd,
-        now: Timestamp,
-    ) {
+    fn finish_job(&self, at: Timestamp, context: &EventContext, job: JobEnd, now: Timestamp) {
         let unit = self.take_unit(&UnitKey::Job(job.job_id.clone()));
         if job.job_type == ALERT_JOB || self.options.ignore.jobs.contains(&job.job_type) {
             return;
@@ -1217,13 +1192,7 @@ impl Engine {
 
     /// Counts a statement run by a request or job and opens a slow-query
     /// issue when it was slow.
-    fn query_done(
-        &self,
-        query: PendingQuery,
-        origin_name: &str,
-        origin: &Origin,
-        now: Timestamp,
-    ) {
+    fn query_done(&self, query: PendingQuery, origin_name: &str, origin: &Origin, now: Timestamp) {
         self.count_query(&query, origin_name, now);
         if query.duration_ms < self.tuning.slow_query_ms() as f64 {
             return;
@@ -1259,13 +1228,7 @@ impl Engine {
         );
     }
 
-    fn call_done(
-        &self,
-        pending: PendingCall,
-        origin_name: &str,
-        origin: &Origin,
-        now: Timestamp,
-    ) {
+    fn call_done(&self, pending: PendingCall, origin_name: &str, origin: &Origin, now: Timestamp) {
         let call = &pending.call;
         let host = url_host(&call.url);
         let duration_ms = millis(call.duration);

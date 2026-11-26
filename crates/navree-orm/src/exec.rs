@@ -45,9 +45,9 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use futures::stream::{BoxStream, Stream, StreamExt};
 use navree_contracts::Clock;
+use navree_datetime::Timestamp;
 use navree_db::{
     ChangeEvent, DEFAULT_CONNECTION, Db, DbError, Executed, Executor as DbExecutor, Pool,
     Row as DbRow, Transaction, Uow,
@@ -435,7 +435,9 @@ pub(crate) fn truncate_to_micros(at: Timestamp) -> Timestamp {
 pub(crate) fn truncate_to(at: Timestamp, digits: u32) -> Timestamp {
     let unit = 10_u32.pow(9 - digits.min(9));
     let nanos = at.subsec_nanos();
-    Timestamp::from_secs_nanos(at.as_secs(), nanos - nanos % unit).ok().unwrap_or(at)
+    Timestamp::from_secs_nanos(at.as_secs(), nanos - nanos % unit)
+        .ok()
+        .unwrap_or(at)
 }
 
 impl Target<'_> {

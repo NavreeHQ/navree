@@ -147,16 +147,8 @@ fn lowered_subqueries_exists_and_columns() {
 fn lowered_date_parts_and_patterns() {
     insta::assert_snapshot!(query(
         Deal::query()
-            .where_date(
-                Deal::CLOSED_AT,
-                "=",
-                Date::new(2026, 10, 27).unwrap()
-            )
-            .where_time(
-                Deal::CLOSED_AT,
-                ">=",
-                Time::new(9, 0, 0).unwrap()
-            )
+            .where_date(Deal::CLOSED_AT, "=", Date::new(2026, 10, 27).unwrap())
+            .where_time(Deal::CLOSED_AT, ">=", Time::new(9, 0, 0).unwrap())
             .where_day(Deal::CLOSED_AT, "=", 7)
             .where_month(Deal::CLOSED_AT, "<", 10)
             .where_year(Deal::CLOSED_AT, ">", 2025)

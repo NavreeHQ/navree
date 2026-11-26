@@ -105,10 +105,7 @@ async fn the_connection_lifecycle() {
         .unwrap();
     assert!(!stored.credentials.contains("refresh-secret"));
     assert!(!stored.access_token.as_deref().unwrap().contains("second"));
-    assert_eq!(
-        stored.token_expires_at,
-        Some(start() + Span::seconds(660))
-    );
+    assert_eq!(stored.token_expires_at, Some(start() + Span::seconds(660)));
 
     // An expired token is refreshed once and stored.
     h.advance(Duration::from_secs(600));

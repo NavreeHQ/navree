@@ -1,6 +1,5 @@
 //! `StripeProvider` against a local mock server.
 
-use navree_datetime::Timestamp;
 use http::{HeaderMap, HeaderValue};
 use navree_billing::{
     BillingError, BillingProvider, InvoiceStatus, ProviderError, STRIPE_API_VERSION, STRIPE_EVENTS,
@@ -8,6 +7,7 @@ use navree_billing::{
     sign_stripe_webhook,
 };
 use navree_contracts::Secret;
+use navree_datetime::Timestamp;
 use std::time::Duration;
 use wiremock::matchers::{body_string, body_string_contains, header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};

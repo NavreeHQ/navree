@@ -3,9 +3,9 @@
 use std::fmt;
 use std::sync::{Mutex, MutexGuard};
 
-use navree_datetime::{Span, Timestamp};
 use navree_crypto::jose::{JwkSet, VerifyingKey};
 use navree_crypto::sns::CertificateCache;
+use navree_datetime::{Span, Timestamp};
 use navree_http_client::HttpClient;
 
 use crate::verify::VerifyError;

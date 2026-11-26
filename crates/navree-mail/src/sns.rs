@@ -8,9 +8,9 @@
 //! ([`CertificateCache`]). The URL token of the routes is checked on top of
 //! it.
 
-use navree_datetime::Timestamp;
 use navree_crypto::jose::VerifyingKey;
 use navree_crypto::sns::{CertificateCache, SnsEnvelopeError, SnsMessage};
+use navree_datetime::Timestamp;
 use navree_http_client::HttpClient;
 use serde::de::IgnoredAny;
 
@@ -146,8 +146,7 @@ mod tests {
 
     /// 2026-10-27 at `time` (UTC).
     fn at(time: &str) -> Timestamp {
-        Timestamp::parse_rfc3339(&format!("2026-10-27T{time}Z"))
-            .unwrap()
+        Timestamp::parse_rfc3339(&format!("2026-10-27T{time}Z")).unwrap()
     }
 
     /// A minute after the bounce was published.

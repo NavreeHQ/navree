@@ -568,10 +568,7 @@ mod tests {
         assert!(cache.get(url, at("10:00:00")).is_some());
         assert!(
             cache
-                .get(
-                    url,
-                    at("10:00:00") + CERTIFICATE_TTL - Span::seconds(1)
-                )
+                .get(url, at("10:00:00") + CERTIFICATE_TTL - Span::seconds(1))
                 .is_some()
         );
         assert!(cache.get(url, at("10:00:00") + CERTIFICATE_TTL).is_none());

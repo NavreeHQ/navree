@@ -702,9 +702,13 @@ fn an_xlsx_iso_date_is_a_date() {
     let got = cells_of(&file, "x.xlsx").unwrap();
     let at = |day: u8, hour: u8, minute: u8| {
         Cell::DateTime(
-            navree_datetime::Date::new(if day == 31 { 1899 } else { 2026 },
+            navree_datetime::Date::new(
+                if day == 31 { 1899 } else { 2026 },
                 if day == 31 { 12 } else { 3 },
-                day).unwrap().at(navree_datetime::Time::new(hour, minute, 0).unwrap()),
+                day,
+            )
+            .unwrap()
+            .at(navree_datetime::Time::new(hour, minute, 0).unwrap()),
         )
     };
     assert_eq!(

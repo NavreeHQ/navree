@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use navree_datetime::Timestamp;
 use navree_auth::User;
 use navree_contracts::AuditSink;
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_orm::Model as _;
 use navree_testing::{TestClient, TestResponse};

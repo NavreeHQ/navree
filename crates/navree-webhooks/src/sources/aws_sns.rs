@@ -160,8 +160,8 @@ pub use navree_crypto::sns::SnsMessage;
 mod tests {
     use std::sync::Arc;
 
-    use navree_datetime::{Span, Timestamp, Zoned};
     use http::{HeaderMap, Method};
+    use navree_datetime::{Span, Timestamp, Zoned};
     use navree_http_client::{FakeResponse, FakeServer, HttpClient};
     use serde_json::{Value, json};
 
@@ -206,8 +206,7 @@ mod tests {
     }
 
     fn now() -> Timestamp {
-        Timestamp::parse_rfc3339("2026-10-26T08:00:00Z")
-            .unwrap()
+        Timestamp::parse_rfc3339("2026-10-26T08:00:00Z").unwrap()
     }
 
     async fn verify(

@@ -1818,12 +1818,7 @@ enum StatusChange {
 }
 
 /// The status change `n` hits at `last_at` in `release` make to `issue`.
-fn status_change(
-    issue: &issue::Model,
-    n: i64,
-    last_at: Timestamp,
-    release: &str,
-) -> StatusChange {
+fn status_change(issue: &issue::Model, n: i64, last_at: Timestamp, release: &str) -> StatusChange {
     match IssueStatus::parse(&issue.status).unwrap_or(IssueStatus::Open) {
         IssueStatus::Open => StatusChange::None,
         IssueStatus::Resolved => StatusChange::Reopen { regression: true },

@@ -24,7 +24,10 @@ pub fn clamp(date: Date) -> Date {
 
 /// How many days month `month` of `year` has.
 pub fn days_in_month(year: i32, month: u32) -> u32 {
-    match u8::try_from(month).ok().map(|m| civil::days_in_month(year, m)) {
+    match u8::try_from(month)
+        .ok()
+        .map(|m| civil::days_in_month(year, m))
+    {
         Some(days) if days > 0 => u32::from(days),
         _ => 31,
     }
@@ -79,7 +82,8 @@ pub fn month_grid(year: i32, month: u32, week_start: Weekday, fixed_weeks: bool)
         .filter(|m| (1..=12).contains(m))
         .unwrap_or(1);
     let first = Date::new(year, month_u8, 1).ok().unwrap_or_else(earliest);
-    let lead = u32::from((first.weekday().days_from_sunday() + 7 - week_start.days_from_sunday()) % 7);
+    let lead =
+        u32::from((first.weekday().days_from_sunday() + 7 - week_start.days_from_sunday()) % 7);
     let used = lead + u32::from(civil::days_in_month(first.year(), first.month_number()));
     let rows_needed = if fixed_weeks { 6 } else { used.div_ceil(7) };
     let start = first.add_days(-i64::from(lead)).unwrap_or(first);

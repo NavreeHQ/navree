@@ -5,11 +5,11 @@
 use std::collections::BTreeMap;
 
 use bytes::Bytes;
-use navree_datetime::{Span, Timestamp};
 use futures_util::{TryStreamExt, stream};
 use http::Request;
 use http_body_util::BodyExt;
 use navree_contracts::HealthStatus;
+use navree_datetime::{Span, Timestamp};
 use navree_http::AppRouter;
 use navree_http::body::Body;
 use navree_storage::{

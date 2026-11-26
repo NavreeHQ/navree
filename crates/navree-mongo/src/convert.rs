@@ -239,7 +239,9 @@ mod tests {
         assert_eq!(round_trip(id), id);
         let day = Date::new(2026, 10, 27).unwrap();
         assert_eq!(round_trip(day), day);
-        let time = Time::new(8, 30, 15).and_then(|t| t.with_nanos(250000000)).unwrap();
+        let time = Time::new(8, 30, 15)
+            .and_then(|t| t.with_nanos(250000000))
+            .unwrap();
         assert_eq!(round_trip(time), time);
         let json = serde_json::json!({ "tags": ["a", "b"], "n": 3, "nested": { "ok": true } });
         assert_eq!(round_trip(json.clone()), json);
@@ -249,8 +251,7 @@ mod tests {
 
     #[test]
     fn date_times_keep_milliseconds() {
-        let at = Timestamp::parse_rfc3339("2026-10-27T09:30:00.123456Z")
-            .unwrap();
+        let at = Timestamp::parse_rfc3339("2026-10-27T09:30:00.123456Z").unwrap();
         let back: Timestamp = round_trip(at);
         assert_eq!(back.to_rfc3339(), "2026-10-27T09:30:00.123+00:00");
         let naive: DateTime = round_trip(at.date_time_utc());

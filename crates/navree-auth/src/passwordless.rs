@@ -26,9 +26,9 @@
 //!   sign-in then continues like a password login: a two-factor challenge
 //!   when the user has two-factor authentication on, a session otherwise.
 
-use navree_datetime::Timestamp;
 use navree_contracts::AuditKind;
 use navree_crypto::{constant_time_eq, hmac_sha256, sha256_hex};
+use navree_datetime::Timestamp;
 use navree_orm::{Model as _, Record};
 use serde_json::json;
 use uuid::Uuid;

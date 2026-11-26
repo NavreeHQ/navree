@@ -1,7 +1,7 @@
 //! The JSON API: routing, authorization, CRUD, search, sorting, filters.
 
-use navree_datetime::Date;
 use navree_audit::AuditModule;
+use navree_datetime::Date;
 use navree_db::Db;
 use navree_helm::FormData;
 use navree_orm::{Assignment, Model};
@@ -644,10 +644,7 @@ async fn creating_validates_and_saves_through_the_resource() {
     assert_eq!(saved.stage, "lead");
     assert_eq!(saved.owner_id, Some(rep_id));
     assert!(saved.priority);
-    assert_eq!(
-        saved.expected_close_date,
-        Date::new(2026, 12, 1).ok()
-    );
+    assert_eq!(saved.expected_close_date, Date::new(2026, 12, 1).ok());
     assert_eq!(body["data"]["display"]["amount_cents"], "$1,250.50");
 
     // Without `create` on deals, nothing is created.

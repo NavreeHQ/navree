@@ -604,16 +604,13 @@ fn buckets<Tz: WallZone>(
 fn period_start(day: Date, grain: Grain, week_start: Weekday) -> Date {
     match grain {
         Grain::Week => {
-            let back =
-                (day.weekday().days_from_monday() + 7 - week_start.days_from_monday()) % 7;
+            let back = (day.weekday().days_from_monday() + 7 - week_start.days_from_monday()) % 7;
             day.add_days(-i64::from(back)).unwrap_or(day)
         }
         Grain::Month => day.first_of_month(),
-        Grain::Quarter => {
-            Date::new(day.year(), (day.month_number() - 1) / 3 * 3 + 1, 1)
-                .ok()
-                .unwrap_or(day)
-        }
+        Grain::Quarter => Date::new(day.year(), (day.month_number() - 1) / 3 * 3 + 1, 1)
+            .ok()
+            .unwrap_or(day),
         Grain::Year => Date::new(day.year(), 1, 1).ok().unwrap_or(day),
         Grain::Minute | Grain::Hour | Grain::Day => day,
     }
@@ -858,7 +855,11 @@ mod tests {
             assert_eq!(report.grain(), became, "{range:?} {grain:?}");
             assert_eq!(report.asked_grain(), grain);
             assert!(report.buckets().len() <= MAX_BUCKETS);
-            assert_eq!(report.bounds(), range.utc_bounds(&Zone::UTC), "every day counted");
+            assert_eq!(
+                report.bounds(),
+                range.utc_bounds(&Zone::UTC),
+                "every day counted"
+            );
             assert_eq!(report.cut(), None);
         }
         // From a URL: the automatic grain is held to the limit too.
@@ -928,7 +929,10 @@ mod tests {
                 Some("America/New_York")
             );
         }
-        assert_eq!(Report::new(range, Grain::Day, &Zone::UTC).zone(), Some("UTC"));
+        assert_eq!(
+            Report::new(range, Grain::Day, &Zone::UTC).zone(),
+            Some("UTC")
+        );
         let ny_zone = Zone::named("America/New_York").unwrap();
         assert_eq!(
             Report::new(range, Grain::Day, &ny_zone).zone(),

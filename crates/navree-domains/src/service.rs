@@ -847,9 +847,7 @@ impl Domains {
                     _ => {
                         row.check_attempts = row.check_attempts.saturating_add(1);
                         let deadline = row.created_at
-                            + Span::hours(i64::from(
-                                rt.options.verification.give_up_after_hours,
-                            ));
+                            + Span::hours(i64::from(rt.options.verification.give_up_after_hours));
                         if scheduled && was == DomainStatus::Pending && now >= deadline {
                             row.status = DomainStatus::Failed.as_str().to_owned();
                             row.next_check_at = None;

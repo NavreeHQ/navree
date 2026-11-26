@@ -246,7 +246,10 @@ fn calendar_heatmap_short() -> CalendarHeatmap {
         .locale("en-IN")
         .days((0..24).map(|d| {
             let minutes = [10, 0, 15, 20, 5, 25, 0, 30][(d * 3 % 8) as usize];
-            (first.add_days(d + 6).unwrap_or(first), Some(f64::from(minutes)))
+            (
+                first.add_days(d + 6).unwrap_or(first),
+                Some(f64::from(minutes)),
+            )
         }))
         .range(first, last)
         .steps(HeatSteps::Quartiles)

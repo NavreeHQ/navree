@@ -7,8 +7,8 @@ mod cloud_suite;
 
 use std::sync::Arc;
 
-use navree_datetime::Timestamp;
 use http::Method;
+use navree_datetime::Timestamp;
 use navree_storage::S3Config;
 use navree_storage::cloud::http::{Client, Request};
 use navree_storage::cloud::s3::S3Store;

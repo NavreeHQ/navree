@@ -567,8 +567,7 @@ fn date_time_offset(value: Value) -> Result<Zoned, FieldError> {
         Value::TimestampTz(v) => Ok(v),
         Value::String(s) => parse_offset_date_time(&s)
             .or_else(|| {
-                parse_naive_date_time(&s)
-                    .map(|v| v.in_utc().in_zone(Zone::fixed(Offset::UTC)))
+                parse_naive_date_time(&s).map(|v| v.in_utc().in_zone(Zone::fixed(Offset::UTC)))
             })
             .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date-time"))),
         other => date_time_utc(other).map(|v| v.in_zone(Zone::fixed(Offset::UTC))),

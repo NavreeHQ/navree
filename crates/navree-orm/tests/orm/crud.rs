@@ -24,10 +24,7 @@ async fn create_reads_back_a_database_assigned_key_and_fills_timestamps() {
     assert_eq!((first.id, second.id), (1, 2));
     assert!(first.exists());
     assert!(first.was_recently_created());
-    assert_ne!(
-        first.created_at,
-        navree_datetime::Timestamp::UNIX_EPOCH
-    );
+    assert_ne!(first.created_at, navree_datetime::Timestamp::UNIX_EPOCH);
     assert_eq!(first.created_at, first.updated_at);
     assert!(first.is_clean(), "a saved record is clean");
     assert!(!first.was_changed(), "an insert records no changes");

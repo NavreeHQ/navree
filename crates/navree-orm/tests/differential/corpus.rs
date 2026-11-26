@@ -254,11 +254,7 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         read(
             "date part: date",
-            deals().where_date(
-                "closed_at",
-                "=",
-                Date::new(2026, 10, 20).unwrap(),
-            ),
+            deals().where_date("closed_at", "=", Date::new(2026, 10, 20).unwrap()),
         ),
         read(
             "date part: date from a date-time",

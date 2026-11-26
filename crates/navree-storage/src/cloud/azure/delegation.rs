@@ -177,20 +177,18 @@ fn parse_delegation_key(body: &[u8]) -> Result<(UserDelegationKey, Timestamp, Ti
             )
         })?;
 
-    let starts_at = Timestamp::parse_rfc3339(signed_start)
-        .map_err(|_| {
-            Error::new(
-                ErrorKind::Answer,
-                "the user delegation key has an invalid SignedStart timestamp",
-            )
-        })?;
-    let expires_at = Timestamp::parse_rfc3339(signed_expiry)
-        .map_err(|_| {
-            Error::new(
-                ErrorKind::Answer,
-                "the user delegation key has an invalid SignedExpiry timestamp",
-            )
-        })?;
+    let starts_at = Timestamp::parse_rfc3339(signed_start).map_err(|_| {
+        Error::new(
+            ErrorKind::Answer,
+            "the user delegation key has an invalid SignedStart timestamp",
+        )
+    })?;
+    let expires_at = Timestamp::parse_rfc3339(signed_expiry).map_err(|_| {
+        Error::new(
+            ErrorKind::Answer,
+            "the user delegation key has an invalid SignedExpiry timestamp",
+        )
+    })?;
     if starts_at >= expires_at {
         return Err(Error::new(
             ErrorKind::Answer,

@@ -7,8 +7,8 @@
 
 use std::time::Duration;
 
-use navree_datetime::Span;
 use http::Method;
+use navree_datetime::Span;
 use navree_db::navree_schema::{IndexKind, ReferentialAction, Schema};
 use navree_db::{Db, Executor, MIGRATIONS_TABLE, Statement};
 use navree_http_client::FakeResponse;

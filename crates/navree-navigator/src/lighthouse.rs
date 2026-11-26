@@ -319,9 +319,8 @@ impl Period {
     pub fn start(self, now: Timestamp) -> Timestamp {
         let resolution = self.resolution();
         let buckets = self.minutes() * 60 / resolution;
-        let current =
-            Timestamp::from_secs(now.as_secs() - now.as_secs().rem_euclid(resolution))
-                .unwrap_or(now);
+        let current = Timestamp::from_secs(now.as_secs() - now.as_secs().rem_euclid(resolution))
+            .unwrap_or(now);
         current - Span::seconds(resolution * (buckets - 1))
     }
 }

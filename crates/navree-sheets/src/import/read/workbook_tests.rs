@@ -2027,12 +2027,10 @@ fn ods_dates_and_times_are_dates_and_times() {
             "date",
             "2026-03-01T13:45:10.250",
             Cell::DateTime(
-                day(2026, 3, 1).at(
-                    navree_datetime::Time::new(13, 45, 10)
-                        .unwrap()
-                        .with_nanos(250_000_000)
-                        .unwrap(),
-                ),
+                day(2026, 3, 1).at(navree_datetime::Time::new(13, 45, 10)
+                    .unwrap()
+                    .with_nanos(250_000_000)
+                    .unwrap()),
             ),
         ),
         ("date", "2026-03-01T00:00:00", Cell::Date(day(2026, 3, 1))),
@@ -2052,12 +2050,10 @@ fn ods_dates_and_times_are_dates_and_times() {
             "time",
             "PT00H00M01.5S",
             Cell::DateTime(
-                day(1899, 12, 31).at(
-                    navree_datetime::Time::new(0, 0, 1)
-                        .unwrap()
-                        .with_nanos(500_000_000)
-                        .unwrap(),
-                ),
+                day(1899, 12, 31).at(navree_datetime::Time::new(0, 0, 1)
+                    .unwrap()
+                    .with_nanos(500_000_000)
+                    .unwrap()),
             ),
         ),
         ("time", "P1Y", Cell::Text("P1Y".into())),

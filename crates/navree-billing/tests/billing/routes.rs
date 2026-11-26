@@ -246,8 +246,7 @@ async fn the_webhook_route_is_public_and_verified() {
         "created": start().as_secs(), "data": { "object": { "id": "cus_x" } }
     })
     .to_string();
-    let signature =
-        sign_stripe_webhook(fake.webhook_secret(), start().as_secs(), body.as_bytes());
+    let signature = sign_stripe_webhook(fake.webhook_secret(), start().as_secs(), body.as_bytes());
     let client = world.app.client();
     client
         .post("/api/billing/webhook")
@@ -375,8 +374,7 @@ async fn routes_can_be_turned_off_and_two_billables_need_a_choice() {
         .post("/api/billing/webhook")
         .header(
             STRIPE_SIGNATURE_HEADER,
-            sign_stripe_webhook(fake.webhook_secret(), start().as_secs(), body.as_bytes())
-                .as_str(),
+            sign_stripe_webhook(fake.webhook_secret(), start().as_secs(), body.as_bytes()).as_str(),
         )
         .body(body)
         .send()

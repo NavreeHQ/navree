@@ -82,9 +82,11 @@ impl Surface<Reader> for Shown {
 fn clean(value: &Value) {
     match value {
         Value::String(text) => assert!(
-            !text.chars().any(|c| (c.is_control() && c != '\n' && c != '\t')
-                || ('\u{202A}'..='\u{202E}').contains(&c)
-                || ('\u{2066}'..='\u{2069}').contains(&c)),
+            !text
+                .chars()
+                .any(|c| (c.is_control() && c != '\n' && c != '\t')
+                    || ('\u{202A}'..='\u{202E}').contains(&c)
+                    || ('\u{2066}'..='\u{2069}').contains(&c)),
             "{text:?}"
         ),
         Value::Array(items) => items.iter().for_each(clean),
@@ -97,7 +99,9 @@ fuzz_target!(|data: &[u8]| {
     let Ok(value) = serde_json::from_slice::<Value>(data) else {
         return;
     };
-    let catalog = Catalog::<Reader>::new().surface(Shown).link("/orders/{key}");
+    let catalog = Catalog::<Reader>::new()
+        .surface(Shown)
+        .link("/orders/{key}");
     if let Ok(checked) = catalog.check("show_everything", &value) {
         let names = ["period", "count", "since", "rows", "page", "refunds"];
         for key in checked.props.as_object().expect("an object").keys() {

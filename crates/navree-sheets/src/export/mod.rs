@@ -12,8 +12,8 @@ pub(crate) mod service;
 use std::fmt;
 use std::future::Future;
 
-use navree_datetime::Timestamp;
 use navree_contracts::BoxError;
+use navree_datetime::Timestamp;
 use navree_kernel::AppContext;
 use navree_openapi::ToSchema;
 use serde::de::DeserializeOwned;

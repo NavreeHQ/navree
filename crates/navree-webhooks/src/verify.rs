@@ -4,8 +4,8 @@
 
 use std::future::Future;
 
-use navree_datetime::Timestamp;
 use http::HeaderMap;
+use navree_datetime::Timestamp;
 use serde_json::Value;
 
 use crate::options::{HmacAlgorithm, SignatureEncoding, SourceOptions};

@@ -638,10 +638,7 @@ async fn applied_rows(conn: &dyn Executor) -> Result<HashMap<(String, String), A
         let module: String = row.get("module")?;
         let name: String = row.get("name")?;
         let batch: i64 = row.get("batch")?;
-        let applied_at = row
-            .get::<Option<Timestamp>>("applied_at")
-            .ok()
-            .flatten();
+        let applied_at = row.get::<Option<Timestamp>>("applied_at").ok().flatten();
         applied.insert((module, name), Applied { batch, applied_at });
     }
     Ok(applied)

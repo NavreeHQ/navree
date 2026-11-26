@@ -6,8 +6,8 @@
 
 use std::collections::BTreeSet;
 
-use navree_datetime::{Offset, Timestamp, Zoned};
 use navree_crypto::{AppKey, Encrypter, Hasher, HashingOptions};
+use navree_datetime::{Offset, Timestamp, Zoned};
 use navree_db::Db;
 use navree_db::Executor as _;
 use navree_orm::attributes::{CastContext, ExtraCast};
@@ -165,15 +165,12 @@ fn ledger() -> Ledger {
     Ledger {
         balance: "1234.565".parse().unwrap(),
         opened_at: Timestamp::utc(2026, 10, 27, 8, 30, 59).unwrap(),
-        local_time: Timestamp::utc(2026, 10, 27, 8, 30, 0)
-            .unwrap()
-            .in_zone(navree_datetime::Zone::fixed(
-                Offset::west(4 * 3600).unwrap(),
-            )),
+        local_time: Timestamp::utc(2026, 10, 27, 8, 30, 0).unwrap().in_zone(
+            navree_datetime::Zone::fixed(Offset::west(4 * 3600).unwrap()),
+        ),
         synced_at: Timestamp::utc(2026, 10, 27, 9, 0, 0).unwrap(),
         pinged_at: Some(
-            Timestamp::utc(2026, 10, 27, 9, 0, 1).unwrap()
-                + navree_datetime::Span::millis(250),
+            Timestamp::utc(2026, 10, 27, 9, 0, 1).unwrap() + navree_datetime::Span::millis(250),
         ),
         reference: Uuid::now_v7(),
         batch: Ulid::new(),

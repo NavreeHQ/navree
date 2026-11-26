@@ -399,10 +399,7 @@ mod tests {
             Default::default(),
         )))
         .unwrap();
-        assert_eq!(
-            from_number.date,
-            Date::new(1970, 1, 1).unwrap()
-        );
+        assert_eq!(from_number.date, Date::new(1970, 1, 1).unwrap());
     }
 
     #[test]

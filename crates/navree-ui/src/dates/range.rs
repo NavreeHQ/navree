@@ -378,8 +378,7 @@ impl DatePreset {
         let back = |day: Date, n: i64| day.add_days(-n);
         let days_ago = |n: i64| back(today, n);
         let week_begin = |day: Date| {
-            let since =
-                (day.weekday().days_from_sunday() + 7 - week_start.days_from_sunday()) % 7;
+            let since = (day.weekday().days_from_sunday() + 7 - week_start.days_from_sunday()) % 7;
             back(day, i64::from(since))
         };
         let month_range = |year: i32, month: u32, months: u32| -> Option<DateRange> {
@@ -423,10 +422,7 @@ impl DatePreset {
             Self::ThisYear => DateRange::new(Date::new(today.year(), 1, 1).ok()?, today),
             Self::LastYear => {
                 let prev = today.year().checked_sub(1)?;
-                DateRange::new(
-                    Date::new(prev, 1, 1).ok()?,
-                    Date::new(prev, 12, 31).ok()?,
-                )
+                DateRange::new(Date::new(prev, 1, 1).ok()?, Date::new(prev, 12, 31).ok()?)
             }
             Self::AllTime => DateRange::new(earliest?, today),
         })
@@ -559,7 +555,8 @@ mod tests {
 
     #[test]
     fn utc_bounds_count_the_last_day_whole() {
-        let (start, end) = DateRange::new(day(2026, 11, 1), day(2026, 11, 3)).utc_bounds(&Zone::UTC);
+        let (start, end) =
+            DateRange::new(day(2026, 11, 1), day(2026, 11, 3)).utc_bounds(&Zone::UTC);
         assert_eq!(start, Timestamp::utc(2026, 11, 1, 0, 0, 0).unwrap());
         assert_eq!(end, Timestamp::utc(2026, 11, 4, 0, 0, 0).unwrap());
         // One day is one day.
@@ -609,7 +606,10 @@ mod tests {
     fn presets_count_from_the_day_given() {
         let today = day(2026, 11, 3); // a Tuesday
         let r = |p: DatePreset, ws| p.range(today, ws, None).unwrap();
-        assert_eq!(r(DatePreset::Today, Weekday::Monday), DateRange::single(today));
+        assert_eq!(
+            r(DatePreset::Today, Weekday::Monday),
+            DateRange::single(today)
+        );
         assert_eq!(
             r(DatePreset::Yesterday, Weekday::Monday),
             DateRange::single(day(2026, 11, 2))
@@ -661,7 +661,10 @@ mod tests {
             r(DatePreset::LastYear, Weekday::Monday),
             DateRange::new(day(2025, 1, 1), day(2025, 12, 31))
         );
-        assert_eq!(DatePreset::AllTime.range(today, Weekday::Monday, None), None);
+        assert_eq!(
+            DatePreset::AllTime.range(today, Weekday::Monday, None),
+            None
+        );
         assert_eq!(
             DatePreset::AllTime.range(today, Weekday::Monday, Some(day(2020, 5, 17))),
             Some(DateRange::new(day(2020, 5, 17), today))

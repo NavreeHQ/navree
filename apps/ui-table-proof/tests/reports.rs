@@ -402,8 +402,7 @@ fn sparse_rows() -> Vec<Sparse> {
     for (zone, year, ws) in [("Asia/Kolkata", 1900, 3), ("Africa/Monrovia", 1970, 4)] {
         let tz = Zone::named(zone).unwrap();
         for d in 1..=5 {
-            let (midnight, _) =
-                DateRange::single(Date::new(year, 4, d).unwrap()).utc_bounds(&tz);
+            let (midnight, _) = DateRange::single(Date::new(year, 4, d).unwrap()).utc_bounds(&tz);
             push(ws, Some("old"), Some(1), midnight + Span::minutes(3));
             push(ws, Some("old"), Some(1), midnight - Span::seconds(1));
         }

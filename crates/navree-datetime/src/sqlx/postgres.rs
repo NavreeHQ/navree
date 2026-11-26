@@ -36,9 +36,12 @@ fn encode_date_time_micros(dt: DateTime) -> Result<i64, BoxDynError> {
 
 #[doc(hidden)]
 pub fn decode_timestamp_binary(bytes: &[u8]) -> Result<Timestamp, BoxDynError> {
-    let raw: [u8; 8] = bytes
-        .try_into()
-        .map_err(|_| format!("expected 8 bytes for PostgreSQL timestamp, got {}", bytes.len()))?;
+    let raw: [u8; 8] = bytes.try_into().map_err(|_| {
+        format!(
+            "expected 8 bytes for PostgreSQL timestamp, got {}",
+            bytes.len()
+        )
+    })?;
     let us = i64::from_be_bytes(raw);
     let secs = us
         .div_euclid(MICROS_PER_SEC)
@@ -222,8 +225,9 @@ impl PgHasArrayType for Date {
 #[cfg_attr(docsrs, doc(cfg(feature = "sqlx-postgres")))]
 impl Encode<'_, Postgres> for Date {
     fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> Result<IsNull, BoxDynError> {
-        let days = i32::try_from(self.epoch_days() - PG_EPOCH_DAYS)
-            .map_err(|_| format!("value {self:?} would overflow binary encoding for Postgres DATE"))?;
+        let days = i32::try_from(self.epoch_days() - PG_EPOCH_DAYS).map_err(|_| {
+            format!("value {self:?} would overflow binary encoding for Postgres DATE")
+        })?;
         Encode::<Postgres>::encode(days, buf)
     }
 

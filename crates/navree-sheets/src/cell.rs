@@ -325,7 +325,9 @@ mod tests {
         assert_eq!(Cell::Float(3.0).to_text(), "3");
         assert_eq!(Cell::Float(2.25).to_text(), "2.25");
         assert_eq!(Cell::Bool(false).to_text(), "false");
-        let at = Date::new(2026, 1, 2).unwrap().at(Time::new(3, 4, 5).unwrap());
+        let at = Date::new(2026, 1, 2)
+            .unwrap()
+            .at(Time::new(3, 4, 5).unwrap());
         assert_eq!(Cell::DateTime(at).to_text(), "2026-01-02 03:04:05");
         assert_eq!(Cell::Date(at.date()).to_text(), "2026-01-02");
         assert_eq!(Cell::Empty.to_text(), "");

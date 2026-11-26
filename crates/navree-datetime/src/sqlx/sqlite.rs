@@ -37,15 +37,7 @@ const SQLITE_DATETIME_FORMATS: &[&str] = &[
     "%FT%T%.f%:z",
 ];
 
-const SQLITE_TIME_FORMATS: &[&str] = &[
-    "%T.f",
-    "%T%.f",
-    "%R",
-    "%RZ",
-    "%T%.fZ",
-    "%R%:z",
-    "%T%.f%:z",
-];
+const SQLITE_TIME_FORMATS: &[&str] = &["%T.f", "%T%.f", "%R", "%RZ", "%T%.fZ", "%R%:z", "%T%.f%:z"];
 
 #[doc(hidden)]
 pub fn decode_zoned_text(value: &str) -> Result<Zoned, BoxDynError> {

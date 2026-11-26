@@ -282,9 +282,8 @@ impl Domains {
             .where_(models::Certificate::HOST.eq(row.host.clone()))
             .first(&*rt.db)
             .await?;
-        let renew_after = |not_after: Timestamp| {
-            not_after - Span::days(i64::from(rt.options.acme.renew_days))
-        };
+        let renew_after =
+            |not_after: Timestamp| not_after - Span::days(i64::from(rt.options.acme.renew_days));
         match stored.as_ref().map(|cert| cert.not_after) {
             Some(not_after) if renew_after(not_after) > now => {
                 models::Domain::query()
@@ -419,12 +418,7 @@ impl Domains {
 
 /// Logs, emits and (with Lighthouse) reports a certificate close to
 /// expiry.
-async fn report_expiring(
-    rt: &Runtime,
-    host: &str,
-    domain_id: Option<Uuid>,
-    expires_at: Timestamp,
-) {
+async fn report_expiring(rt: &Runtime, host: &str, domain_id: Option<Uuid>, expires_at: Timestamp) {
     let days_left = (expires_at - rt.now()).as_days().max(0);
     tracing::warn!(target: "navree::domains", host, %expires_at, days_left, "a certificate expires soon");
     rt.emit(DomainCertificateExpiring {

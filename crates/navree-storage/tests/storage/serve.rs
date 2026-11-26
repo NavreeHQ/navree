@@ -3,8 +3,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_kernel::Navree;
 use navree_storage::{Storage, StorageModule};
 

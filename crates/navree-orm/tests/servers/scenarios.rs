@@ -137,8 +137,7 @@ pub async fn records_round_trip(db: Db) {
             value: Decimal::new(1_234_567, 2),
             closes_on: Date::new(2026, 12, 31).ok(),
             closed_at: Some(
-                Timestamp::utc(2026, 10, 27, 8, 30, 15).unwrap()
-                    + Span::micros(123_456),
+                Timestamp::utc(2026, 10, 27, 8, 30, 15).unwrap() + Span::micros(123_456),
             ),
             ..Deal::new("Exact", 1_000_000_000_000)
         },
@@ -256,12 +255,8 @@ pub async fn queries(db: Db, server: Server) {
         ["Small change"]
     );
     assert_eq!(
-        deals(Deal::query().where_date(
-            Deal::CLOSED_AT,
-            "=",
-            Date::new(2026, 3, 20).unwrap()
-        ))
-        .await,
+        deals(Deal::query().where_date(Deal::CLOSED_AT, "=", Date::new(2026, 3, 20).unwrap()))
+            .await,
         ["Platform deal"]
     );
     assert_eq!(
@@ -279,12 +274,7 @@ pub async fn queries(db: Db, server: Server) {
         2
     );
     assert_eq!(
-        deals(Deal::query().where_time(
-            Deal::CLOSED_AT,
-            "<",
-            Time::new(12, 0, 0).unwrap()
-        ))
-        .await,
+        deals(Deal::query().where_time(Deal::CLOSED_AT, "<", Time::new(12, 0, 0).unwrap())).await,
         ["Small change"]
     );
     assert_eq!(

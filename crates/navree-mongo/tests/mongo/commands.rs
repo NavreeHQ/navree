@@ -68,11 +68,7 @@ fn conditions_become_query_operators() {
     ));
     insta::assert_snapshot!(show(
         &table("deals")
-            .where_date(
-                "closes_on",
-                "=",
-                Date::new(2026, 6, 1).unwrap()
-            )
+            .where_date("closes_on", "=", Date::new(2026, 6, 1).unwrap())
             .where_month("closes_on", ">=", 6)
             .where_year("closes_on", "=", 2026)
             .where_day("closes_on", "<", 15)

@@ -80,10 +80,13 @@ fn sample() -> Vec<Value> {
         Value::Json(serde_json::json!({"stage": "won", "tags": ["a", "b"], "n": 3})),
         Value::Uuid(Uuid::from_u128(0x0199_a7a0_0000_7000_8000_0000_0000_0042)),
         Value::Date(Date::new(2026, 10, 28).unwrap()),
-        Value::Time(Time::new(9, 30, 15).and_then(|t| t.with_nanos(250000000)).unwrap()),
-        Value::DateTime(
-            DateTime::parse("%Y-%m-%d %H:%M:%S%.f", "2026-10-28 09:30:15.123456")
+        Value::Time(
+            Time::new(9, 30, 15)
+                .and_then(|t| t.with_nanos(250000000))
                 .unwrap(),
+        ),
+        Value::DateTime(
+            DateTime::parse("%Y-%m-%d %H:%M:%S%.f", "2026-10-28 09:30:15.123456").unwrap(),
         ),
         Value::Timestamp(Timestamp::utc(2026, 10, 28, 9, 30, 15).unwrap()),
     ]
@@ -165,7 +168,9 @@ pub async fn every_kind_round_trips(scratch: Scratch) {
     );
     assert_eq!(
         row.get::<Time>("clock").unwrap(),
-        Time::new(9, 30, 15).and_then(|t| t.with_nanos(250000000)).unwrap(),
+        Time::new(9, 30, 15)
+            .and_then(|t| t.with_nanos(250000000))
+            .unwrap(),
         "{backend}"
     );
     assert_eq!(

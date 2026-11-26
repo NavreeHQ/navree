@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE};
-use navree_datetime::Timestamp;
 use navree_crypto::jose::{Algorithm, Jws};
+use navree_datetime::Timestamp;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -298,10 +298,7 @@ mod tests {
             panic!("{verdict:?}");
         };
         assert_eq!(verified.id.as_deref(), Some("2070443601311540"));
-        assert_eq!(
-            verified.timestamp.unwrap().as_secs(),
-            now().as_secs() - 5
-        );
+        assert_eq!(verified.timestamp.unwrap().as_secs(), now().as_secs() - 5);
         // Cached: the second request fetches nothing.
         verify(&source(), &token(&claims()), &keys).await.unwrap();
         server.assert_sent_count(1);

@@ -87,7 +87,12 @@ fn bind(kind: ValueKind, text: &str) -> Option<Value> {
             .map(Value::Date),
         ValueKind::DateTime => {
             let day = navree_datetime::Date::parse("%Y-%m-%d", text).ok()?;
-            Some(Value::Timestamp(navree_datetime::Time::new(0, 0, 0).ok().map(|t| day.at(t))?.in_utc()))
+            Some(Value::Timestamp(
+                navree_datetime::Time::new(0, 0, 0)
+                    .ok()
+                    .map(|t| day.at(t))?
+                    .in_utc(),
+            ))
         }
         ValueKind::Bool => matches!(text, "true" | "false").then(|| Value::Bool(text == "true")),
         ValueKind::Uuid => uuid::Uuid::parse_str(text).ok().map(Value::Uuid),
@@ -130,7 +135,9 @@ fn filter_of(
                     let next = navree_datetime::Date::parse("%Y-%m-%d", text)
                         .ok()
                         .and_then(|day| day.tomorrow())
-                        .and_then(|day| navree_datetime::Time::new(0, 0, 0).ok().map(|t| day.at(t)));
+                        .and_then(|day| {
+                            navree_datetime::Time::new(0, 0, 0).ok().map(|t| day.at(t))
+                        });
                     if let Some(next) = next {
                         parts.push(source.lt(Value::Timestamp(next.in_utc())));
                     }

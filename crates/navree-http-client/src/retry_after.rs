@@ -16,7 +16,11 @@ pub(crate) fn parse_retry_after(value: &str, now: SystemTime) -> Option<Duration
         return Some(Duration::from_secs(secs));
     }
     let date = http_date(value)?;
-    Some((date - Timestamp::from(now)).to_std().unwrap_or(Duration::ZERO))
+    Some(
+        (date - Timestamp::from(now))
+            .to_std()
+            .unwrap_or(Duration::ZERO),
+    )
 }
 
 /// An HTTP date: the preferred IMF-fixdate (`Sun, 06 Nov 1994 08:49:37

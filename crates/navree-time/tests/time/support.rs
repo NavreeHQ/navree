@@ -6,12 +6,12 @@
 
 use std::sync::Arc;
 
-use navree_datetime::{Date, DateTime, Timestamp, Zoned};
 use http::request::Parts;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{AuthVia, Principal};
+use navree_datetime::{Date, DateTime, Timestamp, Zoned};
 use navree_http::body::Body;
 use navree_http::{AppError, Authenticator, HttpModule, HttpOptions, build_router};
 use navree_kernel::{App, AppBuilder, BoxFuture, Navree};
@@ -23,7 +23,8 @@ use uuid::Uuid;
 /// An RFC 3339 instant.
 pub fn utc(text: &str) -> Timestamp {
     Zoned::parse_rfc3339(text)
-        .unwrap_or_else(|e| panic!("bad instant `{text}`: {e}")).timestamp()
+        .unwrap_or_else(|e| panic!("bad instant `{text}`: {e}"))
+        .timestamp()
 }
 
 /// A `yyyy-MM-dd` day.

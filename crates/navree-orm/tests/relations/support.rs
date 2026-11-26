@@ -5,8 +5,8 @@
 
 use std::sync::{Arc, Mutex, Once};
 
-use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, Db, DbOptions, Executor, ExecutorExt, Statement};
 use navree_kernel::Module;
 use navree_orm::relations::MorphMap;

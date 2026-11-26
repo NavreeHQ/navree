@@ -6,8 +6,8 @@ use std::fmt;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use navree_datetime::Timestamp;
 use navree_contracts::Secret;
+use navree_datetime::Timestamp;
 use navree_http_client::{HttpClient, HttpClientError, Response};
 use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
@@ -657,8 +657,7 @@ mod tests {
             client_id: None,
             project_id: None,
         };
-        let now = Timestamp::parse_rfc3339("2026-10-27T08:00:00Z")
-            .unwrap();
+        let now = Timestamp::parse_rfc3339("2026-10-27T08:00:00Z").unwrap();
         let jwt = service_account_assertion(
             "https://oauth2.googleapis.com/token",
             &key,
