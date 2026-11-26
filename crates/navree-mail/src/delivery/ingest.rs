@@ -4,7 +4,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, TimeZone as _, Utc};
+use navree_datetime::{Timestamp, Zoned};
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -107,7 +107,7 @@ pub struct ProviderEvent {
     /// The provider's diagnostic.
     pub detail: Option<String>,
     /// When it happened (default: when it is recorded).
-    pub occurred_at: Option<DateTime<Utc>>,
+    pub occurred_at: Option<Timestamp>,
 }
 
 impl ProviderEvent {
@@ -161,7 +161,7 @@ impl ProviderEvent {
 
     /// When it happened.
     #[must_use]
-    pub fn at(mut self, occurred_at: DateTime<Utc>) -> Self {
+    pub fn at(mut self, occurred_at: Timestamp) -> Self {
         self.occurred_at = Some(occurred_at);
         self
     }
@@ -339,7 +339,7 @@ impl ProviderEvent {
             detail,
             occurred_at: data["timestamp"]
                 .as_f64()
-                .and_then(|seconds| Utc.timestamp_millis_opt((seconds * 1000.0) as i64).single()),
+                .and_then(|seconds| Timestamp::from_millis((seconds * 1000.0) as i64).ok()),
         }]
     }
 
@@ -435,9 +435,9 @@ impl ProviderEvent {
 }
 
 /// An RFC 3339 timestamp.
-fn time(value: &Value) -> Option<DateTime<Utc>> {
+fn time(value: &Value) -> Option<Timestamp> {
     value
         .as_str()
-        .and_then(|text| DateTime::parse_from_rfc3339(text).ok())
-        .map(|time| time.with_timezone(&Utc))
+        .and_then(|text| Zoned::parse_rfc3339(text).ok())
+        .map(|time| time.timestamp())
 }

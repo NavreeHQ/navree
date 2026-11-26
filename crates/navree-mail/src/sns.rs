@@ -8,7 +8,7 @@
 //! ([`CertificateCache`]). The URL token of the routes is checked on top of
 //! it.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_crypto::jose::VerifyingKey;
 use navree_crypto::sns::{CertificateCache, SnsEnvelopeError, SnsMessage};
 use navree_http_client::HttpClient;
@@ -59,7 +59,7 @@ impl SnsVerifier {
         body: &[u8],
         topics: &[String],
         tolerance_secs: u64,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<SnsMessage, SnsRefusal> {
         let message: SnsMessage = match serde_json::from_slice(body) {
             Ok(message) => message,
@@ -84,7 +84,7 @@ impl SnsVerifier {
 
     /// The key of the certificate at `url` (an SNS certificate URL, checked
     /// by the caller), from the cache or fetched.
-    async fn certificate(&self, url: &str, now: DateTime<Utc>) -> Result<VerifyingKey, SnsRefusal> {
+    async fn certificate(&self, url: &str, now: Timestamp) -> Result<VerifyingKey, SnsRefusal> {
         if let Some(key) = self.certificates.get(url, now) {
             return Ok(key);
         }
@@ -145,14 +145,13 @@ mod tests {
     }
 
     /// 2026-10-27 at `time` (UTC).
-    fn at(time: &str) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(&format!("2026-10-27T{time}Z"))
+    fn at(time: &str) -> Timestamp {
+        Timestamp::parse_rfc3339(&format!("2026-10-27T{time}Z"))
             .unwrap()
-            .with_timezone(&Utc)
     }
 
     /// A minute after the bounce was published.
-    fn now() -> DateTime<Utc> {
+    fn now() -> Timestamp {
         at("10:01:02")
     }
 

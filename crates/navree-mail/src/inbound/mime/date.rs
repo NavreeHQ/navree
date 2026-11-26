@@ -2,11 +2,11 @@
 //! section 4.3): `Tue, 27 Oct 2026 09:14:00 +0000`, a day name optional,
 //! seconds optional, two-digit years, named zones, comments anywhere.
 
-use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use navree_datetime::{Date, Timestamp};
 
 /// The date in UTC. `None` when the value isn't a date. A missing zone is
 /// read as UTC; a day past the end of its month rolls over into the next.
-pub(super) fn parse(value: &str) -> Option<DateTime<Utc>> {
+pub(super) fn parse(value: &str) -> Option<Timestamp> {
     let text = without_comments(value);
     let mut tokens = text
         .split(|c: char| c.is_whitespace() || c == ',')
@@ -47,12 +47,11 @@ pub(super) fn parse(value: &str) -> Option<DateTime<Utc>> {
     {
         return None;
     }
-    let days = NaiveDate::from_ymd_opt(year, month, 1)?
-        .signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1)?)
-        .num_days()
-        + i64::from(day - 1);
+    let first = Date::new(year, month as u8, 1).ok()?;
+    let epoch = Date::new(1970, 1, 1).ok()?;
+    let days = epoch.days_until(first) + i64::from(day - 1);
     let seconds = days * 86_400 + i64::from(hour * 3600 + minute * 60 + second) - offset;
-    Utc.timestamp_opt(seconds, 0).single()
+    Timestamp::from_secs(seconds).ok()
 }
 
 /// The value with its comments (nested, with escapes) replaced by spaces.
@@ -150,8 +149,8 @@ fn zone_offset(zone: &str) -> i64 {
 mod tests {
     use super::*;
 
-    fn at(y: i32, mo: u32, d: u32, h: u32, mi: u32, s: u32) -> Option<DateTime<Utc>> {
-        Utc.with_ymd_and_hms(y, mo, d, h, mi, s).single()
+    fn at(y: i32, mo: u8, d: u8, h: u8, mi: u8, s: u8) -> Option<Timestamp> {
+        Timestamp::utc(y, mo, d, h, mi, s).ok()
     }
 
     #[test]

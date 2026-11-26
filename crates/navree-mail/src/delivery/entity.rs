@@ -25,7 +25,7 @@
 //! [`Deliveries`](crate::Deliveries); read them freely with
 //! [`navree_db::Record::select`] or [`navree_db::record::find`].
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -54,11 +54,11 @@ navree_db::record! {
         /// Whether it is used.
         pub enabled: bool,
         /// When its `usable` check last passed.
-        pub checked_at: Option<DateTime<Utc>>,
+        pub checked_at: Option<Timestamp>,
         /// When it was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
@@ -94,13 +94,13 @@ navree_db::record! {
         /// Why the transport refused it.
         pub error: Option<String>,
         /// When it was first opened (tracking).
-        pub opened_at: Option<DateTime<Utc>>,
+        pub opened_at: Option<Timestamp>,
         /// When a link was first clicked (tracking).
-        pub clicked_at: Option<DateTime<Utc>>,
+        pub clicked_at: Option<Timestamp>,
         /// When it was handed to the transport.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
@@ -129,9 +129,9 @@ navree_db::record! {
         /// The provider's diagnostic.
         pub detail: Option<String>,
         /// When it happened, by the provider's clock.
-        pub occurred_at: DateTime<Utc>,
+        pub occurred_at: Timestamp,
         /// When it was recorded.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
@@ -152,7 +152,7 @@ navree_db::record! {
         /// The delivery that caused it.
         pub delivery_id: Option<Uuid>,
         /// When it was added.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
@@ -187,10 +187,10 @@ navree_db::record! {
         /// Who released or discarded it.
         pub decided_by: Option<Uuid>,
         /// When.
-        pub decided_at: Option<DateTime<Utc>>,
+        pub decided_at: Option<Timestamp>,
         /// When it was held.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }

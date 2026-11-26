@@ -4,7 +4,7 @@
 use std::fmt;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -299,13 +299,13 @@ impl Incoming {
     /// the message is over the default reading limits (see
     /// [`InboundMail::parse`]).
     pub fn parse(self) -> Result<InboundMail, InboundError> {
-        self.parse_at(Utc::now(), Limits::default())
+        self.parse_at(Timestamp::now(), Limits::default())
     }
 
     /// Parses the message within `limits`, received at `received_at`.
     pub(crate) fn parse_at(
         self,
-        received_at: DateTime<Utc>,
+        received_at: Timestamp,
         limits: Limits,
     ) -> Result<InboundMail, InboundError> {
         let mut mail = InboundMail::parse_with(self.raw, limits)?;
@@ -372,7 +372,7 @@ pub struct InboundMail {
     /// `Subject`, decoded, on one line: a control character is a space.
     pub subject: Option<String>,
     /// `Date`, in UTC.
-    pub date: Option<DateTime<Utc>>,
+    pub date: Option<Timestamp>,
     /// The plain-text body (from the HTML when the message has no text
     /// part).
     pub text: Option<String>,
@@ -390,7 +390,7 @@ pub struct InboundMail {
     /// Where the raw message is stored, once it is.
     pub stored: Option<StoredMail>,
     /// When it was received.
-    pub received_at: DateTime<Utc>,
+    pub received_at: Timestamp,
     raw: Bytes,
 }
 
@@ -497,7 +497,7 @@ impl InboundMail {
             size: raw.len(),
             fingerprint: hex::encode(Sha256::digest(&raw)),
             stored: None,
-            received_at: Utc::now(),
+            received_at: Timestamp::now(),
             raw: Bytes::new(),
         };
         Ok(InboundMail { raw, ..mail })

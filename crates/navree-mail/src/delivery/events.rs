@@ -6,7 +6,7 @@
 //! Each carries the delivery (when the message was found in the log), its
 //! workspace and the recipient's address as the provider reported it.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_events::Event;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -23,7 +23,7 @@ pub struct MailDelivered {
     /// The recipient.
     pub recipient: Option<String>,
     /// When it happened.
-    pub occurred_at: DateTime<Utc>,
+    pub occurred_at: Timestamp,
 }
 
 impl Event for MailDelivered {
@@ -47,7 +47,7 @@ pub struct MailBounced {
     /// The provider's diagnostic.
     pub detail: Option<String>,
     /// When it happened.
-    pub occurred_at: DateTime<Utc>,
+    pub occurred_at: Timestamp,
 }
 
 impl Event for MailBounced {
@@ -67,7 +67,7 @@ pub struct MailComplained {
     /// The recipient.
     pub recipient: Option<String>,
     /// When it happened.
-    pub occurred_at: DateTime<Utc>,
+    pub occurred_at: Timestamp,
 }
 
 impl Event for MailComplained {
@@ -86,7 +86,7 @@ pub struct MailOpened {
     /// The recipient, when the provider names one.
     pub recipient: Option<String>,
     /// When it happened.
-    pub occurred_at: DateTime<Utc>,
+    pub occurred_at: Timestamp,
 }
 
 impl Event for MailOpened {
@@ -107,7 +107,7 @@ pub struct MailClicked {
     /// The link.
     pub url: String,
     /// When it happened.
-    pub occurred_at: DateTime<Utc>,
+    pub occurred_at: Timestamp,
 }
 
 impl Event for MailClicked {
@@ -151,7 +151,7 @@ pub struct InboundMailReceived {
     /// Where the raw message is stored.
     pub stored: Option<crate::inbound::StoredMail>,
     /// When it was received.
-    pub received_at: DateTime<Utc>,
+    pub received_at: Timestamp,
 }
 
 #[cfg(feature = "inbound")]

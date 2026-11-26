@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::{HeaderMap, Method, header};
 use navree_contracts::{Clock, SystemClock};
 use navree_http::body::{BodyLimit, Bytes, read_body};
@@ -228,7 +228,7 @@ impl Controller for InboundController {
 }
 
 impl InboundController {
-    fn now(&self) -> DateTime<Utc> {
+    fn now(&self) -> Timestamp {
         self.clock.now()
     }
 

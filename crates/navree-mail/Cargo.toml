@@ -44,7 +44,6 @@ test-mysql = ["navree-db/mysql"]
 [dependencies]
 base64 = { workspace = true }
 bytes = { workspace = true }
-chrono = { workspace = true }
 css-inline = { workspace = true }
 # Feature `inbound`: the charsets of received mail.
 encoding_rs = { workspace = true, optional = true }
@@ -60,6 +59,7 @@ memchr = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }

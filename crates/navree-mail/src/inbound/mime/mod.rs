@@ -28,7 +28,7 @@ mod words;
 use std::ops::Range;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 
 pub(crate) use address::Mailbox;
 pub(crate) use header::unfold;
@@ -635,7 +635,7 @@ pub(crate) fn head_lines_agree(raw: &[u8]) -> bool {
 }
 
 /// A `Date` value in UTC.
-pub(crate) fn date(value: &[u8]) -> Option<DateTime<Utc>> {
+pub(crate) fn date(value: &[u8]) -> Option<Timestamp> {
     date::parse(&header::unfold(value))
 }
 

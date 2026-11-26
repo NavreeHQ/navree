@@ -1,6 +1,6 @@
 //! `InboundMail::parse` on fixture `.eml` files.
 
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_mail::inbound::{Address, Envelope};
 use navree_mail::{InboundError, InboundMail};
 use sha2::{Digest, Sha256};
@@ -36,7 +36,7 @@ fn a_reply_reads_its_headers_addresses_and_text() {
     assert_eq!(mail.subject.as_deref(), Some("Re: [#42] Printer on fire"));
     assert_eq!(
         mail.date,
-        Some(Utc.with_ymd_and_hms(2026, 10, 27, 9, 14, 0).unwrap())
+        Some(Timestamp::utc(2026, 10, 27, 9, 14, 0).unwrap())
     );
     assert!(
         mail.text

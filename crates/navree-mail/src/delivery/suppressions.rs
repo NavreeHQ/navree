@@ -5,7 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::record::{self, Filter};
 use navree_db::{Page, PageQuery, Record as _, Select, Uow};
 use navree_openapi::ToSchema;
@@ -84,7 +84,7 @@ pub struct Suppression {
     /// The delivery that caused it.
     pub delivery_id: Option<Uuid>,
     /// When it was added.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl From<&SuppressionRow> for Suppression {

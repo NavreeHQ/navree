@@ -194,7 +194,7 @@ impl ReplyTokens {
     }
 
     fn today(&self) -> u16 {
-        let days = self.clock.now().timestamp().div_euclid(86_400);
+        let days = self.clock.now().as_secs().div_euclid(86_400);
         u16::try_from(days.max(0)).unwrap_or(u16::MAX)
     }
 

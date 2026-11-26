@@ -1,6 +1,6 @@
 //! `Incoming::compose`: messages built field by field parse back the same.
 
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_mail::Incoming;
 use navree_mail::inbound::{StoredMail, Verdict, Verdicts};
 
@@ -18,7 +18,7 @@ fn a_composed_message_parses_back() {
         .in_reply_to("ticket-42@acme.test")
         .reference("ticket-41@acme.test")
         .reference("<ticket-42@acme.test>")
-        .date(Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 0).unwrap())
+        .date(Timestamp::utc(2026, 10, 27, 9, 0, 0).unwrap())
         .header("X-Ticket", "42")
         .attach("notes.txt", "text/plain", "fire: out\n")
         .inline("logo@acme.test", "logo.png", "image/png", vec![0x89, b'P'])
@@ -60,7 +60,7 @@ fn a_composed_message_parses_back() {
     );
     assert_eq!(
         mail.date,
-        Some(Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 0).unwrap())
+        Some(Timestamp::utc(2026, 10, 27, 9, 0, 0).unwrap())
     );
     assert_eq!(mail.header("X-Ticket"), Some("42"));
     assert_eq!(mail.attachments.len(), 2);

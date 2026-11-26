@@ -5,7 +5,7 @@
 //! facade's `tests/mail_inbound_docs.rs`.
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_config::{Config, ConfigSources};
 use navree_contracts::Secret;
 use navree_events::Event;
@@ -164,10 +164,10 @@ fn the_message_has_its_documented_members() {
         (id, source, provider_id, envelope, verdicts);
     let _: (Option<String>, Option<String>, Vec<String>) = (message_id, in_reply_to, references);
     let _: (Option<Address>, Vec<Address>, Vec<Address>, Vec<Address>) = (from, reply_to, to, cc);
-    let _: (Option<String>, Option<DateTime<Utc>>) = (subject, date);
+    let _: (Option<String>, Option<Timestamp>) = (subject, date);
     let _: (Option<String>, Option<String>, Vec<Header>, Vec<Attachment>) =
         (text, html, headers, attachments);
-    let _: (usize, String, Option<StoredMail>, DateTime<Utc>) =
+    let _: (usize, String, Option<StoredMail>, Timestamp) =
         (size, fingerprint, stored, received_at);
     let _: &Bytes = mail.raw();
     let _: Option<&str> = mail.header("from");
@@ -258,7 +258,7 @@ fn incoming_and_compose_have_their_documented_builders() {
         .message_id("m@x")
         .in_reply_to("r@x")
         .reference("q@x")
-        .date(Utc::now())
+        .date(Timestamp::now())
         .header("X-A", "1")
         .raw_header("Received", "from x")
         .attach("a.txt", "text/plain", "a")
@@ -337,7 +337,7 @@ fn the_event_statuses_and_errors_have_their_documented_names() {
         mailbox: None,
         address: None,
         stored: None,
-        received_at: Utc::now(),
+        received_at: Timestamp::now(),
     };
     assert_eq!(serde_json::to_value(&event).unwrap()["status"], "handled");
     for (status, name) in [
