@@ -11,8 +11,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, SecondsFormat, Utc};
 use navree_crypto::hmac_sha256;
-use object_store::signer::Url;
 use percent_encoding::percent_decode_str;
+use url::Url;
 
 /// The SAS version the links name. Every version from 2020-12-06 signs the
 /// same sixteen fields ([`SharedKeySas::string_to_sign`]).
