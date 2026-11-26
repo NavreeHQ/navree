@@ -92,7 +92,7 @@ impl SessionStore for RedisSessionStore {
             let ttl = match record.expires_at {
                 None => None,
                 Some(at) => match (at - self.clock.now()).to_std() {
-                    Ok(ttl) if !ttl.is_zero() => Some(ttl),
+                    Some(ttl) if !ttl.is_zero() => Some(ttl),
                     // Already expired: nothing to keep.
                     _ => {
                         let _: u64 = self

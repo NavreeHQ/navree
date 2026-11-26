@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use chrono::Duration as Span;
 use navree_contracts::{FixedClock, SessionRecord, SessionStore};
+use navree_datetime::Span;
 use navree_redis::{RedisSessionStore, redis};
 use serde_json::json;
 

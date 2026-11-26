@@ -427,7 +427,7 @@ impl QueueStore for RedisQueueStore {
                 options: job.options.clone(),
                 error: error.to_owned(),
                 attempts: job.attempts,
-                failed_at: chrono::DateTime::from_timestamp_millis(now).unwrap_or_default(),
+                failed_at: navree_datetime::Timestamp::from_millis(now).unwrap_or_default(),
             };
             let json = serde_json::to_string(&failed).map_err(QueueError::Payload)?;
             let moved: i64 = self
