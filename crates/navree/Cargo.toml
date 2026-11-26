@@ -308,7 +308,7 @@ workspace = [
 ## and units of work), the schema builder and migrations on collections,
 ## time-series collections (the official driver on rustls; opt-in because
 ## only apps with a MongoDB server need it).
-mongo = ["dep:navree-mongo", "telemetry", "schema", "db", "orm"]
+mongo = ["dep:navree-mongo", "navree-datetime/bson", "telemetry", "schema", "db", "orm"]
 ## `mongo` by the database's name.
 mongodb = ["mongo"]
 ## L5 (opt-in, not in `full`)
@@ -435,6 +435,7 @@ flags = [
 ## GraphQL: `GraphqlModule`, `#[resolver]`, dataloaders, subscriptions.
 graphql = [
     "dep:navree-graphql",
+    "navree-datetime/async-graphql",
     "http",
     "events",
     "db",
@@ -706,11 +707,11 @@ domains = [
 ## SQLite driver for navree-db (`sqlite:` URLs; the bundled SQLite library),
 ## and Logbook's SQLite file store. Not in `full`: a PostgreSQL or MySQL build
 ## compiles no SQLite.
-sqlite = ["db", "navree-db/sqlite", "navree-logbook?/sqlite"]
+sqlite = ["db", "navree-db/sqlite", "navree-datetime/sqlx-sqlite", "navree-logbook?/sqlite"]
 ## PostgreSQL driver for navree-db.
-postgres = ["db", "navree-db/postgres"]
+postgres = ["db", "navree-db/postgres", "navree-datetime/sqlx-postgres"]
 ## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
-mysql = ["db", "navree-db/mysql"]
+mysql = ["db", "navree-db/mysql", "navree-datetime/sqlx-mysql"]
 ## navree-validation's `Phone`: E.164 phone numbers (navree-phone).
 ## Pure Rust; in `full`.
 validation-phone = ["validation", "phone", "navree-validation/phone", "navree-ui?/phone", "navree-orm?/phone", "navree-i18n?/phone"]
@@ -816,7 +817,6 @@ navree-workflows = { workspace = true, optional = true }
 async-graphql = { workspace = true }
 # `tests/jose_docs.rs` builds fixture keys by hand.
 base64 = { workspace = true }
-chrono = { workspace = true }
 # The request-pipeline benchmarks (`benches/pipeline.rs`).
 criterion = { workspace = true }
 http = { workspace = true }

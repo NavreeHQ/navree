@@ -4,10 +4,10 @@
 use std::sync::Mutex;
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
 use navree::BoxFuture;
 use navree::auth::AuthPages;
 use navree::contracts::{Clock, Job, JobContext, JobOptions};
+use navree::datetime::Timestamp;
 use navree::events::Listener;
 use navree::fleet::{Fleet, LongWaitDetected};
 use navree::prelude::*;
@@ -115,7 +115,7 @@ impl DigestModule {
 #[tokio::test]
 async fn a_mail_waiting_two_minutes_is_a_long_wait() {
     let clock = Arc::new(FixedClock::new(
-        Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap(),
+        Timestamp::utc(2026, 10, 26, 9, 0, 0).unwrap(),
     ));
     let app = TestApp::builder()
         .temp_database()

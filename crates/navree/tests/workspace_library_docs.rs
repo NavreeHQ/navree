@@ -72,8 +72,8 @@ impl Migration for CreateTemplateBlocks {
 // "The model", with "Shaping the copy".
 
 pub mod model {
-    use chrono::{DateTime, Utc};
     use navree::BoxFuture;
+    use navree::datetime::Timestamp;
     use navree::db::Uow;
     use navree::orm::prelude::*;
     use navree::workspace::library::{Library, LibraryScope};
@@ -96,8 +96,8 @@ pub mod model {
         pub slug: String,
         pub name: String,
         pub body: String,
-        pub created_at: DateTime<Utc>,
-        pub updated_at: DateTime<Utc>,
+        pub created_at: Timestamp,
+        pub updated_at: Timestamp,
     }
 
     #[derive(Model, Clone, Debug, Default, Serialize)]

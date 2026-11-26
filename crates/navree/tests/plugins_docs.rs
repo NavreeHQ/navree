@@ -739,11 +739,11 @@ fn a_plugin_that_configures_a_module_only_it_imports_is_refused_once() {
 /// The guard plugin: its crate is this module, so the app's modules at the top of the file are in
 /// no crate it names.
 mod navree_plugin_guard {
-    use chrono::{DateTime, Utc};
     use http::request::Parts;
     use navree::BoxFuture;
     use navree::auth::{AuthError, SignInAttempt, SignInPolicy, Strategy};
     use navree::contracts::{AuditEntry, AuditSink, Clock, FixedClock, PermissionCheck, Principal};
+    use navree::datetime::Timestamp;
     use navree::db::{ChangeEvent, ChangeObserver, DbError, Uow};
     use navree::kernel::KernelError;
     use navree::plugin::PluginInfo;
@@ -846,7 +846,7 @@ mod navree_plugin_guard {
     /// The plugin's clock, stopped at the start of 1970, for a module of the app to register.
     pub fn clock() -> Factory<dyn Clock> {
         Factory::new(|_| async {
-            Ok(Arc::new(FixedClock::new(DateTime::<Utc>::UNIX_EPOCH)) as Arc<dyn Clock>)
+            Ok(Arc::new(FixedClock::new(Timestamp::UNIX_EPOCH)) as Arc<dyn Clock>)
         })
     }
 
@@ -1245,8 +1245,8 @@ impl Module for GuardClock {
 
 #[tokio::test]
 async fn the_app_may_register_a_plugins_clock() {
-    use chrono::{DateTime, Utc};
     use navree::contracts::Clock;
+    use navree::datetime::Timestamp;
 
     let app = TestApp::builder()
         .module(navree_plugin_guard::Provides(|_| {}))
@@ -1254,7 +1254,7 @@ async fn the_app_may_register_a_plugins_clock() {
         .build()
         .await;
     let clock = app.get::<dyn Clock>().await;
-    assert_eq!(clock.now(), DateTime::<Utc>::UNIX_EPOCH);
+    assert_eq!(clock.now(), Timestamp::UNIX_EPOCH);
 
     app.shutdown().await.unwrap();
 }

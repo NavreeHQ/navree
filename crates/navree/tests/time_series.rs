@@ -192,7 +192,7 @@ mod scratch {
 
 #[cfg(feature = "postgres")]
 mod timescaledb {
-    use chrono::{TimeDelta, Utc};
+    use navree::datetime::{Span, Timestamp};
     use navree::db::navree_schema::{IndexKind, Schema};
     use navree::db::{Backend, Executor as _, ExecutorExt as _, Statement};
     use navree::db::{Db, MIGRATIONS_TABLE};
@@ -423,7 +423,6 @@ INSERT INTO "webhook_attempts" VALUES
     /// the same buckets as on SQLite, and `first` / `last`.
     #[tokio::test]
     async fn the_guide_s_time_bucket_queries() {
-        use chrono::{DateTime, TimeZone};
         use navree::db::DbOptions;
         use navree::orm::{Expr, col, table};
 
@@ -456,7 +455,7 @@ INSERT INTO "webhook_attempts" VALUES
             .await
             .unwrap();
         assert!(schema.is_hypertable("readings").await.unwrap());
-        let start = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
+        let start = Timestamp::utc(2026, 10, 27, 8, 0, 0).unwrap();
         for step in 0..9_i32 {
             db.pool()
                 .execute(&Statement::new(
@@ -464,13 +463,13 @@ INSERT INTO "webhook_attempts" VALUES
                     "INSERT INTO readings (celsius, taken_at) VALUES ($1, $2)",
                     [
                         (20.0 + f64::from(step)).into(),
-                        (start + TimeDelta::minutes(10 * i64::from(step))).into(),
+                        (start + Span::minutes(10 * i64::from(step))).into(),
                     ],
                 ))
                 .await
                 .unwrap();
         }
-        let since = start - TimeDelta::days(1);
+        let since = start - Span::days(1);
         let points = table("readings")
             .select_time_bucket("15 minutes", "taken_at", "bucket")
             .select_expr(Expr::avg(col("celsius")), "average")
@@ -484,7 +483,7 @@ INSERT INTO "webhook_attempts" VALUES
         let shown: Vec<String> = points
             .iter()
             .map(|point| {
-                let bucket: DateTime<Utc> = point.get("bucket").unwrap();
+                let bucket: Timestamp = point.get("bucket").unwrap();
                 let average: f64 = point.get("average").unwrap();
                 let samples: i64 = point.get("samples").unwrap();
                 format!("{} {average:.1} {samples}", bucket.format("%H:%M"))
@@ -614,14 +613,14 @@ INSERT INTO "webhook_attempts" VALUES
         );
 
         // `audit:prune` drops the weeks before the cutoff whole.
-        let now = Utc::now();
+        let now = Timestamp::now();
         for weeks in [10, 9, 8, 1] {
             db.pool()
                 .execute(&Statement::new(
                     Backend::Postgres,
                     "INSERT INTO audit_logs (id, kind, action, metadata, created_at) \
                      VALUES (gen_random_uuid(), 'auth', 'auth.login', '{}', $1)",
-                    [(now - TimeDelta::weeks(weeks)).into()],
+                    [(now - Span::weeks(weeks)).into()],
                 ))
                 .await
                 .unwrap();

@@ -12,7 +12,7 @@
 mod temp;
 use temp::TempDirGuard;
 
-use chrono::{DateTime, TimeDelta, TimeZone, Utc};
+use navree::datetime::{Span, Timestamp};
 use navree::db::{Db, DbOptions, prune_time_series};
 use navree::db::{Executor as _, Statement};
 use navree::orm::{Dialect, Expr, col, table};
@@ -80,12 +80,12 @@ mod m20261101_090000_tune_time_series {
 
 /// "Pruning in code".
 mod prune {
-    use chrono::{TimeDelta, Utc};
+    use navree::datetime::{Span, Timestamp};
     use navree::db::{Db, DbError, prune_time_series};
 
     /// Deletes the events older than `days`; returns how many.
     pub async fn prune_events(db: &Db, days: i64) -> Result<u64, DbError> {
-        let cutoff = Utc::now() - TimeDelta::days(days);
+        let cutoff = Timestamp::now() - Span::days(days);
         db.transaction(|uow| async move {
             prune_time_series(&uow, "events", "occurred_at", cutoff).await
         })
@@ -252,7 +252,7 @@ async fn pruning_in_code() {
                 uuid::Uuid::now_v7().into(),
                 "page_view".into(),
                 serde_json::json!({}).into(),
-                (Utc::now() - TimeDelta::days(days)).into(),
+                (Timestamp::now() - Span::days(days)).into(),
             ],
         ))
         .await
@@ -262,7 +262,7 @@ async fn pruning_in_code() {
     assert_eq!(prune::prune_events(&db, 90).await.unwrap(), 0);
     // The helper the example wraps, on its own.
     assert_eq!(
-        prune_time_series(&db, "events", "occurred_at", Utc::now())
+        prune_time_series(&db, "events", "occurred_at", Timestamp::now())
             .await
             .unwrap(),
         1
@@ -271,7 +271,7 @@ async fn pruning_in_code() {
 
 /// `readings`: one row every 10 minutes for an hour and a half from 08:00,
 /// at 20.0 °C and up a degree each time.
-async fn readings(db: &Db) -> DateTime<Utc> {
+async fn readings(db: &Db) -> Timestamp {
     Schema::new(&db)
         .create_hypertable("readings", "taken_at", |t| {
             t.id();
@@ -280,13 +280,13 @@ async fn readings(db: &Db) -> DateTime<Utc> {
         })
         .await
         .unwrap();
-    let start = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
+    let start = Timestamp::utc(2026, 10, 27, 8, 0, 0).unwrap();
     for step in 0..9_i32 {
         db.execute(&Statement::portable(
             "INSERT INTO readings (celsius, taken_at) VALUES (?, ?)",
             [
                 (20.0 + f64::from(step)).into(),
-                (start + TimeDelta::minutes(10 * i64::from(step))).into(),
+                (start + Span::minutes(10 * i64::from(step))).into(),
             ],
         ))
         .await
@@ -301,7 +301,7 @@ async fn time_bucket_queries() -> Result<(), Box<dyn std::error::Error>> {
     let db = sqlite(&dir).await;
     let start = readings(&db).await;
 
-    let since = start - TimeDelta::days(1);
+    let since = start - Span::days(1);
     let points = table("readings")
         .select_time_bucket("15 minutes", "taken_at", "bucket")
         .select_expr(Expr::avg(col("celsius")), "average")
@@ -313,7 +313,7 @@ async fn time_bucket_queries() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let mut shown = Vec::new();
     for point in &points {
-        let bucket: DateTime<Utc> = point.get("bucket")?;
+        let bucket: Timestamp = point.get("bucket")?;
         let average: f64 = point.get("average")?;
         let samples: i64 = point.get("samples")?;
         shown.push(format!("{} {average:.1} {samples}", bucket.format("%H:%M")));
@@ -346,7 +346,7 @@ async fn time_bucket_queries() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Buckets from another origin: 08:05.
-    let origin = start + TimeDelta::minutes(5);
+    let origin = start + Span::minutes(5);
     let shifted = table("readings")
         .select_expr(
             Expr::time_bucket_from("1 hour", col("taken_at"), Expr::val(origin)),

@@ -2,8 +2,8 @@
 //! as an app writes them (the facade, the prelude and the macros),
 //! compiled and run.
 
-use chrono::{DateTime, Utc};
 use navree::BoxFuture;
+use navree::datetime::Timestamp;
 use navree::db::Db;
 use navree::db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree::prelude::*;
@@ -31,14 +31,14 @@ struct Company {
     workspace_id: Uuid,
     name: String,
     stage: String,
-    last_contacted_at: DateTime<Utc>,
+    last_contacted_at: Timestamp,
 }
 
 impl WorkspaceScoped for Company {}
 
 impl Company {
     /// A company of `workspace`, with a new id.
-    fn new(workspace: Uuid, name: String, stage: String, last_contacted_at: DateTime<Utc>) -> Self {
+    fn new(workspace: Uuid, name: String, stage: String, last_contacted_at: Timestamp) -> Self {
         Company {
             id: Uuid::now_v7(),
             workspace_id: workspace,
@@ -74,7 +74,7 @@ impl Migration for CreateCompanies {
 struct CompanyFixture {
     name: String,
     stage: String,
-    last_contacted_at: DateTime<Utc>,
+    last_contacted_at: Timestamp,
 }
 
 /// Fills a demo workspace with the CRM's sample companies.
@@ -124,7 +124,12 @@ impl CompaniesController {
     #[post("/")]
     #[permissions("companies.create")]
     async fn store(&self, ws: CurrentWorkspace, uow: Uow) -> Result<Json<Company>> {
-        let company = Company::new(ws.id(), "Prospect's own".into(), "lead".into(), Utc::now());
+        let company = Company::new(
+            ws.id(),
+            "Prospect's own".into(),
+            "lead".into(),
+            Timestamp::now(),
+        );
         let created = WorkspaceRepo::<Company>::insert(&uow, ws.id(), company).await?;
         Ok(Json(created.into_inner()))
     }
@@ -294,7 +299,7 @@ async fn a_reset_demo_takes_writes_until_the_nightly_reset() {
     // The scheduler's tick at 03:00 UTC runs `workspace:demo-reset`. The
     // app's clock is the system's here, so run the command itself.
     let scheduler = app.get::<Scheduler>().await;
-    let tasks = scheduler.list(Utc::now());
+    let tasks = scheduler.list(Timestamp::now());
     assert!(tasks.iter().any(|task| task.name == "workspace:demo-reset"));
     app.run_command("workspace:demo-reset", &[]).await.unwrap();
     assert_eq!(count().await, 3);

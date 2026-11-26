@@ -9,7 +9,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::http::body::Bytes;
 use navree::kernel::BoxFuture;
 use navree::prelude::*;
@@ -23,7 +23,7 @@ use navree::view::ViewModule;
 const PUBLISH_CHILD_ENV: &str = "NAVREE_PLUGINS_DOCS_TESTING_PUBLISH_ARGS";
 const FIXTURE_LIST_HTML: &str = "<p>Notices from the Ludhiana office</p>\n";
 
-type Files = Arc<Mutex<BTreeMap<String, (Bytes, DateTime<Utc>)>>>;
+type Files = Arc<Mutex<BTreeMap<String, (Bytes, Timestamp)>>>;
 
 #[derive(Clone, Default)]
 struct Sanduk {
@@ -31,7 +31,7 @@ struct Sanduk {
 }
 
 impl Sanduk {
-    fn file(&self, path: &str) -> Result<(Bytes, DateTime<Utc>), DiskDriverError> {
+    fn file(&self, path: &str) -> Result<(Bytes, Timestamp), DiskDriverError> {
         let files = self.files.lock().unwrap();
         files.get(path).cloned().ok_or(DiskDriverError::NotFound)
     }
@@ -50,7 +50,7 @@ impl DiskDriver for Sanduk {
         self.files
             .lock()
             .unwrap()
-            .insert(path.to_owned(), (contents, Utc::now()));
+            .insert(path.to_owned(), (contents, Timestamp::now()));
         Box::pin(async { Ok(()) })
     }
 
@@ -147,7 +147,7 @@ impl DiskUpload for SandukUpload {
         files
             .lock()
             .unwrap()
-            .insert(path, (Bytes::from(buffer), Utc::now()));
+            .insert(path, (Bytes::from(buffer), Timestamp::now()));
         Box::pin(async { Ok(()) })
     }
 

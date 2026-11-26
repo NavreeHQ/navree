@@ -113,7 +113,7 @@ fn totp(secret: &str, clock: &FixedClock) -> String {
     Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
         .build()
         .expect("a valid TOTP")
-        .generate(u64::try_from(clock.now().timestamp()).unwrap())
+        .generate(u64::try_from(clock.now().as_secs()).unwrap())
 }
 
 // Sign in, two-factor, switch workspace, sign out.
@@ -126,7 +126,7 @@ async fn sign_in_two_factor_switch_workspace_and_sign_out() -> Result<(), Browse
         eprintln!("skipped ui_auth_browser: {error}");
         return Ok(());
     }
-    let clock = Arc::new(FixedClock::new(chrono::Utc::now()));
+    let clock = Arc::new(FixedClock::new(navree::datetime::Timestamp::now()));
     let app = TestApp::builder()
         .temp_database()
         .config("app.key", generate_key())

@@ -1,15 +1,15 @@
 //! A report's table downloads as a PDF through the facade, where Navree UI and the
 //! documents engine meet.
 
-use chrono::{Days, NaiveDate, Utc};
+use navree::datetime::{Date, Zone};
 use navree::pdf::text::page_texts;
 use navree::pdf::{Document, ReadLimits};
 use navree::reports::ReportTablePdf;
 use navree::ui::charts::{Grain, NumberFormat, NumberLocale, Report};
 use navree::ui::dates::DateRange;
 
-fn day(d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(2026, 11, d).expect("a real day")
+fn day(d: u8) -> Date {
+    Date::new(2026, 11, d).expect("a real day")
 }
 
 fn indian() -> (NumberFormat, NumberLocale) {
@@ -18,7 +18,7 @@ fn indian() -> (NumberFormat, NumberLocale) {
 
 #[test]
 fn a_report_table_is_a_pdf_with_its_numbers_grouped_the_way_the_locale_groups_them() {
-    let report = Report::new(DateRange::new(day(2), day(4)), Grain::Day, &Utc);
+    let report = Report::new(DateRange::new(day(2), day(4)), Grain::Day, &Zone::UTC);
     let collected: &[Option<f64>] = &[Some(125_000.0), None, Some(80_000.5)];
     let table = report.table("Day", &[("Collected (INR)", collected)]);
     let (format, locale) = indian();
@@ -44,7 +44,7 @@ fn a_report_table_is_a_pdf_with_its_numbers_grouped_the_way_the_locale_groups_th
 
 #[test]
 fn a_report_with_no_series_still_lists_its_periods() {
-    let report = Report::new(DateRange::new(day(2), day(3)), Grain::Day, &Utc);
+    let report = Report::new(DateRange::new(day(2), day(3)), Grain::Day, &Zone::UTC);
     let (format, locale) = indian();
     let file = report
         .table("Day", &[])
@@ -61,8 +61,8 @@ fn a_report_with_no_series_still_lists_its_periods() {
 
 #[test]
 fn a_long_report_takes_more_pages_and_each_repeats_the_headings_and_its_number() {
-    let to = day(1).checked_add_days(Days::new(119)).expect("a real day");
-    let report = Report::new(DateRange::new(day(1), to), Grain::Day, &Utc);
+    let to = day(1).add_days(119).expect("a real day");
+    let report = Report::new(DateRange::new(day(1), to), Grain::Day, &Zone::UTC);
     let orders: Vec<Option<f64>> = (0..120).map(|at| Some(f64::from(at) * 1_000.0)).collect();
     let table = report.table("Day", &[("Orders", orders.as_slice())]);
     let (format, locale) = indian();
@@ -82,7 +82,7 @@ fn a_long_report_takes_more_pages_and_each_repeats_the_headings_and_its_number()
 
 #[test]
 fn rupee_amounts_and_a_gurmukhi_name_print_as_written() {
-    let report = Report::new(DateRange::new(day(2), day(3)), Grain::Day, &Utc);
+    let report = Report::new(DateRange::new(day(2), day(3)), Grain::Day, &Zone::UTC);
     let values: &[Option<f64>] = &[Some(100_000.0), Some(250_000.5)];
     let table = report.table("Day", &[("ਗੁਰਪ੍ਰੀਤ ਕੌਰ", values)]);
     let file = table
@@ -107,7 +107,7 @@ fn rupee_amounts_and_a_gurmukhi_name_print_as_written() {
 
 #[test]
 fn the_download_saves_as_a_pdf_with_a_safe_name_and_is_not_cached_or_sniffed() {
-    let report = Report::new(DateRange::new(day(2), day(3)), Grain::Day, &Utc);
+    let report = Report::new(DateRange::new(day(2), day(3)), Grain::Day, &Zone::UTC);
     let (format, locale) = indian();
     let response = report
         .table("Day", &[])

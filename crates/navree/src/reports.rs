@@ -25,12 +25,13 @@ use navree_ui::charts::ReportTable;
 /// each series is a column of numbers (`#,##0.##`), and a gap is an empty cell.
 ///
 /// ```
+/// use navree::datetime::{Date, Zone};
 /// use navree::reports::ReportTableSheets;
 /// use navree::ui::charts::{Grain, Report};
 /// use navree::ui::dates::DateRange;
 ///
-/// let day = |d| chrono::NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
-/// let report = Report::new(DateRange::new(day(2), day(4)), Grain::Day, &chrono::Utc);
+/// let day = |d| Date::new(2026, 11, d).unwrap();
+/// let report = Report::new(DateRange::new(day(2), day(4)), Grain::Day, &Zone::UTC);
 /// let values: &[Option<f64>] = &[Some(1_25_000.0), None, Some(80_000.5)];
 /// let table = report.table("Day", &[("Collected", values)]);
 /// let file = table.xlsx("Collections").unwrap();
@@ -120,12 +121,13 @@ impl ReportTableSheets for ReportTable {
 /// More than six columns turn the pages on their side.
 ///
 /// ```
+/// use navree::datetime::{Date, Zone};
 /// use navree::reports::ReportTablePdf;
 /// use navree::ui::charts::{Grain, NumberFormat, NumberLocale, Report};
 /// use navree::ui::dates::DateRange;
 ///
-/// let day = |d| chrono::NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
-/// let report = Report::new(DateRange::new(day(2), day(4)), Grain::Day, &chrono::Utc);
+/// let day = |d| Date::new(2026, 11, d).unwrap();
+/// let report = Report::new(DateRange::new(day(2), day(4)), Grain::Day, &Zone::UTC);
 /// let values: &[Option<f64>] = &[Some(1_25_000.0), None, Some(80_000.5)];
 /// let table = report.table("Day", &[("Collected", values)]);
 /// let file = table

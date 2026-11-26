@@ -17,7 +17,7 @@ use navree::ui::{ExtensionFile, PAGE_CSP, UiExtension};
 use serde_json::json;
 
 mod models {
-    use chrono::{DateTime, NaiveDate, Utc};
+    use navree::datetime::{Date, Timestamp};
     use navree::prelude::*;
     use serde::{Deserialize, Serialize};
     use uuid::Uuid;
@@ -73,10 +73,10 @@ mod models {
         pub company_id: Uuid,
         pub contact_id: Option<Uuid>,
         pub owner_id: Option<Uuid>,
-        pub expected_close_date: Option<NaiveDate>,
+        pub expected_close_date: Option<Date>,
         pub lost_reason: Option<String>,
-        pub closed_at: Option<DateTime<Utc>>,
-        pub created_at: DateTime<Utc>,
+        pub closed_at: Option<Timestamp>,
+        pub created_at: Timestamp,
     }
 
     #[derive(Model, Clone, Debug, Default, Serialize)]
@@ -91,7 +91,7 @@ mod models {
         pub website: Option<String>,
         pub city: Option<String>,
         pub owner_id: Option<Uuid>,
-        pub deleted_at: Option<DateTime<Utc>>,
+        pub deleted_at: Option<Timestamp>,
     }
 
     #[derive(Model, Clone, Debug, Default, Serialize)]
@@ -539,7 +539,7 @@ async fn create_deal(app: &TestApp, owner: uuid::Uuid, title: &str) -> Deal {
         stage: Stage::Lead,
         company_id: company.id,
         owner_id: Some(owner),
-        created_at: chrono::Utc::now(),
+        created_at: navree::datetime::Timestamp::now(),
         ..Deal::default()
     };
     Deal::insert(&*db, [deal.clone()]).await.unwrap();

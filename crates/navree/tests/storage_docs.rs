@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{Duration, Utc};
+use navree::datetime::{Span, Timestamp};
 use navree::http::CurrentPrincipal;
 use navree::prelude::*;
 use navree::storage::{
@@ -32,7 +32,7 @@ impl ReportService {
         let path = format!("reports/{quarter}.csv");
         self.disk.put(&path, csv).await?;
         self.disk
-            .temporary_url(&path, Utc::now() + Duration::minutes(30))
+            .temporary_url(&path, Timestamp::now() + Span::minutes(30))
             .await
     }
 
@@ -92,7 +92,7 @@ impl DocumentUploadController {
         let path = upload_path(&dir, &file.content_type);
         let rules = document_rules();
         let upload = disk
-            .presigned_put(&path, Duration::minutes(15), &rules)
+            .presigned_put(&path, Span::minutes(15), &rules)
             .content_type(file.content_type)
             .size(file.size)
             .await?;
@@ -407,7 +407,7 @@ async fn an_s3_disk_signs_links_for_the_bucket() {
     assert_eq!(disk.driver(), "s3");
 
     let link = disk
-        .temporary_url("reports/q1.csv", Utc::now() + Duration::minutes(5))
+        .temporary_url("reports/q1.csv", Timestamp::now() + Span::minutes(5))
         .await
         .unwrap();
     assert!(
@@ -417,7 +417,7 @@ async fn an_s3_disk_signs_links_for_the_bucket() {
 
     let rules = UploadRules::new(1024, ["image/png"]);
     let upload = disk
-        .presigned_put("avatars/a.png", Duration::minutes(10), &rules)
+        .presigned_put("avatars/a.png", Span::minutes(10), &rules)
         .content_type("image/png")
         .size(512)
         .await
@@ -433,7 +433,7 @@ async fn an_s3_disk_signs_links_for_the_bucket() {
 
     // Links last at most 7 days on S3.
     let too_long = disk
-        .temporary_url("reports/q1.csv", Utc::now() + Duration::days(8))
+        .temporary_url("reports/q1.csv", Timestamp::now() + Span::days(8))
         .await;
     assert!(matches!(too_long, Err(StorageError::Signing { .. })));
     app.shutdown().await.unwrap();

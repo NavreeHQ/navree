@@ -5,11 +5,11 @@
 use std::sync::Mutex;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use navree::contracts::{
     BoxFuture, Clock, Dispatcher, FixedClock, Job, JobContext, JobEnvelope, ZoneLevel, ZoneOwner,
     ZoneRequest, ZoneSource,
 };
+use navree::datetime::Timestamp;
 use navree::db::{Db, Executor, Statement};
 use navree::kernel::{CommandSpec, Resolver};
 use navree::prelude::*;
@@ -43,7 +43,7 @@ pub struct Signup {
     /// A UUID v7.
     pub id: Uuid,
     /// When the user signed up.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// Creates `signups` and `users(id, timezone)`.
@@ -77,8 +77,8 @@ mod m20261027_000001_create_time_docs_tables {
 
 #[derive(Serialize)]
 struct SignupReport {
-    from: DateTime<Utc>,
-    to: DateTime<Utc>,
+    from: Timestamp,
+    to: Timestamp,
     signups: u64,
 }
 
@@ -198,7 +198,7 @@ async fn add_user(app: &TestApp, timezone: Option<&str>) -> Uuid {
 }
 
 async fn add_signup(app: &TestApp, at: &str) {
-    let created_at: DateTime<Utc> = at.parse().unwrap();
+    let created_at: Timestamp = at.parse().unwrap();
     Signup::create(
         &*app.get::<Db>().await,
         Signup {
@@ -453,7 +453,7 @@ async fn schedules_run_on_local_clocks() {
         .build()
         .await;
     let scheduler = app.get::<Scheduler>().await;
-    let at = |text: &str| text.parse::<DateTime<Utc>>().unwrap();
+    let at = |text: &str| text.parse::<Timestamp>().unwrap();
     // 26 October 2026: London is on GMT, New York on EDT.
     let london = scheduler.tick(at("2026-10-26T02:00:00Z")).await.unwrap();
     assert_eq!(london[0].task, "reports:close-day");
