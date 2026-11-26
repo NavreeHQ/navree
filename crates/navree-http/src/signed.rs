@@ -3,11 +3,11 @@
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use hmac::{Hmac, KeyInit, Mac};
 use http::Uri;
 use http::request::Parts;
 use navree_contracts::Clock;
+use navree_datetime::Timestamp;
 use navree_kernel::{AppContext, BoxFuture};
 use sha2::Sha256;
 
@@ -18,14 +18,14 @@ use crate::{AppError, Guard};
 /// and an `expires` timestamp.
 ///
 /// ```
-/// use chrono::{Duration, Utc};
+/// use navree_datetime::{Span, Timestamp};
 /// use navree_http::UrlSigner;
 ///
 /// let signer = UrlSigner::new(b"a long random key");
-/// let now = Utc::now();
-/// let url = signer.sign("/verify-email/42?hash=abc", now + Duration::minutes(60));
+/// let now = Timestamp::now();
+/// let url = signer.sign("/verify-email/42?hash=abc", now + Span::minutes(60));
 /// assert!(signer.verify(&url.parse().unwrap(), now));
-/// assert!(!signer.verify(&url.parse().unwrap(), now + Duration::minutes(61)));
+/// assert!(!signer.verify(&url.parse().unwrap(), now + Span::minutes(61)));
 /// ```
 ///
 /// The app's signer is a provider of `HttpModule`, keyed by
@@ -44,7 +44,7 @@ impl UrlSigner {
     }
 
     /// `path_and_query` plus `expires=<unix seconds>&signature=<hex>`.
-    pub fn sign(&self, path_and_query: &str, expires_at: DateTime<Utc>) -> String {
+    pub fn sign(&self, path_and_query: &str, expires_at: Timestamp) -> String {
         let separator = if path_and_query.contains('?') {
             '&'
         } else {
@@ -52,14 +52,14 @@ impl UrlSigner {
         };
         let unsigned = format!(
             "{path_and_query}{separator}expires={}",
-            expires_at.timestamp()
+            expires_at.as_secs()
         );
         let signature = hex::encode(self.mac(&unsigned).finalize().into_bytes());
         format!("{unsigned}&signature={signature}")
     }
 
     /// Whether `uri` carries a valid signature that has not expired at `now`.
-    pub fn verify(&self, uri: &Uri, now: DateTime<Utc>) -> bool {
+    pub fn verify(&self, uri: &Uri, now: Timestamp) -> bool {
         let Some(query) = uri.query() else {
             return false;
         };
@@ -83,7 +83,7 @@ impl UrlSigner {
         let (Some(signature), Some(expires)) = (signature, expires) else {
             return false;
         };
-        if now.timestamp() >= expires {
+        if now.as_secs() >= expires {
             return false;
         }
         let Ok(signature) = hex::decode(signature) else {
@@ -145,7 +145,7 @@ impl Guard for ValidSignature {
             let signer = ctx.get::<UrlSigner>().await?;
             let now = match ctx.try_get::<dyn Clock>().await {
                 Some(clock) => clock.now(),
-                None => Utc::now(),
+                None => Timestamp::now(),
             };
             if signer.verify(&parts.uri, now) {
                 Ok(())
@@ -162,7 +162,7 @@ impl Guard for ValidSignature {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Duration;
+    use navree_datetime::{Span, Timestamp};
 
     use super::*;
 
@@ -173,17 +173,17 @@ mod tests {
     #[test]
     fn signed_url_roundtrip_and_expiry() {
         let signer = UrlSigner::new(b"key-1");
-        let now = Utc::now();
-        let url = signer.sign("/verify/1?hash=abc", now + Duration::seconds(60));
+        let now = Timestamp::now();
+        let url = signer.sign("/verify/1?hash=abc", now + Span::seconds(60));
         assert!(url.starts_with("/verify/1?hash=abc&expires="));
         assert!(signer.verify(&uri(&url), now));
-        assert!(signer.verify(&uri(&url), now + Duration::seconds(59)));
+        assert!(signer.verify(&uri(&url), now + Span::seconds(59)));
         assert!(
-            !signer.verify(&uri(&url), now + Duration::seconds(60)),
+            !signer.verify(&uri(&url), now + Span::seconds(60)),
             "expired"
         );
 
-        let no_query = signer.sign("/download", now + Duration::seconds(60));
+        let no_query = signer.sign("/download", now + Span::seconds(60));
         assert!(no_query.starts_with("/download?expires="));
         assert!(signer.verify(&uri(&no_query), now));
     }
@@ -191,12 +191,12 @@ mod tests {
     #[test]
     fn tampering_or_another_key_fails() {
         let signer = UrlSigner::new(b"key-1");
-        let now = Utc::now();
-        let url = signer.sign("/verify/1?hash=abc", now + Duration::seconds(60));
+        let now = Timestamp::now();
+        let url = signer.sign("/verify/1?hash=abc", now + Span::seconds(60));
 
         assert!(!signer.verify(&uri(&url.replace("/verify/1", "/verify/2")), now));
         assert!(!signer.verify(&uri(&url.replace("hash=abc", "hash=abd")), now));
-        let later = (now + Duration::days(1)).timestamp().to_string();
+        let later = (now + Span::days(1)).as_secs().to_string();
         let expires = url
             .split("expires=")
             .nth(1)

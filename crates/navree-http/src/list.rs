@@ -822,7 +822,7 @@ impl Kind {
                 }
             }
             Kind::DateTime => {
-                if is_date(text) || chrono::DateTime::parse_from_rfc3339(text).is_ok() {
+                if is_date(text) || navree_datetime::Zoned::parse_rfc3339(text).is_ok() {
                     Ok(())
                 } else {
                     wrong("a date or a date and time (2026-11-05 or 2026-11-05T10:30:00Z)")
@@ -851,7 +851,7 @@ impl Kind {
 }
 
 fn is_date(text: &str) -> bool {
-    text.len() == 10 && chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
+    text.len() == 10 && navree_datetime::Date::parse("%Y-%m-%d", text).is_ok()
 }
 
 /// One field a list can be filtered by.

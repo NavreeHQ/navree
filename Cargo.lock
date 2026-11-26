@@ -4950,7 +4950,6 @@ name = "navree-http"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "criterion",
  "dashmap",
  "encoding_rs",
@@ -4970,6 +4969,7 @@ dependencies = [
  "mime",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-kernel",
  "navree-openapi",
  "navree-telemetry",

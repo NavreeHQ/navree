@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use chrono::{TimeZone, Utc};
 use http::{Method, Request, StatusCode};
 use navree_config::ConfigSources;
 use navree_contracts::{Clock, FixedClock, Secret};
+use navree_datetime::Timestamp;
 use navree_http::body::Body;
 use navree_http::{
     ClientIp, Created, HttpOptions, Json, NoContent, Path, RouteDef, UrlSigner, ValidSignature,
@@ -211,7 +211,7 @@ async fn created_no_content_and_client_ip() {
 
 #[tokio::test]
 async fn signed_url_guard_in_the_pipeline() {
-    let now = Utc.with_ymd_and_hms(2026, 10, 25, 12, 0, 0).unwrap();
+    let now = Timestamp::utc(2026, 10, 25, 12, 0, 0).unwrap();
     let clock = Arc::new(FixedClock::new(now));
     let registered = clock.clone();
     let app = Setup::new(vec![
@@ -236,12 +236,12 @@ async fn signed_url_guard_in_the_pipeline() {
     let signer = app.app.ctx().get::<UrlSigner>().await.unwrap();
     let url = signer.sign(
         "/verify-email/7?hash=abc",
-        now + chrono::Duration::minutes(60),
+        now + navree_datetime::Span::minutes(60),
     );
     assert_eq!(
         UrlSigner::new(b"test-signing-key").sign(
             "/verify-email/7?hash=abc",
-            now + chrono::Duration::minutes(60)
+            now + navree_datetime::Span::minutes(60)
         ),
         url,
         "keyed by http.signing_key"
@@ -274,8 +274,8 @@ async fn signer_for(sources: ConfigSources) -> Arc<UrlSigner> {
 
 #[tokio::test]
 async fn signed_urls_survive_a_restart_when_the_app_key_is_set() {
-    let now = Utc::now();
-    let expires = now + chrono::Duration::minutes(5);
+    let now = Timestamp::now();
+    let expires = now + navree_datetime::Span::minutes(5);
     let app_key = "base64:q83vEjRWeJCrze8SNFZ4kKvN7xI0VniQq83vEjRWeJA=";
 
     // Two boots with the same APP_KEY (and no http.signing_key) agree.
