@@ -2,7 +2,7 @@
 //! keys of every kind, embedded documents and duplicate keys.
 
 use bson::doc;
-use chrono::{NaiveDate, Timelike};
+use navree_datetime::Date;
 use navree_mongo::ObjectId;
 use navree_orm::{Decimal, Model, OrmError, Record};
 
@@ -29,7 +29,7 @@ async fn models_are_created_found_saved_and_deleted() {
     assert!(!agra.id.is_nil(), "the ObjectId was made before the insert");
     assert!(agra.exists() && agra.was_recently_created());
     assert_eq!(
-        agra.created_at.nanosecond() % 1_000_000,
+        agra.created_at.subsec_nanos() % 1_000_000,
         0,
         "timestamps keep MongoDB's milliseconds"
     );
@@ -46,7 +46,7 @@ async fn models_are_created_found_saved_and_deleted() {
                 labels: vec!["vip".into()],
             }),
             tags: vec!["renewal".into(), "q4".into()],
-            closes_on: NaiveDate::from_ymd_opt(2026, 12, 31),
+            closes_on: Date::new(2026, 12, 31).ok(),
             ..Deal::new("Renewal", 120_000)
         },
     )

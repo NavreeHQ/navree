@@ -3,7 +3,7 @@
 //! per line).
 
 use bson::doc;
-use chrono::NaiveDate;
+use navree_datetime::Date;
 use navree_mongo::{MongoFilter, MongoQuery, ObjectId, ToMongo, compile};
 use navree_orm::ir::{Aggregate, AggregateFunction, FullText, Operator, Order};
 use navree_orm::{Expr, Filter, Model, col, table};
@@ -71,7 +71,7 @@ fn conditions_become_query_operators() {
             .where_date(
                 "closes_on",
                 "=",
-                NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()
+                Date::new(2026, 6, 1).unwrap()
             )
             .where_month("closes_on", ">=", 6)
             .where_year("closes_on", "=", 2026)

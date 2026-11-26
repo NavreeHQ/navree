@@ -24,11 +24,11 @@ workspace = true
 
 [dependencies]
 bson = { workspace = true }
-chrono = { workspace = true }
 futures-util = { workspace = true }
 mongodb = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true, features = ["bson"] }
 navree-db = { workspace = true }
 navree-kernel = { workspace = true }
 navree-orm = { workspace = true }

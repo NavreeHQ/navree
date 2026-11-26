@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::{Field, FieldError, KeyKind, Kind, PrimaryKey, Value, ValueFor};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -79,8 +79,8 @@ impl ObjectId {
     }
 
     /// When the id was made (to the second).
-    pub fn timestamp(&self) -> DateTime<Utc> {
-        bson::oid::ObjectId::from(*self).timestamp().to_chrono()
+    pub fn timestamp(&self) -> Timestamp {
+        Timestamp::try_from(bson::oid::ObjectId::from(*self).timestamp()).unwrap_or_default()
     }
 
     /// The id as a [`Value`]: an enum value of type
@@ -327,8 +327,8 @@ mod tests {
         let later = ObjectId::new();
         assert!(later > made, "ids made later sort later");
         assert_eq!(made.to_key_string(), made.to_hex());
-        let age = Utc::now() - made.timestamp();
-        assert!(age.num_seconds().abs() < 60, "{age}");
+        let age = Timestamp::now() - made.timestamp();
+        assert!(age.as_seconds().abs() < 60, "{age}");
     }
 
     #[test]

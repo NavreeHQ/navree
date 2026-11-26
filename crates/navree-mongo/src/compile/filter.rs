@@ -4,7 +4,7 @@
 //! other fields or a subquery's columns.
 
 use bson::{Bson, Document, doc};
-use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
+use navree_datetime::{Date, Time};
 use navree_orm::ir::{
     Boolean, ColumnRef, DatePart, Expr, FullText, FullTextMode, IgnoreCaseMode, InValues, Operator,
     Where, WhereClause,
@@ -768,9 +768,9 @@ fn date_text(value: &Value) -> Result<String, OrmError> {
     let date = match value {
         Value::Date(date) => *date,
         Value::DateTime(at) => at.date(),
-        Value::Timestamp(at) => at.date_naive(),
-        Value::TimestampTz(at) => at.date_naive(),
-        Value::String(text) => NaiveDate::parse_from_str(text.trim(), "%Y-%m-%d")
+        Value::Timestamp(at) => at.date_time_utc().date(),
+        Value::TimestampTz(at) => at.timestamp().date_time_utc().date(),
+        Value::String(text) => Date::parse("%Y-%m-%d", text.trim())
             .map_err(|_| invalid(format!("`{text}` is not a date (YYYY-MM-DD)")))?,
         other => {
             return Err(invalid(format!(
@@ -787,9 +787,10 @@ fn time_text(value: &Value) -> Result<String, OrmError> {
     let time = match value {
         Value::Time(time) => *time,
         Value::DateTime(at) => at.time(),
-        Value::Timestamp(at) => at.time(),
-        Value::String(text) => NaiveTime::parse_from_str(text.trim(), "%H:%M:%S")
-            .or_else(|_| NaiveTime::parse_from_str(text.trim(), "%H:%M"))
+        Value::Timestamp(at) => at.date_time_utc().time(),
+        Value::TimestampTz(at) => at.timestamp().date_time_utc().time(),
+        Value::String(text) => Time::parse("%H:%M:%S", text.trim())
+            .or_else(|_| Time::parse("%H:%M", text.trim()))
             .map_err(|_| invalid(format!("`{text}` is not a time (HH:MM:SS)")))?,
         other => {
             return Err(invalid(format!(
@@ -808,14 +809,15 @@ fn time_text(value: &Value) -> Result<String, OrmError> {
 
 /// A day, month or year number.
 fn number(value: &Value, part: DatePart) -> Result<i64, OrmError> {
-    let (name, from_date): (&str, fn(NaiveDate) -> i64) = match part {
+    let (name, from_date): (&str, fn(Date) -> i64) = match part {
         DatePart::Day => ("day", |date| i64::from(date.day())),
-        DatePart::Month => ("month", |date| i64::from(date.month())),
+        DatePart::Month => ("month", |date| i64::from(date.month_number())),
         _ => ("year", |date| i64::from(date.year())),
     };
     Ok(match value {
         Value::Date(date) => from_date(*date),
-        Value::Timestamp(at) => from_date(at.date_naive()),
+        Value::Timestamp(at) => from_date(at.date_time_utc().date()),
+        Value::TimestampTz(at) => from_date(at.timestamp().date_time_utc().date()),
         Value::DateTime(at) => from_date(at.date()),
         other => <i64 as navree_orm::Field>::from_value(other.clone())
             .map_err(|error| invalid(format!("a {name} condition takes a number: {error}")))?,
