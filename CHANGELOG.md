@@ -7,6 +7,8 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-26
+
 ### Upgrading
 
 - An Apple or Android app whose hand-over `callback` is a custom scheme (`custom_scheme = true`) meets one more page: after the person signs in, the site asks before the sign-in leaves for the app, and the code comes back when they press Continue (see Security). The app and its settings need no change. A test of your own that drives the hand-over through the sign-in pages posts that page's form (`POST /auth/app/confirm`) before it expects the callback.
@@ -1334,7 +1336,8 @@ Most apps upgrade with no change. These are the changes that can ask something o
 
 First release. Read what it includes in the [release notes](https://navree.com/docs/prologue/release-notes/).
 
-[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.6.0
 [1.5.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.5.0
 [1.4.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.4.0
 [1.3.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.3.0
