@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE};
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_crypto::jose::{Algorithm, Jws};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -50,8 +50,8 @@ impl GooglePubSub {
         claims: &Value,
         audience: &str,
         service_account: &str,
-        now: DateTime<Utc>,
-    ) -> Result<DateTime<Utc>, VerifyError> {
+        now: Timestamp,
+    ) -> Result<Timestamp, VerifyError> {
         let refuse = |why: &str| Err(VerifyError::Rejected(why.to_owned()));
         let issuer = claims["iss"].as_str().unwrap_or_default();
         if !Self::ISSUERS.contains(&issuer) {
@@ -75,14 +75,14 @@ impl GooglePubSub {
             return refuse("the token is for another service account");
         }
         let expires = claims["exp"].as_i64().unwrap_or(i64::MIN);
-        if expires.saturating_add(CLOCK_SKEW_SECS) <= now.timestamp() {
+        if expires.saturating_add(CLOCK_SKEW_SECS) <= now.as_secs() {
             return refuse("the token has expired");
         }
         let issued = claims["iat"]
             .as_i64()
-            .and_then(|iat| DateTime::from_timestamp(iat, 0))
+            .and_then(|iat| Timestamp::from_secs(iat).ok())
             .ok_or_else(|| VerifyError::Rejected("the token has no `iat`".to_owned()))?;
-        if issued.timestamp() - CLOCK_SKEW_SECS > now.timestamp() {
+        if issued.as_secs() - CLOCK_SKEW_SECS > now.as_secs() {
             return refuse("the token was issued in the future");
         }
         Ok(issued)
@@ -212,8 +212,8 @@ mod tests {
     const ACCOUNT: &str = "gmail-push@navree-test.iam.gserviceaccount.com";
     const URL: &str = "https://api.example.com/api/hooks/pubsub";
 
-    fn now() -> DateTime<Utc> {
-        DateTime::from_timestamp(1_792_000_000, 0).unwrap()
+    fn now() -> Timestamp {
+        Timestamp::from_secs(1_792_000_000).unwrap()
     }
 
     fn signer() -> SigningKey {
@@ -226,8 +226,8 @@ mod tests {
             "azp": "113774264463038321964",
             "email": ACCOUNT,
             "email_verified": true,
-            "exp": now().timestamp() + 3600,
-            "iat": now().timestamp() - 5,
+            "exp": now().as_secs() + 3600,
+            "iat": now().as_secs() - 5,
             "iss": "https://accounts.google.com",
             "sub": "113774264463038321964",
         })
@@ -299,8 +299,8 @@ mod tests {
         };
         assert_eq!(verified.id.as_deref(), Some("2070443601311540"));
         assert_eq!(
-            verified.timestamp.unwrap().timestamp(),
-            now().timestamp() - 5
+            verified.timestamp.unwrap().as_secs(),
+            now().as_secs() - 5
         );
         // Cached: the second request fetches nothing.
         verify(&source(), &token(&claims()), &keys).await.unwrap();
@@ -338,8 +338,8 @@ mod tests {
             ("iss", json!("https://evil.example")),
             ("email", json!("someone-else@other.iam.gserviceaccount.com")),
             ("email_verified", json!(false)),
-            ("exp", json!(now().timestamp() - 61)),
-            ("iat", json!(now().timestamp() + 61)),
+            ("exp", json!(now().as_secs() - 61)),
+            ("iat", json!(now().as_secs() + 61)),
             ("aud", json!(["https://api.example.com/x"])),
         ];
         for (claim, value) in cases {
@@ -355,7 +355,7 @@ mod tests {
         }
         // Within the skew, and with the other issuer spelling.
         let mut claims = claims();
-        claims["exp"] = json!(now().timestamp() - 30);
+        claims["exp"] = json!(now().as_secs() - 30);
         claims["iss"] = json!("accounts.google.com");
         claims["email_verified"] = json!("true");
         verify(&source(), &token(&claims), &keys).await.unwrap();

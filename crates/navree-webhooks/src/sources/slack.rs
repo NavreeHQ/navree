@@ -108,7 +108,7 @@ impl WebhookSource for Slack {
 
 #[cfg(test)]
 mod tests {
-    use chrono::DateTime;
+    use navree_datetime::Timestamp;
     use http::HeaderValue;
 
     use super::*;
@@ -133,8 +133,8 @@ mod tests {
         headers
     }
 
-    fn at(secs: i64) -> DateTime<chrono::Utc> {
-        DateTime::from_timestamp(secs, 0).unwrap()
+    fn at(secs: i64) -> Timestamp {
+        Timestamp::from_secs(secs).unwrap()
     }
 
     #[test]

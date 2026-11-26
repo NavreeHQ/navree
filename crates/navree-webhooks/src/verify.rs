@@ -4,7 +4,7 @@
 
 use std::future::Future;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::HeaderMap;
 use serde_json::Value;
 
@@ -16,23 +16,23 @@ use crate::template::{Field, SignatureFormat, SignedTemplate};
 /// How old (or how far in the future) a signed timestamp may be.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Tolerance {
-    now: DateTime<Utc>,
+    now: Timestamp,
     secs: u64,
 }
 
 impl Tolerance {
     /// `secs` seconds either side of the system clock's now.
     pub fn secs(secs: u64) -> Self {
-        Self::at(Utc::now(), secs)
+        Self::at(Timestamp::now(), secs)
     }
 
     /// `secs` seconds either side of `now` (a test clock's time).
-    pub fn at(now: DateTime<Utc>, secs: u64) -> Self {
+    pub fn at(now: Timestamp, secs: u64) -> Self {
         Self { now, secs }
     }
 
     /// The time signatures are checked against.
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         self.now
     }
 
@@ -42,8 +42,8 @@ impl Tolerance {
     }
 
     /// Accepts `timestamp` when it is within the window.
-    pub(crate) fn check(&self, timestamp: DateTime<Utc>) -> Result<(), VerifyError> {
-        let age = (self.now.timestamp() - timestamp.timestamp()).unsigned_abs();
+    pub(crate) fn check(&self, timestamp: Timestamp) -> Result<(), VerifyError> {
+        let age = (self.now.as_secs() - timestamp.as_secs()).unsigned_abs();
         if age > self.secs {
             return Err(VerifyError::TimestampOutOfTolerance {
                 tolerance_secs: self.secs,
@@ -60,7 +60,7 @@ pub struct Verified {
     /// Stripe event id), when it sends one.
     pub id: Option<String>,
     /// The signed timestamp, when the scheme signs one.
-    pub timestamp: Option<DateTime<Utc>>,
+    pub timestamp: Option<Timestamp>,
     /// The sender's event type, when it sends one.
     pub event_type: Option<String>,
 }
@@ -206,17 +206,17 @@ pub(crate) fn optional_header(headers: &HeaderMap, name: &str) -> Option<String>
 }
 
 /// A Unix timestamp in seconds from header `name`.
-pub(crate) fn parse_timestamp(raw: &str, name: &str) -> Result<DateTime<Utc>, VerifyError> {
+pub(crate) fn parse_timestamp(raw: &str, name: &str) -> Result<Timestamp, VerifyError> {
     raw.trim()
         .parse::<i64>()
         .ok()
-        .and_then(|secs| DateTime::from_timestamp(secs, 0))
+        .and_then(|secs| Timestamp::from_secs(secs).ok())
         .ok_or_else(|| VerifyError::MalformedHeader(name.to_owned()))
 }
 
 /// Checks `timestamp` against `tolerance`, when there is one.
 pub(crate) fn check_age(
-    timestamp: DateTime<Utc>,
+    timestamp: Timestamp,
     tolerance: Option<Tolerance>,
 ) -> Result<(), VerifyError> {
     tolerance.map_or(Ok(()), |tolerance| tolerance.check(timestamp))
@@ -731,8 +731,8 @@ mod tests {
         map
     }
 
-    fn at(secs: i64) -> DateTime<Utc> {
-        DateTime::from_timestamp(secs, 0).unwrap()
+    fn at(secs: i64) -> Timestamp {
+        Timestamp::from_secs(secs).unwrap()
     }
 
     const STANDARD_SECRET: &str = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw";

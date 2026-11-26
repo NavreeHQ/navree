@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{BoxError, Job, JobContext};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -54,7 +54,7 @@ pub struct FanOut {
     /// The `webhook-id` of the message (`msg_...`).
     pub message_id: String,
     /// When it happened: the payload's `timestamp`.
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Timestamp,
     /// The event as JSON, when the payload is built from a
     /// [`WebhookEvent`](crate::WebhookEvent).
     pub event: Option<Value>,

@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::HeaderMap;
 use http::header::{CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use navree_contracts::{Clock, SystemClock};
@@ -65,8 +65,8 @@ pub struct VerifiedWebhook<S> {
     headers: HeaderMap,
     id: String,
     event_type: Option<String>,
-    timestamp: Option<DateTime<Utc>>,
-    received_at: DateTime<Utc>,
+    timestamp: Option<Timestamp>,
+    received_at: Timestamp,
     source: PhantomData<fn() -> S>,
 }
 
@@ -110,7 +110,7 @@ impl<S: WebhookSource> VerifiedWebhook<S> {
 
     /// The signed timestamp (`None` for schemes that sign none, such as
     /// GitHub's).
-    pub fn timestamp(&self) -> Option<DateTime<Utc>> {
+    pub fn timestamp(&self) -> Option<Timestamp> {
         self.timestamp
     }
 
