@@ -4,8 +4,8 @@
 //! default; PostgreSQL with TimescaleDB and MySQL with the `postgres` and
 //! `mysql` features; see `servers`).
 
-use chrono::{DateTime, Utc};
 use image::ImageFormat;
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{
     Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
 };
@@ -53,7 +53,7 @@ impl HasMedia for Lecture {
 pub struct Handout {
     pub id: Uuid,
     pub title: String,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<Timestamp>,
 }
 
 impl HasMedia for Handout {
@@ -131,8 +131,8 @@ fn app(builder: TestAppBuilder) -> TestAppBuilder {
 }
 
 /// Times as the database keeps them (microseconds).
-fn micros(time: DateTime<Utc>) -> i64 {
-    time.timestamp_micros()
+fn micros(time: Timestamp) -> i64 {
+    time.as_micros()
 }
 
 /// Everything the store does, on the app's database.

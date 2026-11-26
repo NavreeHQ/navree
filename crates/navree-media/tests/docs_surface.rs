@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_kernel::ModuleBuilder;
 use navree_media::archive::{Archive, ArchiveEntry, ArchiveLimits, ExtractReport, ZipBuilder};
@@ -96,9 +96,9 @@ async fn media_methods(media: &Media, uow: &Uow, item: MediaItem) -> Result<(), 
     let _: String = media.url(&item)?;
     let _: String = media.conversion_url(&item, "card")?;
     let _: String = media.srcset(&item, "card")?;
-    let _: String = media.temporary_url(&item, Utc::now()).await?;
+    let _: String = media.temporary_url(&item, Timestamp::now()).await?;
     let _: String = media
-        .temporary_conversion_url(&item, "card", Utc::now())
+        .temporary_conversion_url(&item, "card", Timestamp::now())
         .await?;
     let _: Bytes = media.read(&item).await?;
     let _: Bytes = media.read_conversion(&item, "card").await?;
@@ -139,7 +139,7 @@ fn item_fields(item: &MediaItem) {
     let _: (Option<u32>, Option<u32>, i32) = (item.width, item.height, item.order);
     let generated: &GeneratedConversion = &item.conversions["card"];
     let variant: &ResponsiveVariant = &generated.variants[0];
-    let _: (&str, &str, u64, Option<u32>, u32, DateTime<Utc>) = (
+    let _: (&str, &str, u64, Option<u32>, u32, Timestamp) = (
         &generated.path,
         &generated.mime_type,
         generated.size,

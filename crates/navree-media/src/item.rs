@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use uuid::Uuid;
@@ -46,9 +46,9 @@ pub struct MediaItem {
     /// The position in its collection, from 1.
     pub order: i32,
     /// When it was added.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// A generated conversion of a [`MediaItem`].
@@ -70,7 +70,7 @@ pub struct GeneratedConversion {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variants: Vec<ResponsiveVariant>,
     /// When it was generated.
-    pub generated_at: DateTime<Utc>,
+    pub generated_at: Timestamp,
 }
 
 /// One narrower copy of a responsive conversion.
@@ -154,5 +154,5 @@ pub struct MediaResource {
     /// The position in the collection.
     pub order: i32,
     /// When it was added.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
