@@ -46,8 +46,8 @@ phone = ["dep:navree-phone", "navree-validation/phone"]
 storage = ["dep:navree-storage"]
 ## The reader's zone from navree-time: `today_in(&CurrentZone)` on the date pickers and the
 ## calendar, `zone(&CurrentZone)` on a timeline and an activity feed, `FormView::dates_in`, and
-## `ReportZone` for `navree_time::Tz` on `charts::Report`. The facade turns it on when both `ui`
-## and `time` are on.
+## `ReportZone` for `navree_time::Tz` and `navree_time::Zone` on `charts::Report`. The facade
+## turns it on when both `ui` and `time` are on.
 time = ["dep:navree-time"]
 ## Show or hide what a reader may not use, by navree-access's abilities
 ## (`navree_ui::ability`). The facade turns it on when both `ui` and `access` are on.
@@ -79,7 +79,6 @@ navree-storage = { workspace = true, optional = true }
 resvg = { workspace = true, optional = true }
 brotli = { workspace = true }
 bytes = { workspace = true }
-chrono = { workspace = true }
 # The page of an error never waits on the app's own shell builder for long: a deadline and a
 # panic guard around it.
 futures-util = { workspace = true }
@@ -87,6 +86,7 @@ http = { workspace = true }
 http-body = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 # `Markdown`: CommonMark read into safe events by navree-markdown (the reader the API reference

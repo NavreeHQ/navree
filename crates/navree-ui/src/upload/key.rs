@@ -13,7 +13,7 @@
 
 use std::convert::Infallible;
 
-use chrono::{Duration, Utc};
+use navree_datetime::{Span, Timestamp};
 use http::request::Parts;
 use navree_http::extract::{FromRequestParts, urlencoded};
 use navree_http::{CurrentPrincipal, UrlSigner};
@@ -42,14 +42,14 @@ const KEY_LIFETIME_HOURS: i64 = 24;
 pub fn file_key(signer: &UrlSigner, path: &str) -> String {
     signer.sign(
         &format!("{KEY_PATH}?path={}", encode(path)),
-        Utc::now() + Duration::hours(KEY_LIFETIME_HOURS),
+        Timestamp::now() + Span::hours(KEY_LIFETIME_HOURS),
     )
 }
 
 /// The path `key` names, when `signer` signed it and it has not expired.
 pub fn file_path(signer: &UrlSigner, key: &str) -> Option<String> {
     let uri: http::Uri = key.trim().parse().ok()?;
-    if uri.path() != KEY_PATH || !signer.verify(&uri, Utc::now()) {
+    if uri.path() != KEY_PATH || !signer.verify(&uri, Timestamp::now()) {
         return None;
     }
     let mut paths = urlencoded::parse(uri.query()?.as_bytes())
@@ -89,7 +89,7 @@ pub fn file_key_for(signer: &UrlSigner, owner: &str, path: &str) -> String {
             owner_key(owner),
             encode(folder_of(path)),
         ),
-        Utc::now() + Duration::hours(KEY_LIFETIME_HOURS),
+        Timestamp::now() + Span::hours(KEY_LIFETIME_HOURS),
     )
 }
 
@@ -98,7 +98,7 @@ pub fn file_key_for(signer: &UrlSigner, owner: &str, path: &str) -> String {
 /// nor is a key made for another owner or another folder.
 pub fn file_path_for(signer: &UrlSigner, owner: &str, folder: &str, key: &str) -> Option<String> {
     let uri: http::Uri = key.trim().parse().ok()?;
-    if uri.path() != OWNED_KEY_PATH || !signer.verify(&uri, Utc::now()) {
+    if uri.path() != OWNED_KEY_PATH || !signer.verify(&uri, Timestamp::now()) {
         return None;
     }
     let (mut path, mut made_for, mut dir) = (None, None, None);
@@ -231,7 +231,7 @@ mod tests {
         // A key whose path was given twice names no file.
         let twice = signer.sign(
             "/_navree/ui/file?path=a.pdf&path=b.pdf",
-            Utc::now() + Duration::hours(1),
+            Timestamp::now() + Span::hours(1),
         );
         assert_eq!(file_path(&signer, &twice), None);
     }
@@ -241,7 +241,7 @@ mod tests {
         let signer = signer();
         let old = signer.sign(
             "/_navree/ui/file?path=a.pdf",
-            Utc::now() - Duration::seconds(1),
+            Timestamp::now() - Span::seconds(1),
         );
         assert_eq!(file_path(&signer, &old), None);
     }
@@ -307,7 +307,7 @@ mod tests {
         }
         let other = UrlSigner::new(b"another app's key");
         assert_eq!(file_path_for(&other, "u", "receipts", &key), None);
-        let soon = Utc::now() + Duration::hours(1);
+        let soon = Timestamp::now() + Span::hours(1);
         let tag = owner_key("u");
         let sign = |query: &str, at| signer.sign(&format!("{OWNED_KEY_PATH}?{query}"), at);
         // A made-up key with every part, signed by the app, reads; each broken one does not.
@@ -333,7 +333,7 @@ mod tests {
                 &signer,
                 "u",
                 "receipts",
-                &sign(&whole, Utc::now() - Duration::seconds(1))
+                &sign(&whole, Timestamp::now() - Span::seconds(1))
             ),
             None
         );

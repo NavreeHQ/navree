@@ -7,38 +7,130 @@
 //! when clocks jump forward, some times never happen; when they go back, some
 //! happen twice.
 
-use chrono::{
-    DateTime, Duration, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, Offset, TimeZone, Utc,
+use navree_datetime::{
+    Date, DateTime, Disambiguation, ErrorKind, Offset, Span, Time, Timestamp, Zone,
 };
+
+/// A time zone whose clocks a wall-clock date and time can be read against.
+pub trait WallZone {
+    /// Resolves `local` on this zone's clocks using `how` for gaps and folds.
+    fn to_timestamp(
+        &self,
+        local: DateTime,
+        how: Disambiguation,
+    ) -> navree_datetime::Result<Timestamp>;
+
+    /// The offset from UTC this zone keeps at `at`.
+    fn offset_at(&self, at: Timestamp) -> Offset;
+
+    /// `at` as a wall-clock date and time in this zone.
+    fn local_date_time(&self, at: Timestamp) -> DateTime;
+}
+
+impl WallZone for Zone {
+    fn to_timestamp(
+        &self,
+        local: DateTime,
+        how: Disambiguation,
+    ) -> navree_datetime::Result<Timestamp> {
+        Zone::to_timestamp(*self, local, how)
+    }
+
+    fn offset_at(&self, at: Timestamp) -> Offset {
+        Zone::offset_at(*self, at)
+    }
+
+    fn local_date_time(&self, at: Timestamp) -> DateTime {
+        at.in_zone(*self).date_time()
+    }
+}
+
+impl WallZone for Offset {
+    fn to_timestamp(
+        &self,
+        local: DateTime,
+        how: Disambiguation,
+    ) -> navree_datetime::Result<Timestamp> {
+        Zone::fixed(*self).to_timestamp(local, how)
+    }
+
+    fn offset_at(&self, _at: Timestamp) -> Offset {
+        *self
+    }
+
+    fn local_date_time(&self, at: Timestamp) -> DateTime {
+        at.in_zone(Zone::fixed(*self)).date_time()
+    }
+}
+
+#[cfg(feature = "time")]
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
+impl WallZone for navree_time::Tz {
+    fn to_timestamp(
+        &self,
+        local: DateTime,
+        how: Disambiguation,
+    ) -> navree_datetime::Result<Timestamp> {
+        navree_time::Tz::to_timestamp(*self, local, how)
+    }
+
+    fn offset_at(&self, at: Timestamp) -> Offset {
+        navree_time::Tz::offset_at(*self, at).offset()
+    }
+
+    fn local_date_time(&self, at: Timestamp) -> DateTime {
+        self.local(at).date_time()
+    }
+}
+
+#[cfg(feature = "time")]
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
+impl WallZone for navree_time::Zone {
+    fn to_timestamp(
+        &self,
+        local: DateTime,
+        how: Disambiguation,
+    ) -> navree_datetime::Result<Timestamp> {
+        navree_time::Zone::to_timestamp(self, local, how)
+    }
+
+    fn offset_at(&self, at: Timestamp) -> Offset {
+        navree_time::Zone::offset_at(self, at)
+    }
+
+    fn local_date_time(&self, at: Timestamp) -> DateTime {
+        self.local(at).date_time()
+    }
+}
 
 /// What a wall-clock time means in a zone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Resolved {
     /// Exactly one instant.
-    Single(DateTime<Utc>),
+    Single(Timestamp),
     /// The clocks went back and this time happened twice. `first` is the earlier
     /// instant (before the change), `second` the later.
     Ambiguous {
         /// The first time the clock showed it.
-        first: DateTime<Utc>,
+        first: Timestamp,
         /// The second time the clock showed it.
-        second: DateTime<Utc>,
+        second: Timestamp,
     },
     /// The clocks jumped forward and this time never happened.
     Gap {
         /// The first instant after the jump: the clock reads the end of the gap.
-        transition: DateTime<Utc>,
+        transition: Timestamp,
         /// The time read with the offset from before the jump: the same wall time
         /// as the clock shows it after the jump, an hour later in most zones.
-        shifted: DateTime<Utc>,
+        shifted: Timestamp,
     },
 }
 
 impl Resolved {
     /// One instant for callers that don't care to ask: the first of two, and the
     /// shifted time for a time that never happened (what most calendars do).
-    pub fn instant(self) -> DateTime<Utc> {
+    pub fn instant(self) -> Timestamp {
         match self {
             Self::Single(at) => at,
             Self::Ambiguous { first, .. } => first,
@@ -52,83 +144,91 @@ impl Resolved {
     }
 }
 
-fn offset_seconds<Tz: TimeZone>(tz: &Tz, at: &NaiveDateTime) -> i64 {
-    i64::from(tz.offset_from_utc_datetime(at).fix().local_minus_utc())
+fn offset_seconds<Z: WallZone>(tz: &Z, at: DateTime) -> i64 {
+    i64::from(tz.offset_at(at.in_utc()).seconds())
 }
 
 /// The instant of `time` on `date` on the clocks of `tz`.
 ///
 /// ```
-/// use chrono::{NaiveDate, NaiveTime, Utc, TimeZone};
-/// use navree_ui::dates::zoned::{resolve, Resolved};
+/// use navree_datetime::{Date, Time, Zone};
+/// use navree_ui::dates::zoned::{Resolved, resolve};
 ///
-/// let day = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap();
-/// let noon = NaiveTime::from_hms_opt(12, 0, 0).unwrap();
+/// let day = Date::new(2026, 11, 3).unwrap();
+/// let noon = Time::new(12, 0, 0).unwrap();
 /// // UTC has no changes: always one answer.
-/// assert!(matches!(resolve(day, noon, &Utc), Resolved::Single(_)));
+/// assert!(matches!(resolve(day, noon, &Zone::UTC), Resolved::Single(_)));
 /// ```
-pub fn resolve<Tz: TimeZone>(date: NaiveDate, time: NaiveTime, tz: &Tz) -> Resolved {
-    let local = NaiveDateTime::new(date, time);
-    match tz.from_local_datetime(&local) {
-        LocalResult::Single(at) => Resolved::Single(at.with_timezone(&Utc)),
-        LocalResult::Ambiguous(first, second) => Resolved::Ambiguous {
-            first: first.with_timezone(&Utc),
-            second: second.with_timezone(&Utc),
-        },
-        LocalResult::None => gap(local, tz),
+pub fn resolve<Z: WallZone>(date: Date, time: Time, tz: &Z) -> Resolved {
+    let local = DateTime::new(date, time);
+    match tz.to_timestamp(local, Disambiguation::Reject) {
+        Ok(at) => Resolved::Single(at),
+        Err(err) if err.kind() == ErrorKind::Ambiguous => {
+            let first = tz.to_timestamp(local, Disambiguation::Earlier).ok();
+            let second = tz.to_timestamp(local, Disambiguation::Later).ok();
+            match (first, second) {
+                (Some(first), Some(second)) => Resolved::Ambiguous { first, second },
+                (Some(at), None) | (None, Some(at)) => Resolved::Single(at),
+                (None, None) => gap(local, tz),
+            }
+        }
+        Err(_) => gap(local, tz),
     }
 }
 
 /// A wall time the zone skipped: when the clocks jumped, and what the time reads with the
-/// offset from before. Every sum is checked, so a time at the very edge of what chrono can
-/// hold (where a zone with an offset may skip it for being out of reach) gets an answer
+/// offset from before. Every sum is checked, so a time at the very edge of what `Timestamp`
+/// can hold (where a zone with an offset may skip it for being out of reach) gets an answer
 /// and not a panic: there the time itself stands for both.
-fn gap<Tz: TimeZone>(local: NaiveDateTime, tz: &Tz) -> Resolved {
-    let by = |seconds: i64| local.checked_add_signed(Duration::seconds(seconds));
+fn gap<Z: WallZone>(local: DateTime, tz: &Z) -> Resolved {
+    let by = |seconds: i64| local.add(Span::seconds(seconds));
     // The offsets a day and a half either side are the ones before and after.
     let day_and_a_half = 36 * 3600;
     let before = by(-day_and_a_half)
-        .map_or_else(|| offset_seconds(tz, &local), |at| offset_seconds(tz, &at));
-    let after = by(day_and_a_half).map_or(before, |at| offset_seconds(tz, &at));
+        .map_or_else(|| offset_seconds(tz, local), |at| offset_seconds(tz, at));
+    let after = by(day_and_a_half).map_or(before, |at| offset_seconds(tz, at));
     // The change happened in (local - after, local - before]: find the first second at the
     // new offset.
     let (Some(shifted), Some(mut low), Some(mut high)) = (by(-before), by(-after), by(-before))
     else {
         return Resolved::Gap {
-            transition: local.and_utc(),
-            shifted: local.and_utc(),
+            transition: local.in_utc(),
+            shifted: local.in_utc(),
         };
     };
-    while high - low > Duration::seconds(1) {
-        let middle = low + (high - low) / 2;
-        if offset_seconds(tz, &middle) == after {
+    while (high.in_utc() - low.in_utc()) > Span::seconds(1) {
+        let half = (high.in_utc() - low.in_utc()).as_seconds() / 2;
+        let Some(middle) = low.add(Span::seconds(half)) else {
+            break;
+        };
+        if offset_seconds(tz, middle) == after {
             high = middle;
         } else {
             low = middle;
         }
     }
     Resolved::Gap {
-        transition: high.and_utc(),
-        shifted: shifted.and_utc(),
+        transition: high.in_utc(),
+        shifted: shifted.in_utc(),
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "time"))]
 mod tests {
     use navree_time::Tz;
 
     use super::*;
 
-    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    fn day(y: i32, m: u8, d: u8) -> Date {
+        Date::new(y, m, d).unwrap()
     }
 
-    fn time(h: u32, m: u32) -> NaiveTime {
-        NaiveTime::from_hms_opt(h, m, 0).unwrap()
+    fn time(h: u8, m: u8) -> Time {
+        Time::new(h, m, 0).unwrap()
     }
 
-    fn utc(y: i32, m: u32, d: u32, h: u32, min: u32) -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(y, m, d, h, min, 0).unwrap()
+    fn utc(y: i32, m: u8, d: u8, h: u8, min: u8) -> Timestamp {
+        Timestamp::utc(y, m, d, h, min, 0).unwrap()
     }
 
     #[test]
@@ -207,7 +307,7 @@ mod tests {
                 shifted,
             } => {
                 assert_eq!(transition, utc(2026, 10, 3, 15, 30));
-                assert_eq!(shifted - transition, Duration::minutes(15));
+                assert_eq!(shifted - transition, Span::minutes(15));
             }
             other => panic!("{other:?}"),
         }
@@ -215,7 +315,7 @@ mod tests {
         let got = resolve(day(2026, 4, 5), time(1, 45), &howe);
         match got {
             Resolved::Ambiguous { first, second } => {
-                assert_eq!(second - first, Duration::minutes(30));
+                assert_eq!(second - first, Span::minutes(30));
             }
             other => panic!("{other:?}"),
         }
@@ -233,7 +333,7 @@ mod tests {
             Resolved::Single(utc(2026, 11, 3, 3, 30))
         );
         assert!(matches!(
-            resolve(day(2026, 11, 3), time(9, 0), &Utc),
+            resolve(day(2026, 11, 3), time(9, 0), &Zone::UTC),
             Resolved::Single(_)
         ));
     }
@@ -249,7 +349,7 @@ mod tests {
                 shifted,
             } => {
                 assert_eq!(transition, utc(2011, 12, 30, 10, 0));
-                assert_eq!(shifted - transition, Duration::hours(12));
+                assert_eq!(shifted - transition, Span::hours(12));
             }
             other => panic!("{other:?}"),
         }

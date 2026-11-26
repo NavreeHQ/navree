@@ -11,7 +11,7 @@ use std::borrow::Cow;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::Weekday;
+use navree_datetime::Weekday;
 
 use super::data;
 use super::range::DatePreset;
@@ -292,11 +292,12 @@ enum Repr {
 /// A locale for dates and times. Cheap to clone.
 ///
 /// ```
+/// use navree_datetime::Weekday;
 /// use navree_ui::dates::DateLocale;
 ///
 /// let de = DateLocale::of("de-AT");
 /// assert_eq!(de.month_name(11), "November");
-/// assert_eq!(de.first_day, chrono::Weekday::Mon);
+/// assert_eq!(de.first_day, Weekday::Monday);
 /// // An unknown language falls back to English.
 /// assert_eq!(DateLocale::of("xx").month_name(3), "March");
 /// ```
@@ -432,12 +433,12 @@ impl DateLocale {
 
     /// The name of a weekday.
     pub fn weekday_name(&self, day: Weekday) -> &str {
-        &self.weekdays[day.num_days_from_sunday() as usize]
+        &self.weekdays[day.days_from_sunday() as usize]
     }
 
     /// The short name of a weekday.
     pub fn weekday_short(&self, day: Weekday) -> &str {
-        &self.weekdays_short[day.num_days_from_sunday() as usize]
+        &self.weekdays_short[day.days_from_sunday() as usize]
     }
 
     /// The locale as the browser module reads it: the same names, patterns and
@@ -517,22 +518,22 @@ mod tests {
 
     #[test]
     fn the_region_sets_the_first_day() {
-        assert_eq!(DateLocale::of("en").first_day, Weekday::Sun);
-        assert_eq!(DateLocale::of("en-GB").first_day, Weekday::Mon);
-        assert_eq!(DateLocale::of("de").first_day, Weekday::Mon);
-        assert_eq!(DateLocale::of("de-AT").first_day, Weekday::Mon);
-        assert_eq!(DateLocale::of("es-MX").first_day, Weekday::Sun);
-        assert_eq!(DateLocale::of("ar").first_day, Weekday::Sat);
-        assert_eq!(DateLocale::of("ar-SA").first_day, Weekday::Sun);
-        assert_eq!(DateLocale::of("fr-CA").first_day, Weekday::Sun);
-        assert_eq!(DateLocale::of("ja").first_day, Weekday::Sun);
-        assert_eq!(DateLocale::of("zh").first_day, Weekday::Mon);
-        assert_eq!(DateLocale::of("zh-TW").first_day, Weekday::Sun);
-        assert_eq!(DateLocale::of("hi").first_day, Weekday::Sun);
-        assert_eq!(DateLocale::of("pt").first_day, Weekday::Sun);
-        assert_eq!(DateLocale::of("en-AU").first_day, Weekday::Mon);
-        assert_eq!(DateLocale::of("en-AE").first_day, Weekday::Sat);
-        assert_eq!(DateLocale::of("xx").first_day, Weekday::Sun);
+        assert_eq!(DateLocale::of("en").first_day, Weekday::Sunday);
+        assert_eq!(DateLocale::of("en-GB").first_day, Weekday::Monday);
+        assert_eq!(DateLocale::of("de").first_day, Weekday::Monday);
+        assert_eq!(DateLocale::of("de-AT").first_day, Weekday::Monday);
+        assert_eq!(DateLocale::of("es-MX").first_day, Weekday::Sunday);
+        assert_eq!(DateLocale::of("ar").first_day, Weekday::Saturday);
+        assert_eq!(DateLocale::of("ar-SA").first_day, Weekday::Sunday);
+        assert_eq!(DateLocale::of("fr-CA").first_day, Weekday::Sunday);
+        assert_eq!(DateLocale::of("ja").first_day, Weekday::Sunday);
+        assert_eq!(DateLocale::of("zh").first_day, Weekday::Monday);
+        assert_eq!(DateLocale::of("zh-TW").first_day, Weekday::Sunday);
+        assert_eq!(DateLocale::of("hi").first_day, Weekday::Sunday);
+        assert_eq!(DateLocale::of("pt").first_day, Weekday::Sunday);
+        assert_eq!(DateLocale::of("en-AU").first_day, Weekday::Monday);
+        assert_eq!(DateLocale::of("en-AE").first_day, Weekday::Saturday);
+        assert_eq!(DateLocale::of("xx").first_day, Weekday::Sunday);
     }
 
     #[test]

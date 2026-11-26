@@ -212,7 +212,7 @@ struct Deal {
     #[col(sortable, numeric, filter = range)]
     amount: Option<i64>,
     #[col(sortable, filter = date)]
-    closed_on: Option<chrono::NaiveDate>,
+    closed_on: Option<Date>,
     #[col(filter = boolean)]
     active: bool,
     #[col(skip)]

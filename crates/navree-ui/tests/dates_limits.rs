@@ -2,7 +2,7 @@
 //! and the limits of the native fields that stand in with JavaScript off. What a page says
 //! once is what both hold a person to, so the two can't differ.
 
-use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
+use navree_datetime::{Date, Time, Weekday};
 use navree_ui::dates::{
     Calendar, CalendarMode, CaptionLayout, DateError, DateLocale, DatePicker, DateRange,
     DateRangePicker, DateRangeQuery, DateRules, RangeRules, TimePicker, TimeRules,
@@ -12,12 +12,12 @@ use navree_ui::{Form, FormView, Node, Validate, render};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+fn day(y: i32, m: u8, d: u8) -> Date {
+    Date::new(y, m, d).unwrap()
 }
 
-fn t(h: u32, m: u32, s: u32) -> NaiveTime {
-    NaiveTime::from_hms_opt(h, m, s).unwrap()
+fn t(h: u8, m: u8, s: u8) -> Time {
+    Time::new(h, m, s).unwrap()
 }
 
 fn html(node: impl Into<Node>) -> String {
@@ -59,7 +59,7 @@ fn a_range_picker_and_the_server_read_take_the_same_limits() {
     let limits = RangeRules::new(
         DateRules::new()
             .min(day(2026, 11, 2))
-            .disable_weekdays([Weekday::Sat, Weekday::Sun]),
+            .disable_weekdays([Weekday::Saturday, Weekday::Sunday]),
     )
     .min_days(2)
     .max_days(10);
@@ -107,7 +107,7 @@ fn a_range_picker_and_the_server_read_take_the_same_limits() {
     );
     assert_eq!(
         query("2026-11-02", "2026-11-07").checked(&limits),
-        Err(DateError::Weekday(Weekday::Sat))
+        Err(DateError::Weekday(Weekday::Saturday))
     );
     assert_eq!(
         query("2026-10-30", "2026-11-04").checked(&limits),
@@ -142,7 +142,7 @@ fn office_days() -> DateRules {
     DateRules::new()
         .min(day(2026, 11, 3))
         .max(day(2027, 2, 3))
-        .disable_weekdays([Weekday::Sat, Weekday::Sun])
+        .disable_weekdays([Weekday::Saturday, Weekday::Sunday])
 }
 
 fn office_hours() -> TimeRules {
@@ -154,13 +154,13 @@ fn office_hours() -> TimeRules {
         .strict_step()
 }
 
-fn open_day(day: &NaiveDate) -> Result<(), String> {
+fn open_day(day: &Date) -> Result<(), String> {
     office_days()
         .check(*day)
         .map_err(|error| error.message(&DateLocale::english()))
 }
 
-fn open_hours(at: &NaiveTime) -> Result<(), String> {
+fn open_hours(at: &Time) -> Result<(), String> {
     office_hours()
         .check(*at)
         .map_err(|error| error.message(&DateLocale::english()))
@@ -171,11 +171,11 @@ struct Visit {
     /// Day
     #[validate(custom(open_day))]
     #[form(widget = date_picker, date_rules = office_days)]
-    day: NaiveDate,
+    day: Date,
     /// At
     #[validate(custom(open_hours))]
     #[form(widget = time_picker, time_rules = office_hours)]
-    at: NaiveTime,
+    at: Time,
 }
 
 fn posted(day: &str, at: &str) -> Vec<(String, String)> {
@@ -218,24 +218,24 @@ fn a_form_gives_its_pickers_the_rules_the_server_holds_it_to() {
     while date < day(2027, 3, 1) {
         let browser_allows = date.to_string() >= min
             && date.to_string() <= max
-            && !weekdays.contains(&u64::from(date.weekday().num_days_from_sunday()));
+            && !weekdays.contains(&u64::from(date.weekday().days_from_sunday()));
         let server_accepts = decode::<Visit>(&posted(&date.to_string(), "10:00")).is_ok();
         assert_eq!(browser_allows, server_accepts, "{date}");
         checked += 1;
-        date = date.succ_opt().unwrap();
+        date = date.tomorrow().unwrap();
     }
     assert!(checked > 130);
     // The times, minute by minute through a day: the server's check is the rules' own.
-    for minute in 0..1440 {
+    for minute in 0..1440_u16 {
         let at = format!("{:02}:{:02}", minute / 60, minute % 60);
         let server_accepts = decode::<Visit>(&posted("2026-11-09", &at)).is_ok();
         assert_eq!(
             server_accepts,
-            office_hours().allows(t(minute / 60, minute % 60, 0)),
+            office_hours().allows(t((minute / 60) as u8, (minute % 60) as u8, 0)),
             "{at}"
         );
     }
-    // A leap second is no time of day the server takes, though chrono reads it.
+    // A leap second is no time of day the server takes.
     assert!(decode::<Visit>(&posted("2026-11-09", "16:00:60")).is_err());
 }
 
@@ -321,7 +321,7 @@ fn the_native_time_field_is_told_what_the_server_takes_and_never_less() {
 // ---- the server holds a form to the rules its pickers were given ------------------------------
 
 fn weekdays_only() -> DateRules {
-    DateRules::new().disable_weekdays([Weekday::Sat, Weekday::Sun])
+    DateRules::new().disable_weekdays([Weekday::Saturday, Weekday::Sunday])
 }
 
 fn nine_to_five() -> TimeRules {
@@ -334,11 +334,11 @@ struct OnlyDrawn {
     /// Day
     #[validate(skip)]
     #[form(widget = date_picker, date_rules = weekdays_only)]
-    day: NaiveDate,
+    day: Date,
     /// At
     #[validate(skip)]
     #[form(widget = time_picker, time_rules = nine_to_five)]
-    at: NaiveTime,
+    at: Time,
 }
 
 /// No rules at all, on the pickers and on the native fields.
@@ -347,25 +347,25 @@ struct Plain {
     /// Day
     #[validate(skip)]
     #[form(widget = date_picker)]
-    day: NaiveDate,
+    day: Date,
     /// At
     #[validate(skip)]
     #[form(widget = time_picker)]
-    at: NaiveTime,
+    at: Time,
     /// Native day
     #[validate(skip)]
     #[form(widget = date)]
-    native_day: NaiveDate,
+    native_day: Date,
     /// Native time
     #[validate(skip)]
     #[form(widget = time)]
-    native_at: NaiveTime,
+    native_at: Time,
 }
 
 #[test]
 fn rules_named_only_in_the_form_hold_the_server_to_them_too() {
     assert!(decode::<OnlyDrawn>(&posted("2026-11-09", "10:00")).is_ok());
-    // A Saturday at ten; a Monday at three in the morning; the last day chrono holds with a leap
+    // A Saturday at ten; a Monday at three in the morning; an out-of-range year with a leap
     // second; leap day of year 0 with half a second: each was accepted when the rules only drew.
     let day_only = decode::<OnlyDrawn>(&posted("2026-11-07", "10:00")).unwrap_err();
     assert_eq!(day_only.keys().collect::<Vec<_>>(), ["day"], "{day_only:?}");
@@ -454,7 +454,7 @@ fn a_refused_range_says_why_in_the_words_of_each_language() {
     );
     // The other reasons keep the plain "isn't available".
     assert_eq!(
-        DateError::Weekday(Weekday::Sat).message(&english),
+        DateError::Weekday(Weekday::Saturday).message(&english),
         "That date isn't available."
     );
     for tag in [

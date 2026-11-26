@@ -26,7 +26,7 @@
 //!     #[col(sortable, numeric, filter = range)]
 //!     amount: Option<i64>,
 //!     #[col(sortable, filter = date)]
-//!     updated_at: chrono::NaiveDate,
+//!     updated_at: navree_datetime::Date,
 //! }
 //!
 //! async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<AppPage> {
@@ -115,7 +115,7 @@ impl ValueKind {
             Self::Money => crate::form::Money::parse(text).is_some(),
             Self::Float | Self::Decimal => text.parse::<f64>().is_ok_and(f64::is_finite),
             Self::Date | Self::DateTime => {
-                chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
+                navree_datetime::Date::parse("%Y-%m-%d", text).is_ok()
             }
             Self::Bool => matches!(text, "true" | "false"),
             Self::Uuid => uuid::Uuid::parse_str(text).is_ok(),
@@ -153,8 +153,8 @@ column_values! {
     Int: i8, i16, i32, i64, u8, u16, u32, u64;
     Money: crate::form::Money;
     Float: f32, f64;
-    Date: chrono::NaiveDate;
-    DateTime: chrono::DateTime<chrono::Utc>, chrono::NaiveDateTime;
+    Date: navree_datetime::Date;
+    DateTime: navree_datetime::Timestamp, navree_datetime::DateTime, navree_datetime::Zoned;
     Bool: bool;
     Uuid: uuid::Uuid;
 }
@@ -486,7 +486,12 @@ macro_rules! formatted_cells {
     };
 }
 
-formatted_cells!(chrono::NaiveDate => "%Y-%m-%d", chrono::NaiveDateTime => "%Y-%m-%d %H:%M", chrono::DateTime<chrono::Utc> => "%Y-%m-%d %H:%M");
+formatted_cells!(
+    navree_datetime::Date => "%Y-%m-%d",
+    navree_datetime::DateTime => "%Y-%m-%d %H:%M",
+    navree_datetime::Timestamp => "%Y-%m-%d %H:%M",
+    navree_datetime::Zoned => "%Y-%m-%d %H:%M"
+);
 
 impl<T: CellValue> CellValue for Option<T> {
     #[inline]

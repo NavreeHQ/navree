@@ -1,9 +1,8 @@
 //! Calendar dates and clock times from unix seconds, for the timeline and the feed.
 //!
-//! The toolkit takes no date dependency: a timeline needs a day name, a clock
-//! time and an offset label, and those are a few lines of arithmetic. The
-//! functions take any `i64` and never panic: a time far outside the calendar
-//! prints a large year, not an error.
+//! Civil date fields come from [`navree_datetime::civil::civil_from_days`]. The
+//! functions take any `i64` and never panic: a time far outside `i32` years clamps
+//! to the calendar's ends rather than failing.
 
 use std::fmt::Write as _;
 
@@ -126,17 +125,11 @@ pub(crate) fn offset_label(offset: i32) -> String {
 /// Year, month and day of a count of days since 1970-01-01 (the proleptic
 /// Gregorian calendar).
 fn civil_from_days(days: i64) -> (i64, u8, u8) {
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let day_of_era = z.rem_euclid(146_097);
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let year = year_of_era + era * 400;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let mp = (5 * day_of_year + 2) / 153;
-    let day = u8::try_from(day_of_year - (153 * mp + 2) / 5 + 1).unwrap_or(1);
-    let month = u8::try_from(if mp < 10 { mp + 3 } else { mp - 9 }).unwrap_or(1);
-    (if month <= 2 { year + 1 } else { year }, month, day)
+    match navree_datetime::civil::civil_from_days(days) {
+        Some((year, month, day)) => (i64::from(year), month, day),
+        None if days < 0 => (i64::from(i32::MIN), 1, 1),
+        None => (i64::from(i32::MAX), 12, 31),
+    }
 }
 
 #[cfg(test)]

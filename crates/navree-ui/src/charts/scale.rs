@@ -4,7 +4,7 @@
 //! the wall clock (minutes, hours, days, weeks, months, years), so ticks fall on
 //! midnights and month starts whatever the zone did that day.
 
-use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, Timelike, Weekday};
+use navree_datetime::{Date, DateTime, Span, Time, Timestamp, Weekday};
 
 use crate::dates::DateLocale;
 
@@ -226,13 +226,13 @@ fn round(value: f64, places: u8) -> f64 {
 // ---- Time ----------------------------------------------------------------
 
 /// A wall-clock time as seconds since 1970-01-01 00:00, with no zone.
-pub(crate) fn seconds_of(at: NaiveDateTime) -> i64 {
-    at.and_utc().timestamp()
+pub(crate) fn seconds_of(at: DateTime) -> i64 {
+    at.in_utc().as_secs()
 }
 
-/// The wall-clock time `seconds` stands for, when chrono holds it.
-pub(crate) fn time_of(seconds: i64) -> Option<NaiveDateTime> {
-    DateTime::from_timestamp(seconds, 0).map(|at| at.naive_utc())
+/// The wall-clock time `seconds` stands for, when `Timestamp` holds it.
+pub(crate) fn time_of(seconds: i64) -> Option<DateTime> {
+    Timestamp::from_secs(seconds).ok().map(|at| at.date_time_utc())
 }
 
 /// One tick of a time axis.
@@ -298,7 +298,7 @@ impl Unit {
     }
 
     /// The first tick at or after `from`.
-    fn first(self, from: NaiveDateTime, week_start: Weekday) -> Option<NaiveDateTime> {
+    fn first(self, from: DateTime, week_start: Weekday) -> Option<DateTime> {
         let fixed = |n: i64| {
             let s = seconds_of(from);
             let first = s.div_euclid(n) * n;
@@ -312,76 +312,96 @@ impl Unit {
             Self::Day(n) => {
                 // Every other day counted from the month's start, so the 1st is a tick.
                 let mut day = midnight_at_or_after(from)?;
-                while (day.day() - 1) % u32::try_from(n).ok()? != 0 {
-                    day = day.checked_add_signed(Duration::days(1))?;
+                let step = u8::try_from(n).ok()?;
+                while (day.date().day() - 1) % step != 0 {
+                    day = day.add(Span::days(1))?;
                 }
                 Some(day)
             }
             Self::Week => {
                 let mut day = midnight_at_or_after(from)?;
                 for _ in 0..7 {
-                    if day.weekday() == week_start {
+                    if day.date().weekday() == week_start {
                         return Some(day);
                     }
-                    day = day.checked_add_signed(Duration::days(1))?;
+                    day = day.add(Span::days(1))?;
                 }
                 None
             }
             Self::Month(n) => {
-                let (mut year, mut month) = (from.year(), from.month());
-                let start = NaiveDate::from_ymd_opt(year, month, 1)?.and_hms_opt(0, 0, 0)?;
+                let (mut year, mut month) = (from.date().year(), u32::from(from.date().month_number()));
+                let start = Date::new(year, u8::try_from(month).ok()?, 1)
+                    .ok()?
+                    .at(Time::MIDNIGHT);
                 if start < from {
                     (year, month) = next_month(year, month)?;
                 }
                 while (month - 1) % n != 0 {
                     (year, month) = next_month(year, month)?;
                 }
-                NaiveDate::from_ymd_opt(year, month, 1)?.and_hms_opt(0, 0, 0)
+                Some(
+                    Date::new(year, u8::try_from(month).ok()?, 1)
+                        .ok()?
+                        .at(Time::MIDNIGHT),
+                )
             }
             Self::Year(n) => {
-                let mut year = from.year();
-                if NaiveDate::from_ymd_opt(year, 1, 1)?.and_hms_opt(0, 0, 0)? < from {
+                let mut year = from.date().year();
+                if Date::new(year, 1, 1).ok()?.at(Time::MIDNIGHT) < from {
                     year += 1;
                 }
                 year = year.div_euclid(n).checked_mul(n)?;
-                if year < from.year()
-                    || NaiveDate::from_ymd_opt(year, 1, 1)?.and_hms_opt(0, 0, 0)? < from
+                if year < from.date().year()
+                    || Date::new(year, 1, 1).ok()?.at(Time::MIDNIGHT) < from
                 {
                     year = year.checked_add(n)?;
                 }
-                NaiveDate::from_ymd_opt(year, 1, 1)?.and_hms_opt(0, 0, 0)
+                Some(Date::new(year, 1, 1).ok()?.at(Time::MIDNIGHT))
             }
         }
     }
 
     /// The tick after `at`.
-    fn next(self, at: NaiveDateTime) -> Option<NaiveDateTime> {
+    fn next(self, at: DateTime) -> Option<DateTime> {
         match self {
-            Self::Second(n) => at.checked_add_signed(Duration::seconds(n)),
-            Self::Minute(n) => at.checked_add_signed(Duration::minutes(n)),
-            Self::Hour(n) => at.checked_add_signed(Duration::hours(n)),
-            Self::Day(1) => at.checked_add_signed(Duration::days(1)),
+            Self::Second(n) => at.add(Span::seconds(n)),
+            Self::Minute(n) => at.add(Span::minutes(n)),
+            Self::Hour(n) => at.add(Span::hours(n)),
+            Self::Day(1) => at.add(Span::days(1)),
             Self::Day(n) => {
-                let next = at.checked_add_signed(Duration::days(n))?;
+                let next = at.add(Span::days(n))?;
                 // A month of 31 days restarts at the 1st rather than drawing the 31st and the 1st.
-                if next.month() != at.month() && next.day() != 1 {
-                    let (year, month) = next_month(at.year(), at.month())?;
-                    NaiveDate::from_ymd_opt(year, month, 1)?.and_hms_opt(0, 0, 0)
+                if next.date().month_number() != at.date().month_number() && next.date().day() != 1
+                {
+                    let (year, month) =
+                        next_month(at.date().year(), u32::from(at.date().month_number()))?;
+                    Some(
+                        Date::new(year, u8::try_from(month).ok()?, 1)
+                            .ok()?
+                            .at(Time::MIDNIGHT),
+                    )
                 } else {
                     Some(next)
                 }
             }
-            Self::Week => at.checked_add_signed(Duration::days(7)),
+            Self::Week => at.add(Span::days(7)),
             Self::Month(n) => {
-                let (mut year, mut month) = (at.year(), at.month());
+                let (mut year, mut month) =
+                    (at.date().year(), u32::from(at.date().month_number()));
                 for _ in 0..n {
                     (year, month) = next_month(year, month)?;
                 }
-                NaiveDate::from_ymd_opt(year, month, 1)?.and_hms_opt(0, 0, 0)
+                Some(
+                    Date::new(year, u8::try_from(month).ok()?, 1)
+                        .ok()?
+                        .at(Time::MIDNIGHT),
+                )
             }
-            Self::Year(n) => {
-                NaiveDate::from_ymd_opt(at.year().checked_add(n)?, 1, 1)?.and_hms_opt(0, 0, 0)
-            }
+            Self::Year(n) => Some(
+                Date::new(at.date().year().checked_add(n)?, 1, 1)
+                    .ok()?
+                    .at(Time::MIDNIGHT),
+            ),
         }
     }
 }
@@ -394,10 +414,10 @@ fn next_month(year: i32, month: u32) -> Option<(i32, u32)> {
     }
 }
 
-fn midnight_at_or_after(at: NaiveDateTime) -> Option<NaiveDateTime> {
-    let midnight = at.date().and_hms_opt(0, 0, 0)?;
+fn midnight_at_or_after(at: DateTime) -> Option<DateTime> {
+    let midnight = at.date().at(Time::MIDNIGHT);
     if midnight < at {
-        at.date().succ_opt()?.and_hms_opt(0, 0, 0)
+        Some(at.date().tomorrow()?.at(Time::MIDNIGHT))
     } else {
         Some(midnight)
     }
@@ -405,7 +425,7 @@ fn midnight_at_or_after(at: NaiveDateTime) -> Option<NaiveDateTime> {
 
 /// How a time reads at a grain: `14:00`, `Nov 3`, `Nov 2026`, `2026`.
 pub(crate) fn time_label(
-    at: NaiveDateTime,
+    at: DateTime,
     grain: Grain,
     locale: &DateLocale,
     with_year: bool,
@@ -413,7 +433,7 @@ pub(crate) fn time_label(
     let date = at.date();
     match grain {
         Grain::Minute | Grain::Hour => {
-            if at.time() == chrono::NaiveTime::MIN {
+            if at.time() == navree_datetime::Time::MIDNIGHT {
                 locale.format_short(date, with_year)
             } else {
                 locale.format_time(at.time(), false)
@@ -421,10 +441,11 @@ pub(crate) fn time_label(
         }
         Grain::Day | Grain::Week => locale.format_short(date, with_year),
         Grain::Month | Grain::Quarter => {
+            let m = u32::from(date.month_number());
             if with_year {
-                format!("{} {}", locale.month_short(date.month()), date.year())
+                format!("{} {}", locale.month_short(m), date.year())
             } else {
-                locale.month_short(date.month()).to_owned()
+                locale.month_short(m).to_owned()
             }
         }
         Grain::Year => date.year().to_string(),
@@ -433,17 +454,17 @@ pub(crate) fn time_label(
 
 /// A time as a table row or a tooltip names it: the whole date, and the time when
 /// the grain is finer than a day.
-pub(crate) fn time_name(at: NaiveDateTime, grain: Grain, locale: &DateLocale) -> String {
+pub(crate) fn time_name(at: DateTime, grain: Grain, locale: &DateLocale) -> String {
     let date = at.date();
     match grain {
         Grain::Minute | Grain::Hour => format!(
             "{}, {}",
             locale.format_short(date, true),
-            locale.format_time(at.time(), at.second() != 0)
+            locale.format_time(at.time(), at.time().second() != 0)
         ),
         Grain::Day | Grain::Week => locale.format_short(date, true),
-        Grain::Month => locale.format_caption(date.year(), date.month()),
-        Grain::Quarter => format!("Q{} {}", (date.month() - 1) / 3 + 1, date.year()),
+        Grain::Month => locale.format_caption(date.year(), u32::from(date.month_number())),
+        Grain::Quarter => format!("Q{} {}", (date.month_number() - 1) / 3 + 1, date.year()),
         Grain::Year => date.year().to_string(),
     }
 }
@@ -474,7 +495,8 @@ pub(crate) fn time_ticks(
         Unit::Month(_) => Grain::Month,
         Unit::Year(_) => Grain::Year,
     };
-    let spans_years = time_of(from).map(|t| t.year()) != time_of(to).map(|t| t.year());
+    let spans_years =
+        time_of(from).map(|t| t.date().year()) != time_of(to).map(|t| t.date().year());
     let mut out = Vec::new();
     let mut at = unit.first(start, week_start);
     let mut last_year = None;
@@ -485,17 +507,17 @@ pub(crate) fn time_ticks(
         }
         let with_year = spans_years
             && match grain {
-                Grain::Month | Grain::Quarter => last_year != Some(tick.year()),
+                Grain::Month | Grain::Quarter => last_year != Some(tick.date().year()),
                 Grain::Minute | Grain::Hour => false,
-                _ => last_year != Some(tick.year()),
+                _ => last_year != Some(tick.date().year()),
             };
         let mut label = time_label(tick, grain, locale, with_year);
         if let Unit::Second(_) = unit
-            && tick.time() != chrono::NaiveTime::MIN
+            && tick.time() != navree_datetime::Time::MIDNIGHT
         {
             label = locale.format_time(tick.time(), true);
         }
-        last_year = Some(tick.year());
+        last_year = Some(tick.date().year());
         out.push(TimeTick { at: seconds, label });
         at = unit.next(tick);
     }
@@ -570,17 +592,14 @@ mod tests {
         }
     }
 
-    fn at(y: i32, m: u32, d: u32, h: u32) -> i64 {
+    fn at(y: i32, m: u8, d: u8, h: u8) -> i64 {
         seconds_of(
-            NaiveDate::from_ymd_opt(y, m, d)
-                .unwrap()
-                .and_hms_opt(h, 0, 0)
-                .unwrap(),
+            Date::new(y, m, d).unwrap().at(Time::new(h, 0, 0).unwrap()),
         )
     }
 
     fn labels(from: i64, to: i64, most: usize) -> Vec<String> {
-        time_ticks(from, to, most, &DateLocale::of("en-GB"), Weekday::Mon)
+        time_ticks(from, to, most, &DateLocale::of("en-GB"), Weekday::Monday)
             .into_iter()
             .map(|t| t.label)
             .collect()
@@ -626,7 +645,7 @@ mod tests {
             (-62_000_000_000, 250_000_000_000),
             (5, -5),
         ] {
-            let ticks = time_ticks(a, b, 6, &DateLocale::english(), Weekday::Sun);
+            let ticks = time_ticks(a, b, 6, &DateLocale::english(), Weekday::Sunday);
             assert!(ticks.len() <= 40);
         }
     }

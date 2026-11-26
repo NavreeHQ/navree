@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{Datelike, NaiveDate, Utc, Weekday};
+use navree_datetime::{Date, Timestamp, Weekday};
 
 use super::grid::{self, add_months, month_grid, week_number};
 use super::locale::DateLocale;
@@ -59,9 +59,9 @@ type Month = (i32, u32);
 /// ```
 /// use navree_ui::dates::Calendar;
 /// use navree_ui::render;
-/// use chrono::NaiveDate;
+/// use navree_datetime::Date;
 ///
-/// let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap();
+/// let today = Date::new(2026, 11, 3).unwrap();
 /// let html = render(&Calendar::new("due").name("due").today(today).selected(today).into());
 /// assert!(html.contains(r#"aria-selected="true""#));
 /// assert!(html.contains(r#"name="due" value="2026-11-03""#));
@@ -71,14 +71,14 @@ type Month = (i32, u32);
 pub struct Calendar {
     pub(super) id: String,
     pub(super) mode: CalendarMode,
-    pub(super) view: Option<NaiveDate>,
-    pub(super) selected: Vec<NaiveDate>,
+    pub(super) view: Option<Date>,
+    pub(super) selected: Vec<Date>,
     pub(super) range: Option<DateRange>,
     pub(super) names: Option<(String, Option<String>)>,
     pub(super) months: u8,
     pub(super) rules: DateRules,
     pub(super) locale: DateLocale,
-    pub(super) today: NaiveDate,
+    pub(super) today: Date,
     pub(super) week_start: Option<Weekday>,
     pub(super) week_numbers: bool,
     pub(super) fixed_weeks: bool,
@@ -111,7 +111,7 @@ impl Calendar {
             months: 1,
             rules: DateRules::new(),
             locale: DateLocale::english(),
-            today: Utc::now().date_naive(),
+            today: Timestamp::now().date_time_utc().date(),
             week_start: None,
             week_numbers: false,
             fixed_weeks: false,
@@ -153,13 +153,13 @@ impl Calendar {
     }
 
     /// The chosen day.
-    pub fn selected(mut self, day: NaiveDate) -> Self {
+    pub fn selected(mut self, day: Date) -> Self {
         self.selected = vec![day];
         self
     }
 
     /// The chosen days, for [`CalendarMode::Multiple`].
-    pub fn selected_days(mut self, days: impl IntoIterator<Item = NaiveDate>) -> Self {
+    pub fn selected_days(mut self, days: impl IntoIterator<Item = Date>) -> Self {
         self.selected = days.into_iter().collect();
         self
     }
@@ -172,7 +172,7 @@ impl Calendar {
 
     /// The month to open on, given as any day in it. By default the month of the
     /// choice, else the month of today.
-    pub fn month(mut self, day: NaiveDate) -> Self {
+    pub fn month(mut self, day: Date) -> Self {
         self.view = Some(day);
         self
     }
@@ -190,13 +190,13 @@ impl Calendar {
     }
 
     /// The earliest day that can be chosen.
-    pub fn min(mut self, day: NaiveDate) -> Self {
+    pub fn min(mut self, day: Date) -> Self {
         self.rules = self.rules.min(day);
         self
     }
 
     /// The latest day that can be chosen.
-    pub fn max(mut self, day: NaiveDate) -> Self {
+    pub fn max(mut self, day: Date) -> Self {
         self.rules = self.rules.max(day);
         self
     }
@@ -210,7 +210,7 @@ impl Calendar {
     /// Today, as the page counts it. The calendar marks it and the browser module
     /// never asks the clock, so a page is the same wherever it is read. Without it,
     /// today is the day in UTC.
-    pub fn today(mut self, today: NaiveDate) -> Self {
+    pub fn today(mut self, today: Date) -> Self {
         self.today = today;
         self
     }
@@ -328,7 +328,7 @@ impl Calendar {
     }
 
     /// The days chosen, in order.
-    fn chosen(&self) -> BTreeSet<NaiveDate> {
+    fn chosen(&self) -> BTreeSet<Date> {
         match self.mode {
             CalendarMode::Single => self.selected.iter().copied().take(1).collect(),
             CalendarMode::Multiple => self.selected.iter().copied().collect(),
@@ -359,7 +359,7 @@ impl Calendar {
         }
         // Keep room for the months after it.
         let span = i32::from(self.months) - 1;
-        let (year, month) = (anchor.year(), anchor.month());
+        let (year, month) = (anchor.year(), u32::from(anchor.month_number()));
         let last = add_months(year, month, span);
         match last {
             Some(_) => (year, month),
@@ -377,9 +377,9 @@ impl Calendar {
 
     /// The day that holds the tab stop: the first chosen day on show, else today,
     /// else the first day that can be chosen.
-    fn focus_day(&self, visible: &[(i32, u32)]) -> Option<NaiveDate> {
-        let shown = |day: NaiveDate| visible.contains(&(day.year(), day.month()));
-        let chosen: Vec<NaiveDate> = match self.mode {
+    fn focus_day(&self, visible: &[(i32, u32)]) -> Option<Date> {
+        let shown = |day: Date| visible.contains(&(day.year(), u32::from(day.month_number())));
+        let chosen: Vec<Date> = match self.mode {
             CalendarMode::Range => self.range.iter().flat_map(|r| [r.from, r.to]).collect(),
             _ => self.chosen().into_iter().collect(),
         };
@@ -389,10 +389,11 @@ impl Calendar {
             .or_else(|| (shown(self.today) && self.rules.allows(self.today)).then_some(self.today))
             .or_else(|| {
                 let (year, month) = *visible.first()?;
+                let m = u8::try_from(month).ok()?;
                 (1..=grid::days_in_month(year, month))
-                    .filter_map(|day| NaiveDate::from_ymd_opt(year, month, day))
+                    .filter_map(|day| Date::new(year, m, u8::try_from(day).ok()?).ok())
                     .find(|day| self.rules.allows(*day))
-                    .or_else(|| NaiveDate::from_ymd_opt(year, month, 1))
+                    .or_else(|| Date::new(year, m, 1).ok())
             })
     }
 
@@ -440,7 +441,7 @@ impl Calendar {
             .attr("data-today", self.today.to_string())
             .attr(
                 "data-week-start",
-                i64::from(first_day.num_days_from_sunday()),
+                i64::from(first_day.days_from_sunday()),
             )
             .attr("data-months", i64::from(self.months))
             .attr("data-ui-loc", self.locale.client().to_string())
@@ -491,7 +492,7 @@ impl Calendar {
     }
 
     /// The hidden fields that post the choice.
-    fn value_fields(&self, chosen: &BTreeSet<NaiveDate>) -> Vec<Element> {
+    fn value_fields(&self, chosen: &BTreeSet<Date>) -> Vec<Element> {
         let field = |name: Option<&str>, which: &'static str, value: String| {
             el("input")
                 .attr("type", "hidden")
@@ -508,7 +509,7 @@ impl Calendar {
             CalendarMode::Single | CalendarMode::Multiple => {
                 let value = chosen
                     .iter()
-                    .map(NaiveDate::to_string)
+                    .map(Date::to_string)
                     .collect::<Vec<_>>()
                     .join(",");
                 vec![field(name, "main", value)]
@@ -525,8 +526,8 @@ impl Calendar {
         &self,
         year: i32,
         month: u32,
-        chosen: &BTreeSet<NaiveDate>,
-        focus: Option<NaiveDate>,
+        chosen: &BTreeSet<Date>,
+        focus: Option<Date>,
         first_day: Weekday,
         editable: bool,
     ) -> Element {
@@ -625,14 +626,18 @@ impl Calendar {
         let (start, end) = self.rules.window(year, month);
         let limited = self.rules.has_rule();
         let first = if limited {
-            Some((start.year(), start.month()))
+            Some((start.year(), u32::from(start.month_number())))
         } else {
-            self.rules.earliest().map(|d| (d.year(), d.month()))
+            self.rules
+                .earliest()
+                .map(|d| (d.year(), u32::from(d.month_number())))
         };
         let last = if limited {
-            Some((end.year(), end.month()))
+            Some((end.year(), u32::from(end.month_number())))
         } else {
-            self.rules.latest().map(|d| (d.year(), d.month()))
+            self.rules
+                .latest()
+                .map(|d| (d.year(), u32::from(d.month_number())))
         };
         (first, last)
     }
@@ -690,13 +695,13 @@ impl Calendar {
 
     fn cell(
         &self,
-        day: NaiveDate,
+        day: Date,
         shown: (i32, u32),
-        chosen: &BTreeSet<NaiveDate>,
-        focus: Option<NaiveDate>,
+        chosen: &BTreeSet<Date>,
+        focus: Option<Date>,
         editable: bool,
     ) -> Element {
-        let outside = (day.year(), day.month()) != shown;
+        let outside = (day.year(), u32::from(day.month_number())) != shown;
         if outside {
             let cell = el("td").attr("role", "gridcell");
             return if self.outside_days {

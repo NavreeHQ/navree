@@ -10,7 +10,7 @@
 
 use std::fmt;
 
-use chrono::{Datelike, NaiveDate, NaiveTime};
+use navree_datetime::{Date, Time};
 
 use super::locale::{DateLocale, DateOrder};
 
@@ -221,7 +221,7 @@ enum MonthMatch {
 }
 
 /// The year for digits: four digits as they are, two within 50 years of `today`.
-fn year_of(digits: &str, today: NaiveDate) -> Result<i32, DateParseError> {
+fn year_of(digits: &str, today: Date) -> Result<i32, DateParseError> {
     let value: i32 = digits.parse().map_err(|_| DateParseError::BadYear)?;
     let year = match digits.len() {
         4 => value,
@@ -250,8 +250,10 @@ fn part(digits: &str) -> Result<u32, DateParseError> {
     digits.parse().map_err(|_| DateParseError::Unreadable)
 }
 
-fn build(year: i32, month: u32, day: u32) -> Result<NaiveDate, DateParseError> {
-    NaiveDate::from_ymd_opt(year, month, day).ok_or(DateParseError::NotADate)
+fn build(year: i32, month: u32, day: u32) -> Result<Date, DateParseError> {
+    let month = u8::try_from(month).map_err(|_| DateParseError::NotADate)?;
+    let day = u8::try_from(day).map_err(|_| DateParseError::NotADate)?;
+    Date::new(year, month, day).ok().ok_or(DateParseError::NotADate)
 }
 
 impl DateLocale {
@@ -293,17 +295,17 @@ impl DateLocale {
     /// two-digit year.
     ///
     /// ```
+    /// use navree_datetime::Date;
     /// use navree_ui::dates::DateLocale;
-    /// use chrono::NaiveDate;
     ///
-    /// let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap();
+    /// let today = Date::new(2026, 11, 3).unwrap();
     /// let de = DateLocale::of("de");
     /// assert_eq!(de.parse_date("3.11.2026", today), Ok(today));
     /// assert_eq!(de.parse_date("3. November 26", today), Ok(today));
     /// assert_eq!(de.parse_date("2026-11-03", today), Ok(today));
     /// assert!(de.parse_date("31.4.2026", today).is_err());
     /// ```
-    pub fn parse_date(&self, text: &str, today: NaiveDate) -> Result<NaiveDate, DateParseError> {
+    pub fn parse_date(&self, text: &str, today: Date) -> Result<Date, DateParseError> {
         let text = text.trim();
         if text.is_empty() {
             return Err(DateParseError::Empty);
@@ -358,8 +360,8 @@ impl DateLocale {
         a: &str,
         b: &str,
         c: &str,
-        today: NaiveDate,
-    ) -> Result<NaiveDate, DateParseError> {
+        today: Date,
+    ) -> Result<Date, DateParseError> {
         let (year, month, day) = if a.len() == 4 {
             (a, b, c)
         } else {
@@ -378,8 +380,8 @@ impl DateLocale {
         a: &str,
         b: &str,
         month: u32,
-        today: NaiveDate,
-    ) -> Result<NaiveDate, DateParseError> {
+        today: Date,
+    ) -> Result<Date, DateParseError> {
         let (year, day) = match (a.len(), b.len()) {
             (4, 4) => return Err(DateParseError::Unreadable),
             (4, _) => (a, b),
@@ -392,7 +394,7 @@ impl DateLocale {
 
     /// Eight digits are `yyyymmdd` when that is a date, else the locale's order
     /// with a four-digit year; six digits are the locale's order with two.
-    fn compact(&self, digits: &str, today: NaiveDate) -> Result<NaiveDate, DateParseError> {
+    fn compact(&self, digits: &str, today: Date) -> Result<Date, DateParseError> {
         let at = |from: usize, to: usize| digits.get(from..to).unwrap_or_default();
         match digits.len() {
             8 => {
@@ -433,14 +435,14 @@ impl DateLocale {
     /// afternoon; the field then shows the time back in the locale's own form.
     ///
     /// ```
+    /// use navree_datetime::Time;
     /// use navree_ui::dates::DateLocale;
-    /// use chrono::NaiveTime;
     ///
     /// let en = DateLocale::of("en");
-    /// assert_eq!(en.parse_time("9:30 pm").unwrap(), NaiveTime::from_hms_opt(21, 30, 0).unwrap());
+    /// assert_eq!(en.parse_time("9:30 pm").unwrap(), Time::new(21, 30, 0).unwrap());
     /// assert!(en.parse_time("25:00").is_err());
     /// ```
-    pub fn parse_time(&self, text: &str) -> Result<NaiveTime, TimeParseError> {
+    pub fn parse_time(&self, text: &str) -> Result<Time, TimeParseError> {
         let text = text.trim();
         if text.is_empty() {
             return Err(TimeParseError::Empty);
@@ -504,13 +506,13 @@ impl DateLocale {
         if parts.iter().any(|part| part.is_empty() || part.len() > 2) {
             return Err(TimeParseError::Unreadable);
         }
-        let number = |at: usize| -> u32 {
-            parts
-                .get(at)
-                .and_then(|part| part.parse().ok())
-                .unwrap_or_default()
+        let number = |at: usize| -> Result<u8, TimeParseError> {
+            match parts.get(at) {
+                Some(part) => part.parse().map_err(|_| TimeParseError::OutOfRange),
+                None => Ok(0),
+            }
         };
-        let (mut hour, minute, second) = (number(0), number(1), number(2));
+        let (mut hour, minute, second) = (number(0)?, number(1)?, number(2)?);
         if let Some(afternoon) = marker {
             if !(1..=12).contains(&hour) {
                 return Err(TimeParseError::OutOfRange);
@@ -520,7 +522,7 @@ impl DateLocale {
                 hour += 12;
             }
         }
-        NaiveTime::from_hms_opt(hour, minute, second).ok_or(TimeParseError::OutOfRange)
+        Time::new(hour, minute, second).ok().ok_or(TimeParseError::OutOfRange)
     }
 }
 
@@ -528,11 +530,11 @@ impl DateLocale {
 mod tests {
     use super::*;
 
-    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    fn day(y: i32, m: u8, d: u8) -> Date {
+        Date::new(y, m, d).unwrap()
     }
 
-    fn today() -> NaiveDate {
+    fn today() -> Date {
         day(2026, 11, 3)
     }
 
@@ -552,7 +554,7 @@ mod tests {
     fn the_shared_cases_hold() {
         let cases: serde_json::Value =
             serde_json::from_str(include_str!("../../tests/fixtures/dates-parse.json")).unwrap();
-        let today: NaiveDate = cases["today"].as_str().unwrap().parse().unwrap();
+        let today: Date = cases["today"].as_str().unwrap().parse().unwrap();
         let mut seen = 0;
         for case in cases["dates"].as_array().unwrap() {
             let locale = DateLocale::of(case["locale"].as_str().unwrap());
@@ -560,7 +562,7 @@ mod tests {
             let got = locale.parse_date(text, today);
             match (case.get("ok"), case.get("err")) {
                 (Some(ok), _) => {
-                    let want: NaiveDate = ok.as_str().unwrap().parse().unwrap();
+                    let want: Date = ok.as_str().unwrap().parse().unwrap();
                     assert_eq!(got, Ok(want), "{} {text:?}", case["locale"]);
                 }
                 (_, Some(err)) => {
@@ -581,7 +583,7 @@ mod tests {
             let got = locale.parse_time(text);
             match (case.get("ok"), case.get("err")) {
                 (Some(ok), _) => {
-                    let want: NaiveTime = ok.as_str().unwrap().parse().unwrap();
+                    let want: Time = ok.as_str().unwrap().parse().unwrap();
                     assert_eq!(got, Ok(want), "{} {text:?}", case["locale"]);
                 }
                 (_, Some(err)) => {
@@ -656,7 +658,7 @@ mod tests {
     #[test]
     fn times_without_a_marker_read_on_the_24_hour_clock() {
         let en = DateLocale::of("en");
-        let t = |h, m, s| NaiveTime::from_hms_opt(h, m, s).unwrap();
+        let t = |h, m, s| Time::new(h, m, s).unwrap();
         assert_eq!(en.parse_time("9"), Ok(t(9, 0, 0)));
         assert_eq!(en.parse_time("15"), Ok(t(15, 0, 0)));
         assert_eq!(en.parse_time("9:05"), Ok(t(9, 5, 0)));
@@ -671,7 +673,7 @@ mod tests {
     #[test]
     fn markers_make_a_12_hour_time() {
         let en = DateLocale::of("en");
-        let t = |h, m| NaiveTime::from_hms_opt(h, m, 0).unwrap();
+        let t = |h, m| Time::new(h, m, 0).unwrap();
         assert_eq!(en.parse_time("12 am"), Ok(t(0, 0)));
         assert_eq!(en.parse_time("12:30 AM"), Ok(t(0, 30)));
         assert_eq!(en.parse_time("12 pm"), Ok(t(12, 0)));

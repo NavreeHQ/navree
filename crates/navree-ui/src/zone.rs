@@ -16,7 +16,6 @@
 //! # }
 //! ```
 
-use chrono::Offset as _;
 use navree_time::CurrentZone;
 
 use crate::components::{ActivityFeed, Timeline};
@@ -25,7 +24,7 @@ use crate::dates::{Calendar, DatePicker, DateRangePicker};
 /// The zone's name and its offset from UTC in seconds at this moment, as a timeline and a
 /// feed take them.
 fn name_and_offset(zone: &CurrentZone) -> (String, i32) {
-    let offset = zone.now().offset().fix().local_minus_utc();
+    let offset = zone.now().offset().seconds();
     (zone.name().to_owned(), offset)
 }
 

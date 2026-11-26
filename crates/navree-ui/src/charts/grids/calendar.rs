@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{Datelike, Duration, NaiveDate, Weekday};
+use navree_datetime::{Date, Weekday};
 
 use super::super::format::NumberFormat;
 use super::super::motion::{Effect, Motion};
@@ -93,16 +93,16 @@ fn step_of(value: f64, edges: [f64; 3]) -> u8 {
 /// "Less" to "More", a summary, a tooltip for a day and its data as a table.
 ///
 /// ```
-/// use chrono::{Duration, NaiveDate};
+/// use navree_datetime::Date;
 /// use navree_ui::charts::{CalendarHeatmap, HeatSteps, Ink};
 ///
-/// let first = NaiveDate::from_ymd_opt(2026, 5, 15).unwrap();
+/// let first = Date::new(2026, 5, 15).unwrap();
 /// let chart = CalendarHeatmap::new("Training consistency")
 ///     .description("Last 6 months, Harleen Kaur")
 ///     .locale("en-IN")
 ///     .days((0..181).map(|d| {
 ///         let load = if d % 9 == 4 { None } else { Some((d * 37 % 130) as f64) };
-///         (first + Duration::days(d), load)
+///         (first.add_days(d).unwrap(), load)
 ///     }))
 ///     .ink(Ink::slot(5))
 ///     .unit("load")
@@ -113,8 +113,8 @@ fn step_of(value: f64, edges: [f64; 3]) -> u8 {
 #[must_use]
 pub struct CalendarHeatmap {
     common: Common,
-    days: Vec<(NaiveDate, Option<f64>)>,
-    range: Option<(NaiveDate, NaiveDate)>,
+    days: Vec<(Date, Option<f64>)>,
+    range: Option<(Date, Date)>,
     week_start: Option<Weekday>,
     ink: Ink,
     steps: HeatSteps,
@@ -149,14 +149,14 @@ impl CalendarHeatmap {
 
     /// Adds a day. A value that is not a finite number, or `None`, is a day with no data.
     /// A date given twice keeps the last value.
-    pub fn day(mut self, date: NaiveDate, value: impl IntoValue) -> Self {
+    pub fn day(mut self, date: Date, value: impl IntoValue) -> Self {
         self.days.push((date, finite(value.into_value())));
         self
     }
 
     /// Adds days: dates with their values. Days between them that are not given have no
     /// data.
-    pub fn days<V: IntoValue>(mut self, days: impl IntoIterator<Item = (NaiveDate, V)>) -> Self {
+    pub fn days<V: IntoValue>(mut self, days: impl IntoIterator<Item = (Date, V)>) -> Self {
         self.days.extend(
             days.into_iter()
                 .map(|(date, value)| (date, finite(value.into_value()))),
@@ -167,7 +167,7 @@ impl CalendarHeatmap {
     /// Draws these dates, first to last, whether or not they have data: a range that
     /// starts before the first day given, or ends after the last, shows the days between
     /// as empty. Days given outside it are left out.
-    pub fn range(mut self, first: NaiveDate, last: NaiveDate) -> Self {
+    pub fn range(mut self, first: Date, last: Date) -> Self {
         self.range = Some((first.min(last), first.max(last)));
         self
     }
@@ -236,7 +236,7 @@ impl CalendarHeatmap {
         let words = self.words.clone();
         let numbers = self.common.numbers.clone();
         let dates = self.common.dates.clone();
-        let mut by_day: BTreeMap<NaiveDate, Option<f64>> = BTreeMap::new();
+        let mut by_day: BTreeMap<Date, Option<f64>> = BTreeMap::new();
         for (date, value) in &self.days {
             by_day.insert(*date, *value);
         }
@@ -246,24 +246,31 @@ impl CalendarHeatmap {
         if by_day.values().all(Option::is_none) {
             return None;
         }
-        let (mut first, last) = self.range.unwrap_or_else(|| {
-            let first = by_day.keys().next().copied().unwrap_or_default();
-            let last = by_day.keys().next_back().copied().unwrap_or_default();
-            (first, last)
-        });
-        let total = (last - first).num_days() + 1;
+        let (mut first, last) = match self.range {
+            Some(range) => range,
+            None => {
+                let first = *by_day.keys().next()?;
+                let last = *by_day.keys().next_back()?;
+                (first, last)
+            }
+        };
+        let total = first.days_until(last) + 1;
         let cut = total > MAX_DAYS;
         if cut {
-            first = last - Duration::days(MAX_DAYS - 1);
+            first = last.add_days(-(MAX_DAYS - 1)).unwrap_or(Date::MIN);
         }
-        let shown = (last - first).num_days() + 1;
+        let shown = first.days_until(last) + 1;
 
         let week_start = self.week_start.unwrap_or(dates.first_day);
-        let row_of = |date: NaiveDate| {
-            (date.weekday().num_days_from_monday() + 7 - week_start.num_days_from_monday()) % 7
+        let row_of = |date: Date| {
+            (date.weekday().days_from_monday() + 7 - week_start.days_from_monday()) % 7
         };
-        let grid_start = first - Duration::days(i64::from(row_of(first)));
-        let weeks = ((last - grid_start).num_days() / 7 + 1) as usize;
+        let pad_before = i64::from(row_of(first));
+        let (grid_start, start_offset) = match first.add_days(-pad_before) {
+            Some(start) => (start, 0_i64),
+            None => (first, -pad_before),
+        };
+        let weeks = ((grid_start.days_until(last) - start_offset) / 7 + 1) as usize;
 
         let values: Vec<f64> = by_day
             .range(first..=last)
@@ -280,14 +287,14 @@ impl CalendarHeatmap {
         // name that would stand within two columns of the next.
         let mut marks: Vec<(usize, u32)> = Vec::new();
         for w in 0..weeks {
-            let column: Vec<NaiveDate> = (0..7)
-                .map(|r| grid_start + Duration::days((w * 7 + r) as i64))
+            let column: Vec<Date> = (0..7)
+                .filter_map(|r| grid_start.add_days((w * 7 + r) as i64 + start_offset))
                 .filter(|date| (first..=last).contains(date))
                 .collect();
             let new_month = column.iter().find(|date| date.day() == 1);
             match (w, new_month, column.first()) {
-                (_, Some(date), _) => marks.push((w, date.month())),
-                (0, None, Some(date)) => marks.push((0, date.month())),
+                (_, Some(date), _) => marks.push((w, u32::from(date.month_number()))),
+                (0, None, Some(date)) => marks.push((0, u32::from(date.month_number()))),
                 _ => {}
             }
         }
@@ -312,7 +319,10 @@ impl CalendarHeatmap {
                 );
             }
             for r in 0..7_usize {
-                let date = grid_start + Duration::days((w * 7 + r) as i64);
+                let Some(date) = grid_start.add_days((w * 7 + r) as i64 + start_offset) else {
+                    cells.push(el("div").slot("heat-pad").into());
+                    continue;
+                };
                 if date < first || date > last {
                     cells.push(el("div").slot("heat-pad").into());
                     continue;
@@ -347,12 +357,12 @@ impl CalendarHeatmap {
             week_nodes.push(week.into());
         }
 
-        let day_names: Vec<Node> = (0..7_u32)
+        let day_names: Vec<Node> = (0..7_u8)
             .map(|r| {
-                let day = Weekday::try_from(((week_start.num_days_from_monday() + r) % 7) as u8)
-                    .unwrap_or(Weekday::Mon);
+                let day = Weekday::try_from((week_start.days_from_monday() + r) % 7)
+                    .unwrap_or(Weekday::Monday);
                 // Monday, Wednesday and Friday are named: every other row, as a person reads them.
-                let named = matches!(day, Weekday::Mon | Weekday::Wed | Weekday::Fri);
+                let named = matches!(day, Weekday::Monday | Weekday::Wednesday | Weekday::Friday);
                 el("span")
                     .child(named.then(|| dates.weekday_short(day).to_owned()))
                     .into()
@@ -490,8 +500,8 @@ mod tests {
     use super::*;
     use crate::render;
 
-    fn day(d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(2026, 3, d).unwrap()
+    fn day(d: u8) -> Date {
+        Date::new(2026, 3, d).unwrap()
     }
 
     #[test]
@@ -519,7 +529,7 @@ mod tests {
         // 1 March 2026 is a Sunday.
         let chart = CalendarHeatmap::new("Load")
             .id("cal")
-            .week_start(Weekday::Mon)
+            .week_start(Weekday::Monday)
             .days((1..=14).map(|d| (day(d), d as f64)));
         let html = render(&chart.into());
         // Sunday 1 March sits in the first column, in the last row; two full weeks follow.
@@ -564,10 +574,10 @@ mod tests {
 
     #[test]
     fn months_are_named_above_their_first_week_and_never_crowd() {
-        let first = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let first = Date::new(2026, 1, 1).unwrap();
         let chart = CalendarHeatmap::new("Load")
-            .days((0..181).map(|d| (first + Duration::days(d), 1)))
-            .week_start(Weekday::Sun);
+            .days((0..181).map(|d| (first.add_days(d).unwrap(), 1)))
+            .week_start(Weekday::Sunday);
         let html = render(&chart.into());
         let names: Vec<&str> = html
             .split(r#"data-slot="heat-month">"#)
@@ -579,11 +589,11 @@ mod tests {
         let chart = CalendarHeatmap::new("Load")
             .days((0..60).map(|d| {
                 (
-                    NaiveDate::from_ymd_opt(2026, 1, 30).unwrap() + Duration::days(d),
+                    Date::new(2026, 1, 30).unwrap().add_days(d).unwrap(),
                     1,
                 )
             }))
-            .week_start(Weekday::Sun);
+            .week_start(Weekday::Sunday);
         let html = render(&chart.into());
         assert!(!html.contains(">Jan<"), "{html}");
         assert!(html.contains(">Feb<") && html.contains(">Mar<"), "{html}");
@@ -618,7 +628,7 @@ mod tests {
             &CalendarHeatmap::new("Load")
                 .day(day(1), f64::MAX)
                 .day(day(2), -4)
-                .day(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(), 1)
+                .day(Date::new(2020, 1, 1).unwrap(), 1)
                 .range(day(9), day(1))
                 .into(),
         );
@@ -628,7 +638,7 @@ mod tests {
             &CalendarHeatmap::new("Load")
                 .days((0..2_000).map(|d| {
                     (
-                        NaiveDate::from_ymd_opt(2020, 1, 1).unwrap() + Duration::days(d),
+                        Date::new(2020, 1, 1).unwrap().add_days(d).unwrap(),
                         3,
                     )
                 }))
@@ -667,7 +677,7 @@ mod tests {
         let html = render(
             &CalendarHeatmap::new("Load")
                 .day(day(2), 1)
-                .week_start(Weekday::Mon)
+                .week_start(Weekday::Monday)
                 .into(),
         );
         // A week that starts on Monday names Monday, Wednesday and Friday.

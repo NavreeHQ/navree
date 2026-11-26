@@ -1,7 +1,7 @@
 //! Decimal numbers, dates with a time and instants in a derived form: the widget each
 //! gets, how a value is shown when a form is edited, and how the post is read back.
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use navree_datetime::{Date, DateTime, Time, Timestamp};
 use navree_ui::form::{Form, FormView, Widget, decode};
 use navree_ui::{Form, InputKind, Validate, render};
 use rust_decimal::Decimal;
@@ -17,13 +17,13 @@ struct Invoice {
     discount: Option<Decimal>,
     /// Due
     #[validate(skip)]
-    due: NaiveDateTime,
+    due: DateTime,
     /// Sent at
     #[validate(skip)]
-    sent_at: DateTime<Utc>,
+    sent_at: Timestamp,
     /// Reminder
     #[validate(skip)]
-    reminder: Option<DateTime<Utc>>,
+    reminder: Option<Timestamp>,
 }
 
 fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
@@ -78,21 +78,12 @@ fn an_edit_form_shows_the_values_the_browser_can_hold() {
     let invoice = Invoice {
         total: "1234.50".parse().unwrap(),
         discount: None,
-        due: NaiveDate::from_ymd_opt(2026, 11, 4)
-            .unwrap()
-            .and_hms_opt(14, 30, 0)
-            .unwrap(),
-        sent_at: NaiveDate::from_ymd_opt(2026, 11, 4)
-            .unwrap()
-            .and_hms_opt(9, 5, 0)
-            .unwrap()
-            .and_utc(),
+        due: Date::new(2026, 11, 4).unwrap().at(Time::new(14, 30, 0).unwrap()),
+        sent_at: Date::new(2026, 11, 4).unwrap().at(Time::new(9, 5, 0).unwrap())
+            .in_utc(),
         reminder: Some(
-            NaiveDate::from_ymd_opt(2026, 11, 5)
-                .unwrap()
-                .and_hms_opt(8, 0, 30)
-                .unwrap()
-                .and_utc(),
+            Date::new(2026, 11, 5).unwrap().at(Time::new(8, 0, 30).unwrap())
+                .in_utc(),
         ),
     };
     let values = Invoice::values(&invoice);
@@ -127,19 +118,13 @@ fn a_good_post_decodes() {
     assert_eq!(invoice.discount, None, "an empty optional is absent");
     assert_eq!(
         invoice.due,
-        NaiveDate::from_ymd_opt(2026, 11, 4)
-            .unwrap()
-            .and_hms_opt(14, 30, 0)
-            .unwrap(),
+        Date::new(2026, 11, 4).unwrap().at(Time::new(14, 30, 0).unwrap()),
         "a browser posts the minute and no seconds"
     );
     assert_eq!(
         invoice.sent_at,
-        NaiveDate::from_ymd_opt(2026, 11, 4)
-            .unwrap()
-            .and_hms_opt(9, 5, 0)
-            .unwrap()
-            .and_utc(),
+        Date::new(2026, 11, 4).unwrap().at(Time::new(9, 5, 0).unwrap())
+            .in_utc(),
         "an instant is read as UTC"
     );
     assert_eq!(invoice.reminder, None);
@@ -280,12 +265,11 @@ fn the_year_of_an_instant_is_held_to_the_calendar_in_utc_too() {
 struct Booking {
     /// Starts
     #[validate(custom(after_2000))]
-    starts: chrono::DateTime<chrono::Utc>,
+    starts: navree_datetime::Timestamp,
 }
 
-fn after_2000(at: &chrono::DateTime<chrono::Utc>) -> Result<(), String> {
-    use chrono::Datelike;
-    if at.year() < 2000 {
+fn after_2000(at: &navree_datetime::Timestamp) -> Result<(), String> {
+    if at.date_time_utc().date().year() < 2000 {
         return Err("Pick a time after 1999.".to_owned());
     }
     Ok(())
@@ -308,7 +292,7 @@ fn a_full_path_instant_is_read_as_utc_and_says_so() {
     let starts = Booking::FIELDS.iter().find(|f| f.name == "starts").unwrap();
     assert!(
         starts.instant,
-        "chrono::DateTime<chrono::Utc> is an instant"
+        "navree_datetime::Timestamp is an instant"
     );
     assert!(!field("total").instant && !field("due").instant);
     // The input tells the person which clock it is.

@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{Datelike, NaiveDate, Weekday};
+use navree_datetime::{Date, Weekday};
 use serde_json::{Value, json};
 
 use super::grid::{self, add_months};
@@ -26,9 +26,9 @@ const RULE_SPAN_CAP: i64 = 40_000;
 #[non_exhaustive]
 pub enum DateError {
     /// Before the earliest date.
-    TooEarly(NaiveDate),
+    TooEarly(Date),
     /// After the latest date.
-    TooLate(NaiveDate),
+    TooLate(Date),
     /// On a weekday that is turned off.
     Weekday(Weekday),
     /// On a date or in a range that is turned off, or the page's rule says no.
@@ -77,7 +77,7 @@ impl fmt::Display for DateError {
 
 impl std::error::Error for DateError {}
 
-type Rule = Arc<dyn Fn(NaiveDate) -> bool + Send + Sync>;
+type Rule = Arc<dyn Fn(Date) -> bool + Send + Sync>;
 
 /// The limits of a range, written once: the days that can't be chosen, and the fewest and most
 /// days a range may hold. Give it to a [`DateRangePicker`](super::DateRangePicker) with
@@ -86,10 +86,10 @@ type Rule = Arc<dyn Fn(NaiveDate) -> bool + Send + Sync>;
 /// holds the request to it. Nothing is said twice, so the two can't differ.
 ///
 /// ```
+/// use navree_datetime::Weekday;
 /// use navree_ui::dates::{DateRange, DateRangeQuery, DateRangePicker, DateRules, RangeRules};
-/// use chrono::{NaiveDate, Weekday};
 ///
-/// let limits = RangeRules::new(DateRules::new().disable_weekdays([Weekday::Sat, Weekday::Sun]))
+/// let limits = RangeRules::new(DateRules::new().disable_weekdays([Weekday::Saturday, Weekday::Sunday]))
 ///     .min_days(2)
 ///     .max_days(30);
 /// let picker = DateRangePicker::new("from", "to").limits(limits.clone());
@@ -161,13 +161,13 @@ impl From<DateRules> for RangeRules {
 /// The days a calendar will not let a person choose.
 ///
 /// ```
+/// use navree_datetime::{Date, Weekday};
 /// use navree_ui::dates::DateRules;
-/// use chrono::{NaiveDate, Weekday};
 ///
-/// let day = |d| NaiveDate::from_ymd_opt(2026, 12, d).unwrap();
+/// let day = |d| Date::new(2026, 12, d).unwrap();
 /// let rules = DateRules::new()
 ///     .min(day(1))
-///     .disable_weekdays([Weekday::Sat, Weekday::Sun])
+///     .disable_weekdays([Weekday::Saturday, Weekday::Sunday])
 ///     .disable_dates([day(25)]);
 /// assert!(rules.check(day(2)).is_ok());    // a Wednesday
 /// assert!(rules.check(day(5)).is_err());   // a Saturday
@@ -175,11 +175,11 @@ impl From<DateRules> for RangeRules {
 /// ```
 #[derive(Clone, Default)]
 pub struct DateRules {
-    min: Option<NaiveDate>,
-    max: Option<NaiveDate>,
+    min: Option<Date>,
+    max: Option<Date>,
     weekdays: u8,
-    dates: BTreeSet<NaiveDate>,
-    ranges: Vec<(NaiveDate, NaiveDate)>,
+    dates: BTreeSet<Date>,
+    ranges: Vec<(Date, Date)>,
     rule: Option<Rule>,
 }
 
@@ -204,14 +204,14 @@ impl DateRules {
 
     /// The earliest day that can be chosen.
     #[must_use]
-    pub fn min(mut self, day: NaiveDate) -> Self {
+    pub fn min(mut self, day: Date) -> Self {
         self.min = Some(day);
         self
     }
 
     /// The latest day that can be chosen.
     #[must_use]
-    pub fn max(mut self, day: NaiveDate) -> Self {
+    pub fn max(mut self, day: Date) -> Self {
         self.max = Some(day);
         self
     }
@@ -220,21 +220,21 @@ impl DateRules {
     #[must_use]
     pub fn disable_weekdays(mut self, days: impl IntoIterator<Item = Weekday>) -> Self {
         for day in days {
-            self.weekdays |= 1 << day.num_days_from_sunday();
+            self.weekdays |= 1 << day.days_from_sunday();
         }
         self
     }
 
     /// Turns single days off.
     #[must_use]
-    pub fn disable_dates(mut self, days: impl IntoIterator<Item = NaiveDate>) -> Self {
+    pub fn disable_dates(mut self, days: impl IntoIterator<Item = Date>) -> Self {
         self.dates.extend(days);
         self
     }
 
     /// Turns a run of days off, both ends included. Given backwards, it is put right.
     #[must_use]
-    pub fn disable_range(mut self, from: NaiveDate, to: NaiveDate) -> Self {
+    pub fn disable_range(mut self, from: Date, to: Date) -> Self {
         self.ranges.push((from.min(to), from.max(to)));
         self
     }
@@ -244,18 +244,18 @@ impl DateRules {
     /// stops navigation at the edges of that window; the server asks it for each
     /// date that comes back.
     #[must_use]
-    pub fn disable_if(mut self, rule: impl Fn(NaiveDate) -> bool + Send + Sync + 'static) -> Self {
+    pub fn disable_if(mut self, rule: impl Fn(Date) -> bool + Send + Sync + 'static) -> Self {
         self.rule = Some(Arc::new(rule));
         self
     }
 
     /// The earliest day, when set.
-    pub fn earliest(&self) -> Option<NaiveDate> {
+    pub fn earliest(&self) -> Option<Date> {
         self.min
     }
 
     /// The latest day, when set.
-    pub fn latest(&self) -> Option<NaiveDate> {
+    pub fn latest(&self) -> Option<Date> {
         self.max
     }
 
@@ -265,7 +265,7 @@ impl DateRules {
     }
 
     /// Why `day` can't be chosen, or `Ok` when it can.
-    pub fn check(&self, day: NaiveDate) -> Result<(), DateError> {
+    pub fn check(&self, day: Date) -> Result<(), DateError> {
         if day < grid::earliest() || day > grid::latest() {
             return Err(DateError::OutOfCalendar);
         }
@@ -279,7 +279,7 @@ impl DateRules {
         {
             return Err(DateError::TooLate(max));
         }
-        if self.weekdays & (1 << day.weekday().num_days_from_sunday()) != 0 {
+        if self.weekdays & (1 << day.weekday().days_from_sunday()) != 0 {
             return Err(DateError::Weekday(day.weekday()));
         }
         if self.dates.contains(&day)
@@ -295,7 +295,7 @@ impl DateRules {
     }
 
     /// Whether `day` can be chosen.
-    pub fn allows(&self, day: NaiveDate) -> bool {
+    pub fn allows(&self, day: Date) -> bool {
         self.check(day).is_ok()
     }
 
@@ -304,10 +304,10 @@ impl DateRules {
     /// range is picked.
     ///
     /// ```
+    /// use navree_datetime::Date;
     /// use navree_ui::dates::{DateError, DateRange, DateRules};
-    /// use chrono::NaiveDate;
     ///
-    /// let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
+    /// let day = |d| Date::new(2026, 11, d).unwrap();
     /// let rules = DateRules::new().disable_dates([day(5)]);
     /// let range = DateRange::new(day(3), day(7));
     /// assert_eq!(rules.check_range(&range, None, None), Err(DateError::RangeBlocked));
@@ -343,7 +343,7 @@ impl DateRules {
     /// and not of the days in the span. Only a rule function must be asked a day at a time,
     /// and for that a span of more than 40,000 days (about 110 years, more than any calendar
     /// the browser can show is given) counts as blocked.
-    pub fn blocks_span(&self, from: NaiveDate, to: NaiveDate) -> bool {
+    pub fn blocks_span(&self, from: Date, to: Date) -> bool {
         let (from, to) = (from.min(to), from.max(to));
         if from < grid::earliest() || to > grid::latest() {
             return true;
@@ -358,10 +358,10 @@ impl DateRules {
                 if day > to {
                     break;
                 }
-                if self.weekdays & (1 << day.weekday().num_days_from_sunday()) != 0 {
+                if self.weekdays & (1 << day.weekday().days_from_sunday()) != 0 {
                     return true;
                 }
-                let Some(next) = day.succ_opt() else { break };
+                let Some(next) = day.tomorrow() else { break };
                 day = next;
             }
         }
@@ -376,7 +376,7 @@ impl DateRules {
         let Some(rule) = &self.rule else {
             return false;
         };
-        if (to - from).num_days() > RULE_SPAN_CAP {
+        if from.days_until(to) > RULE_SPAN_CAP {
             return true;
         }
         let mut day = from;
@@ -384,7 +384,7 @@ impl DateRules {
             if rule(day) {
                 return true;
             }
-            let Some(next) = day.succ_opt() else { break };
+            let Some(next) = day.tomorrow() else { break };
             day = next;
         }
         false
@@ -393,10 +393,10 @@ impl DateRules {
     /// What the browser needs: limits, weekdays, and the listed and ruled-out days as
     /// runs, for `window` (the days the calendar can reach). Navigation stops at the
     /// months in `nav` when a rule function limits it.
-    pub(crate) fn client(&self, window: (NaiveDate, NaiveDate), limit_nav: bool) -> Value {
+    pub(crate) fn client(&self, window: (Date, Date), limit_nav: bool) -> Value {
         let (start, end) = window;
-        let mut runs: Vec<(NaiveDate, NaiveDate)> = Vec::new();
-        let mut push = |from: NaiveDate, to: NaiveDate| {
+        let mut runs: Vec<(Date, Date)> = Vec::new();
+        let mut push = |from: Date, to: Date| {
             let (from, to) = (from.max(start), to.min(end));
             if from <= to {
                 runs.push((from, to));
@@ -413,7 +413,7 @@ impl DateRules {
             push(*from, *to);
         }
         if let Some(rule) = &self.rule {
-            let mut run: Option<(NaiveDate, NaiveDate)> = None;
+            let mut run: Option<(Date, Date)> = None;
             let mut day = start;
             while day <= end {
                 if rule(day) {
@@ -424,7 +424,7 @@ impl DateRules {
                 } else if let Some((from, to)) = run.take() {
                     push(from, to);
                 }
-                let Some(next) = day.succ_opt() else { break };
+                let Some(next) = day.tomorrow() else { break };
                 day = next;
             }
             if let Some((from, to)) = run {
@@ -432,11 +432,11 @@ impl DateRules {
             }
         }
         runs.sort();
-        let mut merged: Vec<(NaiveDate, NaiveDate)> = Vec::with_capacity(runs.len());
+        let mut merged: Vec<(Date, Date)> = Vec::with_capacity(runs.len());
         for (from, to) in runs {
             let joins = merged
                 .last()
-                .is_some_and(|(_, last)| from <= last.succ_opt().unwrap_or(*last));
+                .is_some_and(|(_, last)| from <= last.tomorrow().unwrap_or(*last));
             match merged.last_mut() {
                 Some(last) if joins => last.1 = last.1.max(to),
                 _ => merged.push((from, to)),
@@ -466,8 +466,8 @@ impl DateRules {
         }
         if limit_nav {
             out["nav"] = json!([
-                format!("{:04}-{:02}", start.year(), start.month()),
-                format!("{:04}-{:02}", end.year(), end.month()),
+                format!("{:04}-{:02}", start.year(), start.month_number()),
+                format!("{:04}-{:02}", end.year(), end.month_number()),
             ]);
         }
         out
@@ -476,19 +476,28 @@ impl DateRules {
     /// The days the browser can be told about, around the month `year`-`month`: the
     /// whole span between the limits when both are set and it is at most three years,
     /// else 18 months either side, held inside the limits.
-    pub(crate) fn window(&self, year: i32, month: u32) -> (NaiveDate, NaiveDate) {
+    pub(crate) fn window(&self, year: i32, month: u32) -> (Date, Date) {
         let first_of = |delta: i32| {
             let (y, m) = add_months(year, month, delta).unwrap_or((year, month));
-            NaiveDate::from_ymd_opt(y, m, 1).unwrap_or_else(grid::earliest)
+            u8::try_from(m)
+                .ok()
+                .and_then(|m| Date::new(y, m, 1).ok())
+                .unwrap_or_else(grid::earliest)
         };
         let last_of = |delta: i32| {
             let (y, m) = add_months(year, month, delta).unwrap_or((year, month));
-            NaiveDate::from_ymd_opt(y, m, grid::days_in_month(y, m)).unwrap_or_else(grid::latest)
+            match (
+                u8::try_from(m).ok(),
+                u8::try_from(grid::days_in_month(y, m)).ok(),
+            ) {
+                (Some(m), Some(d)) => Date::new(y, m, d).ok().unwrap_or_else(grid::latest),
+                _ => grid::latest(),
+            }
         };
         let mut start = first_of(-18);
         let mut end = last_of(18);
         if let (Some(min), Some(max)) = (self.min, self.max)
-            && (max - min).num_days() <= 3 * 366
+            && min.days_until(max) <= 3 * 366
         {
             start = min;
             end = max;
@@ -505,12 +514,12 @@ impl DateRules {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Duration;
+    use navree_datetime::{Date, Weekday};
 
     use super::*;
 
-    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    fn day(y: i32, m: u8, d: u8) -> Date {
+        Date::new(y, m, d).unwrap()
     }
 
     #[test]
@@ -518,7 +527,7 @@ mod tests {
         let rules = DateRules::new()
             .min(day(2026, 1, 10))
             .max(day(2026, 12, 18))
-            .disable_weekdays([Weekday::Sun])
+            .disable_weekdays([Weekday::Sunday])
             .disable_dates([day(2026, 6, 3)])
             .disable_range(day(2026, 8, 20), day(2026, 8, 10))
             .disable_if(|d| d.day() == 31);
@@ -532,7 +541,7 @@ mod tests {
         );
         assert_eq!(
             rules.check(day(2026, 11, 1)),
-            Err(DateError::Weekday(Weekday::Sun))
+            Err(DateError::Weekday(Weekday::Sunday))
         );
         assert_eq!(rules.check(day(2026, 6, 3)), Err(DateError::Unavailable));
         assert_eq!(rules.check(day(2026, 8, 15)), Err(DateError::Unavailable));
@@ -613,7 +622,7 @@ mod tests {
     #[test]
     fn the_browser_gets_merged_runs() {
         let rules = DateRules::new()
-            .disable_weekdays([Weekday::Sat, Weekday::Sun])
+            .disable_weekdays([Weekday::Saturday, Weekday::Sunday])
             .disable_dates([
                 day(2026, 12, 1),
                 day(2026, 12, 2),
@@ -634,7 +643,7 @@ mod tests {
 
     #[test]
     fn a_rule_function_becomes_runs_and_limits_navigation() {
-        let rules = DateRules::new().disable_if(|d| d.month() == 12 && d.day() >= 24);
+        let rules = DateRules::new().disable_if(|d| d.month_number() == 12 && d.day() >= 24);
         let json = rules.client((day(2026, 11, 1), day(2027, 1, 31)), true);
         assert_eq!(json["r"], json!([["2026-12-24", "2026-12-31"]]));
         assert_eq!(json["nav"], json!(["2026-11", "2027-01"]));
@@ -645,10 +654,10 @@ mod tests {
     #[test]
     fn the_runs_are_capped() {
         let rules = DateRules::new()
-            .disable_dates((0..3000).map(|n| day(2026, 1, 1) + Duration::days(n * 2)));
+            .disable_dates((0..3000).map(|n| day(2026, 1, 1).add_days(n * 2).unwrap()));
         let json = rules.client((day(2026, 1, 1), day(2035, 1, 1)), false);
         assert_eq!(json["r"].as_array().unwrap().len(), MAX_CLIENT_RANGES);
-        assert!(!rules.allows(day(2026, 1, 1) + Duration::days(2 * 2999)));
+        assert!(!rules.allows(day(2026, 1, 1).add_days(2 * 2999).unwrap()));
     }
 
     #[test]

@@ -15,7 +15,7 @@
 //! On every path a row outside the window counts nowhere, whatever the app's query
 //! says, and the app's conditions are grouped before the window's are added.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::ir::{Boolean, Where, WhereClause};
 use navree_orm::{
     Access, Builder, Dialect, Executor, Expr, FieldError, HasQuery, Model, Result, Row, Selectable,
@@ -82,11 +82,11 @@ impl TimeColumn {
     }
 
     /// An instant as this column stores it.
-    fn value(self, at: DateTime<Utc>) -> Value {
+    fn value(self, at: Timestamp) -> Value {
         match self {
             Self::Timestamp(_) => Value::Timestamp(at),
-            Self::UnixSeconds(_) => Value::I64(at.timestamp()),
-            Self::UnixMillis(_) => Value::I64(at.timestamp_millis()),
+            Self::UnixSeconds(_) => Value::I64(at.as_secs()),
+            Self::UnixMillis(_) => Value::I64(at.as_millis()),
         }
     }
 }
@@ -107,7 +107,7 @@ fn number(value: &Value) -> Option<f64> {
         Value::Decimal(d) => d.to_string().parse().ok()?,
         Value::String(s) => s.trim().parse().ok()?,
         Value::Bool(b) => f64::from(u8::from(*b)),
-        Value::Timestamp(at) => at.timestamp() as f64,
+        Value::Timestamp(at) => at.as_secs() as f64,
         _ => return None,
     };
     out.is_finite().then_some(out)
@@ -161,7 +161,7 @@ impl Selectable for InstantKey {
 
     fn read(&self, row: &Row, column: &str) -> std::result::Result<i64, FieldError> {
         Ok(match row.value(column).ok() {
-            Some(Value::Timestamp(at)) => at.timestamp(),
+            Some(Value::Timestamp(at)) => at.as_secs(),
             Some(other) => number(&other).map_or(i64::MIN, |v| v as i64),
             None => i64::MIN,
         })
@@ -571,7 +571,7 @@ impl Report {
             };
             let (period, group) = (key.div_euclid(width), key.rem_euclid(width) as usize);
             let index = if timescale {
-                DateTime::from_timestamp(period, 0).and_then(|at| self.bucket_of(at.max(start)))
+                Timestamp::from_secs(period).ok().and_then(|at| self.bucket_of(at.max(start)))
             } else {
                 usize::try_from(period).ok().filter(|i| *i < count)
             };
@@ -595,7 +595,7 @@ impl Report {
         matches!(time, TimeColumn::Timestamp(_))
             && (self.grain() == Grain::Hour
                 || (self.zone().is_some()
-                    && (self.grain() != Grain::Week || self.week_start() == chrono::Weekday::Mon)))
+                    && (self.grain() != Grain::Week || self.week_start() == navree_datetime::Weekday::Monday)))
     }
 
     /// `EXTRACT(EPOCH FROM time_bucket(..))`: the first second of each row's bucket.
@@ -649,8 +649,8 @@ impl Report {
             self.buckets().iter().all(|b| {
                 [b.start, b.end].iter().all(|at| {
                     *at == latest
-                        || (at.timestamp_subsec_nanos() == 0
-                            && at.timestamp().rem_euclid(unit) == 0)
+                        || (at.subsec_nanos() == 0
+                            && at.as_secs().rem_euclid(unit) == 0)
                 })
             })
         };
@@ -691,7 +691,7 @@ impl Report {
         let fold = |found: Vec<(i64, Option<f64>)>, combine: fn(f64, f64) -> f64| {
             let mut out: Vec<Option<f64>> = vec![None; count];
             for (seconds, value) in found {
-                let (Some(at), Some(value)) = (DateTime::from_timestamp(seconds, 0), value) else {
+                let (Some(at), Some(value)) = (Timestamp::from_secs(seconds).ok(), value) else {
                     continue;
                 };
                 if let Some(i) = self.bucket_of(at) {

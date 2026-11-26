@@ -265,7 +265,7 @@ fn meets(schema: &Value, value: &Value) -> Result<(), String> {
             Some(pattern) => return Err(format!("{text} does not match {pattern}")),
         }
         if schema.get("format").and_then(Value::as_str) == Some("date")
-            && chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_err()
+            && navree_datetime::Date::parse("%Y-%m-%d", text).is_err()
         {
             return Err(format!("{text} is not a date"));
         }

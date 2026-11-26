@@ -2118,7 +2118,7 @@ mod tests {
         use crate::{CopyField, DayPager, Dock, DockItem, InfoTip, View};
         use navree_native::{Client, FormFactor, Platform};
         let phone = || Client::new(Platform::Android, FormFactor::Phone);
-        let day = chrono::NaiveDate::from_ymd_opt(2026, 11, 12).expect("a day");
+        let day = navree_datetime::Date::new(2026, 11, 12).expect("a day");
         let parts: Vec<(Node, &str)> = vec![
             (Ring::new("Score", 72).into(), "chart:ring"),
             (

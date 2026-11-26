@@ -29,7 +29,7 @@ struct Deal {
     #[col(sortable, numeric, filter = range)]
     amount: Option<i64>,
     #[col(sortable, filter = date)]
-    closed: Option<chrono::NaiveDate>,
+    closed: Option<navree_datetime::Date>,
     #[col(filter = boolean)]
     hot: bool,
     #[col(hidden, filter = relation)]
@@ -1308,7 +1308,7 @@ fn the_browser_sorts_only_values_it_can_read_as_the_store_does() {
         #[col(sortable, numeric)]
         amount: Option<i64>,
         #[col(sortable)]
-        closed: Option<chrono::NaiveDate>,
+        closed: Option<navree_datetime::Date>,
     }
     let row = |id: i64, code: &str, amount: Option<i64>| Local {
         id,
@@ -1316,7 +1316,7 @@ fn the_browser_sorts_only_values_it_can_read_as_the_store_does() {
         company: "Agra".into(),
         code: code.into(),
         amount,
-        closed: chrono::NaiveDate::from_ymd_opt(2026, 1, u32::try_from(id).unwrap()),
+        closed: navree_datetime::Date::new(2026, 1, u8::try_from(id).unwrap()).ok(),
     };
     let rows = vec![row(1, "12", Some(5)), row(2, "A1", None)];
     let page = TablePage::new(rows, 2);

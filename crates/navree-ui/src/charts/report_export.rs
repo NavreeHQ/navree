@@ -2,9 +2,9 @@
 //! rows behind them, and the period before it to draw beside it.
 
 use bytes::Bytes;
-use chrono::{Datelike, Duration, NaiveDateTime};
 use http::HeaderValue;
 use http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
+use navree_datetime::DateTime;
 use navree_http::body::Body;
 use navree_http::response::Response;
 
@@ -18,12 +18,12 @@ use crate::table::write_csv_field;
 /// what the chart's own table holds, as numbers, so a file and the page cannot differ.
 ///
 /// ```
+/// use navree_datetime::{Date, Zone};
 /// use navree_ui::charts::{Grain, Report};
 /// use navree_ui::dates::DateRange;
-/// use chrono::{NaiveDate, Utc};
 ///
-/// let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
-/// let report = Report::new(DateRange::new(day(1), day(3)), Grain::Day, &Utc);
+/// let day = |d| Date::new(2026, 11, d).unwrap();
+/// let report = Report::new(DateRange::new(day(1), day(3)), Grain::Day, &Zone::UTC);
 /// let sales: &[Option<f64>] = &[Some(120.0), None, Some(1_20_000.5)];
 /// let table = report.table("Day", &[("Sales", sales)]);
 /// assert_eq!(table.csv(), "\u{feff}Day,Sales\r\n2026-11-01,120\r\n2026-11-02,\r\n2026-11-03,120000.5\r\n");
@@ -37,12 +37,16 @@ pub struct ReportTable {
 }
 
 /// A period named the way a file writes it: sortable, and exact to the grain.
-fn period_name(grain: Grain, local: NaiveDateTime) -> String {
+fn period_name(grain: Grain, local: DateTime) -> String {
     match grain {
         Grain::Minute | Grain::Hour => local.format("%Y-%m-%d %H:%M").to_string(),
         Grain::Day | Grain::Week => local.format("%Y-%m-%d").to_string(),
         Grain::Month => local.format("%Y-%m").to_string(),
-        Grain::Quarter => format!("{}-Q{}", local.year(), local.month0() / 3 + 1),
+        Grain::Quarter => format!(
+            "{}-Q{}",
+            local.date().year(),
+            (local.date().month_number() - 1) / 3 + 1
+        ),
         Grain::Year => local.format("%Y").to_string(),
     }
 }
@@ -110,7 +114,7 @@ impl Report {
             .map(|at| {
                 let from = buckets[at].local.date();
                 let to = match buckets.get(at + 1) {
-                    Some(next) => next.local.date().pred_opt().unwrap_or(from),
+                    Some(next) => next.local.date().yesterday().unwrap_or(from),
                     None => self.range().to,
                 };
                 let to = to.max(from);
@@ -124,10 +128,8 @@ impl Report {
     /// the 1st. Pass the zone this report was cut in.
     pub fn previous<Tz: ReportZone>(&self, zone: &Tz) -> Report {
         let days = self.range().day_count();
-        let to = self.range().from.pred_opt().unwrap_or(self.range().from);
-        let from = to
-            .checked_sub_signed(Duration::days(days - 1))
-            .unwrap_or(to);
+        let to = self.range().from.yesterday().unwrap_or(self.range().from);
+        let from = to.add_days(-(days - 1)).unwrap_or(to);
         Report::build(
             DateRange::new(from, to),
             self.asked_grain(),

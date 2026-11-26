@@ -2,13 +2,13 @@
 //! table, links from a period to the rows behind it, and the period before to draw beside
 //! it, across a clock change.
 
-use chrono::{NaiveDate, Utc};
+use navree_datetime::{Date, Zone};
 use navree_ui::charts::{Chart, Grain, Report, Series};
 use navree_ui::dates::DateRange;
 use navree_ui::render;
 
-fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(y, m, d).expect("a real day")
+fn day(y: i32, m: u8, d: u8) -> Date {
+    Date::new(y, m, d).expect("a real day")
 }
 
 fn html(chart: Chart) -> String {
@@ -42,7 +42,7 @@ fn a_report_downloads_exactly_the_numbers_its_chart_tables() {
     let report = Report::new(
         navree_ui::dates::DateRange::new(day(2026, 11, 2), day(2026, 11, 6)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     let sales: &[Option<f64>] = &[
         Some(12_000.0),
@@ -87,22 +87,22 @@ fn a_file_names_its_periods_by_the_grain_and_keeps_gaps_empty() {
     let months = Report::new(
         DateRange::new(day(2026, 1, 15), day(2026, 6, 20)),
         Grain::Month,
-        &Utc,
+        &Zone::UTC,
     );
     assert_eq!(months.table("Month", &[]).periods()[0], "2026-01");
     let quarters = Report::new(
         DateRange::new(day(2025, 11, 1), day(2026, 8, 1)),
         Grain::Quarter,
-        &Utc,
+        &Zone::UTC,
     );
     assert_eq!(quarters.table("Quarter", &[]).periods()[0], "2025-Q4");
     let years = Report::new(
         DateRange::new(day(2024, 3, 1), day(2026, 8, 1)),
         Grain::Year,
-        &Utc,
+        &Zone::UTC,
     );
     assert_eq!(years.table("Year", &[]).periods(), ["2024", "2025", "2026"]);
-    let hours = Report::new(DateRange::single(day(2026, 11, 2)), Grain::Hour, &Utc);
+    let hours = Report::new(DateRange::single(day(2026, 11, 2)), Grain::Hour, &Zone::UTC);
     assert_eq!(hours.table("Hour", &[]).periods()[13], "2026-11-02 13:00");
 
     // A gap is an empty field; a short series is padded and a long one cut.
@@ -111,7 +111,7 @@ fn a_file_names_its_periods_by_the_grain_and_keeps_gaps_empty() {
     let report = Report::new(
         DateRange::new(day(2026, 11, 2), day(2026, 11, 4)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     let table = report.table("Day", &[("A", short), ("B", long)]);
     assert_eq!(
@@ -125,7 +125,7 @@ fn a_file_never_holds_a_formula_and_quotes_what_it_must() {
     let report = Report::new(
         DateRange::new(day(2026, 11, 2), day(2026, 11, 2)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     let values: &[Option<f64>] = &[Some(1.0)];
     let table = report.table(
@@ -142,7 +142,7 @@ fn the_download_saves_with_a_safe_name_and_is_not_cached_or_sniffed() {
     let report = Report::new(
         DateRange::new(day(2026, 11, 2), day(2026, 11, 3)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     let table = report.table("Day", &[]);
     let response = table.csv_response("../orders \"november\".csv; x");
@@ -166,7 +166,7 @@ fn a_file_made_from_the_table_downloads_the_same_way() {
     let report = Report::new(
         DateRange::new(day(2026, 11, 2), day(2026, 11, 3)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     let table = report.table("Day", &[]);
     let response = table.file_response(b"%PDF-1.7".to_vec(), "application/pdf", "../days 1.pdf");
@@ -185,7 +185,7 @@ fn a_period_links_to_the_rows_behind_it() {
     let days = Report::new(
         DateRange::new(day(2026, 11, 2), day(2026, 11, 4)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     assert_eq!(
         days.drill_links("/orders", "created_at"),
@@ -200,7 +200,7 @@ fn a_period_links_to_the_rows_behind_it() {
     let weeks = Report::new(
         DateRange::new(day(2026, 11, 2), day(2026, 11, 12)),
         Grain::Week,
-        &Utc,
+        &Zone::UTC,
     );
     let links = weeks.drill_links("/orders?status=paid", "created_at");
     assert_eq!(links.len(), 2);
@@ -214,7 +214,7 @@ fn a_period_links_to_the_rows_behind_it() {
     );
 
     // An hour is listed with its day; a column that is no plain name gives no link.
-    let hours = Report::new(DateRange::single(day(2026, 11, 2)), Grain::Hour, &Utc);
+    let hours = Report::new(DateRange::single(day(2026, 11, 2)), Grain::Hour, &Zone::UTC);
     assert!(
         hours
             .drill_links("/o", "at")
@@ -232,7 +232,7 @@ fn a_bar_and_a_period_name_become_links_when_a_chart_drills() {
     let report = Report::new(
         DateRange::new(day(2026, 11, 2), day(2026, 11, 4)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     let links = report.drill_links("/orders", "created_at");
     let out = html(
@@ -286,7 +286,7 @@ fn merged_bars_have_no_links_because_a_bar_stands_for_several_rows() {
     let report = Report::new(
         DateRange::new(day(2026, 1, 1), day(2026, 3, 31)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     let values: Vec<u32> = (0..report.buckets().len() as u32).collect();
     let out = html(
@@ -324,11 +324,11 @@ fn the_period_before_has_as_many_days_across_a_clock_change() {
         "seven days against seven"
     );
     let long_day = before.buckets()[6];
-    assert_eq!((long_day.end - long_day.start).num_hours(), 25);
+    assert_eq!((long_day.end - long_day.start).as_hours(), 25);
     assert!(
         now.buckets()
             .iter()
-            .all(|b| (b.end - b.start).num_hours() == 24)
+            .all(|b| (b.end - b.start).as_hours() == 24)
     );
     assert_eq!(before.grain(), now.grain());
 
@@ -347,10 +347,10 @@ fn the_period_before_has_as_many_days_across_a_clock_change() {
     let month = Report::new(
         DateRange::new(day(2026, 3, 1), day(2026, 3, 31)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     assert_eq!(
-        month.previous(&Utc).range(),
+        month.previous(&Zone::UTC).range(),
         DateRange::new(day(2026, 1, 29), day(2026, 2, 28))
     );
 }
@@ -360,9 +360,9 @@ fn the_period_before_is_laid_on_this_periods_by_position_and_drawn_quiet() {
     let now = Report::new(
         DateRange::new(day(2026, 11, 2), day(2026, 11, 6)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
-    let before = now.previous(&Utc);
+    let before = now.previous(&Zone::UTC);
     // The figures of the days before: one fewer than this window has periods.
     let found: &[Option<f64>] = &[Some(3.0), Some(5.0), None, Some(9.0)];
     let series = now.previous_series("Previous period", found);

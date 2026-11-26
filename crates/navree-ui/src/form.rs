@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use std::panic::RefUnwindSafe;
 use std::sync::Arc;
 
-use chrono::{NaiveDate, NaiveTime};
+use navree_datetime::{Date, Time};
 use http::header::{ALLOW, CONTENT_TYPE, COOKIE, ORIGIN};
 use http::request::Parts;
 use http::{HeaderValue, Method, StatusCode};
@@ -542,7 +542,7 @@ pub struct FormField {
     /// The most values a [`Many`] field takes: the browser stops at it, and
     /// [`decode`] refuses a post that goes past it.
     pub max: Option<u32>,
-    /// A `chrono::DateTime<Utc>`: the date and time a browser posts have no zone, and are
+    /// A [`navree_datetime::Timestamp`]: the date and time a browser posts have no zone, and are
     /// read as UTC. A value posted with its own offset is read with it, and the year is
     /// held to the calendar in UTC too.
     pub instant: bool,
@@ -654,7 +654,7 @@ impl FormField {
         self
     }
 
-    /// Sets whether it is a `DateTime<Utc>`.
+    /// Sets whether it is a `Timestamp`.
     pub const fn instant(mut self, instant: bool) -> Self {
         self.instant = instant;
         self
@@ -936,8 +936,8 @@ display_values!(
     f32,
     f64,
     uuid::Uuid,
-    chrono::NaiveDate,
-    chrono::NaiveTime,
+    navree_datetime::Date,
+    navree_datetime::Time,
     rust_decimal::Decimal,
 );
 
@@ -957,9 +957,8 @@ impl FieldValue for navree_phone::PhoneNumber {
 
 /// A date and time as the browser's field holds it: to the minute, or to the second when
 /// the seconds are not zero, so editing a value does not drop them.
-fn moment_text(at: &chrono::NaiveDateTime) -> String {
-    use chrono::Timelike;
-    let format = if at.second() == 0 && at.nanosecond() == 0 {
+fn moment_text(at: &navree_datetime::DateTime) -> String {
+    let format = if at.time().second() == 0 && at.time().nanosecond() == 0 {
         "%Y-%m-%dT%H:%M"
     } else {
         "%Y-%m-%dT%H:%M:%S"
@@ -967,16 +966,22 @@ fn moment_text(at: &chrono::NaiveDateTime) -> String {
     at.format(format).to_string()
 }
 
-impl FieldValue for chrono::NaiveDateTime {
+impl FieldValue for navree_datetime::DateTime {
     fn field_value(&self) -> Option<String> {
         Some(moment_text(self))
     }
 }
 
 /// An instant is shown in UTC, and read back as UTC.
-impl FieldValue for chrono::DateTime<chrono::Utc> {
+impl FieldValue for navree_datetime::Timestamp {
     fn field_value(&self) -> Option<String> {
-        Some(moment_text(&self.naive_utc()))
+        Some(moment_text(&self.date_time_utc()))
+    }
+}
+
+impl FieldValue for navree_datetime::Zoned {
+    fn field_value(&self) -> Option<String> {
+        Some(self.to_rfc3339())
     }
 }
 
@@ -1213,7 +1218,7 @@ pub struct FormView<T> {
     csrf: Option<String>,
     date_locale: DateLocale,
     slider_labels: crate::flow::SliderLabels,
-    today: Option<chrono::NaiveDate>,
+    today: Option<navree_datetime::Date>,
     /// What goes before every id the form writes, from [`id_prefix`](Self::id_prefix).
     id_scope: Option<String>,
     #[cfg(feature = "phone")]
@@ -1294,7 +1299,7 @@ impl<T: Form> FormView<T> {
     /// Names the days and times of the form's date and time pickers after a
     /// language and region, and says what today is. Without a day, today is the day
     /// in UTC.
-    pub fn dates(mut self, locale: DateLocale, today: chrono::NaiveDate) -> Self {
+    pub fn dates(mut self, locale: DateLocale, today: navree_datetime::Date) -> Self {
         self.date_locale = locale;
         self.today = Some(today);
         self
@@ -2871,7 +2876,7 @@ fn browser_text<T: Form>(name: &str, value: &str) -> String {
     if bytes.len() == 16 && bytes[10] == b'T' && is_hour_minute(&bytes[11..]) {
         text.push_str(":00");
     }
-    if field.instant && text.parse::<chrono::NaiveDateTime>().is_ok() {
+    if field.instant && text.parse::<navree_datetime::DateTime>().is_ok() {
         text.push('Z');
     }
     text
@@ -2881,16 +2886,16 @@ fn browser_text<T: Form>(name: &str, value: &str) -> String {
 /// time as typed, and for an instant that names a zone the same moment in UTC, which is what
 /// is stored (`9999-12-31T23:30-05:00` is on 10,000-01-01 in UTC, past the calendar). A field
 /// that is not an instant takes no zone, so a text with one is the type's own error.
-fn moments(field: &FormField, text: &str) -> Vec<chrono::NaiveDateTime> {
+fn moments(field: &FormField, text: &str) -> Vec<navree_datetime::DateTime> {
     let text = text.trim();
-    if let Ok(wall) = text.parse::<chrono::NaiveDateTime>() {
+    if let Ok(wall) = text.parse::<navree_datetime::DateTime>() {
         return vec![wall];
     }
     if !field.instant {
         return Vec::new();
     }
-    match chrono::DateTime::parse_from_rfc3339(text) {
-        Ok(at) => vec![at.naive_local(), at.naive_utc()],
+    match navree_datetime::Zoned::parse_rfc3339(text) {
+        Ok(at) => vec![at.date_time(), at.timestamp().date_time_utc()],
         Err(_) => Vec::new(),
     }
 }
@@ -2978,14 +2983,14 @@ fn refused_by_pickers<T: Form>(
                 .then(|| words.render(name, "form.decimal_places", &[]))
             }
             Widget::DatePicker | Widget::Input(InputKind::Date) => {
-                let Ok(day) = value.trim().parse::<NaiveDate>() else {
+                let Ok(day) = value.trim().parse::<Date>() else {
                     continue;
                 };
                 let rules = field.date_rules.map(|rules| rules()).unwrap_or_default();
                 rules.check(day).err().map(|error| error.message(dates))
             }
             Widget::TimePicker | Widget::Input(InputKind::Time) => {
-                let Ok(time) = value.trim().parse::<NaiveTime>() else {
+                let Ok(time) = value.trim().parse::<Time>() else {
                     continue;
                 };
                 let rules = field.time_rules.map(|rules| rules()).unwrap_or_default();

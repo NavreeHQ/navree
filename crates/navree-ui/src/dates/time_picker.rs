@@ -1,6 +1,6 @@
 //! [`TimePicker`]: a time of day, typed or chosen from a list.
 
-use chrono::{NaiveTime, Timelike};
+use navree_datetime::Time;
 
 use super::locale::{Clock, DateLocale};
 use super::picker::id_from;
@@ -12,13 +12,13 @@ use crate::node::{AttrValue, Element, Node, Uses, el, into_node};
 /// What the picker was given as its value.
 #[derive(Clone, Debug)]
 enum Given {
-    Time(NaiveTime),
+    Time(Time),
     Text(String),
 }
 
 /// A time without a leap second or a fraction: the picker takes and posts whole seconds.
-fn whole_seconds(time: NaiveTime) -> NaiveTime {
-    time.with_nanosecond(0).unwrap_or(time)
+fn whole_seconds(time: Time) -> Time {
+    time.with_nanos(0).ok().unwrap_or(time)
 }
 
 /// A time of day: hours and minutes, and seconds if asked.
@@ -38,9 +38,9 @@ fn whole_seconds(time: NaiveTime) -> NaiveTime {
 /// ```
 /// use navree_ui::dates::{DateLocale, TimePicker};
 /// use navree_ui::render;
-/// use chrono::NaiveTime;
+/// use navree_datetime::Time;
 ///
-/// let t = NaiveTime::from_hms_opt(14, 30, 0).unwrap();
+/// let t = Time::new(14, 30, 0).unwrap();
 /// let html = render(&TimePicker::new("starts").value(t).locale(DateLocale::of("en")).into());
 /// assert!(html.contains(r#"type="time" name="starts" value="14:30""#));
 /// assert!(html.contains(r#"value="2:30 PM""#));
@@ -106,13 +106,13 @@ impl TimePicker {
     }
 
     /// Sets the time.
-    pub fn value(mut self, time: NaiveTime) -> Self {
+    pub fn value(mut self, time: Time) -> Self {
         self.value = Some(Given::Time(whole_seconds(time)));
         self
     }
 
     /// Sets the time, or leaves the picker empty.
-    pub fn value_opt(mut self, time: Option<NaiveTime>) -> Self {
+    pub fn value_opt(mut self, time: Option<Time>) -> Self {
         self.value = time.map(|time| Given::Time(whole_seconds(time)));
         self
     }
@@ -125,8 +125,8 @@ impl TimePicker {
             None
         } else {
             Some(
-                NaiveTime::parse_from_str(text, "%H:%M:%S")
-                    .or_else(|_| NaiveTime::parse_from_str(text, "%H:%M"))
+                Time::parse("%H:%M:%S", text)
+                    .or_else(|_| Time::parse("%H:%M", text))
                     .ok()
                     .filter(|time| time.nanosecond() == 0)
                     .map_or_else(|| Given::Text(text.to_owned()), Given::Time),
@@ -148,13 +148,13 @@ impl TimePicker {
     }
 
     /// The earliest time.
-    pub fn min(mut self, time: NaiveTime) -> Self {
+    pub fn min(mut self, time: Time) -> Self {
         self.rules = self.rules.min(time);
         self
     }
 
     /// The latest time.
-    pub fn max(mut self, time: NaiveTime) -> Self {
+    pub fn max(mut self, time: Time) -> Self {
         self.rules = self.rules.max(time);
         self
     }
