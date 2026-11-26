@@ -6,32 +6,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-# `cargo xtask ...` runs this one; `time-golden` is a second program below.
-default-run = "xtask"
 
 [lints]
 workspace = true
 
-[features]
-## `cargo xtask time-golden`: the program that records how dates and times
-## are written and read today. It needs chrono, navree-time and SQLx with its
-## three drivers, so it is a feature: the release commands build without them.
-time-golden = ["dep:chrono", "dep:navree-time", "dep:serde", "dep:sqlx"]
-
-# Built and run by `cargo xtask time-golden`, with the feature on.
-[[bin]]
-name = "time-golden"
-path = "src/time_golden.rs"
-required-features = ["time-golden"]
-
 [dependencies]
 serde_json = { workspace = true }
 toml_edit = { workspace = true }
-chrono = { workspace = true, optional = true }
-navree-time = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
-# The encoders the golden files are recorded from.
-sqlx = { workspace = true, optional = true, features = ["chrono", "mysql", "postgres", "sqlite-bundled"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

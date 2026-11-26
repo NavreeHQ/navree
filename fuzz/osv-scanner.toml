@@ -1,7 +1,2 @@
-# Known findings with no fixed release their dependents can use. Reviewed 2026-11-10;
-# each entry expires so it gets looked at again.
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0543"
-ignoreUntil = 2026-12-17
-reason = "The advisory says the chrono crate is unmaintained and names no flaw; no version is fixed. Navree's crates use it for dates and times, and navree-orm names its DateTime and Utc in its public types, so it is replaced (by jiff) in the next major version, where changing those types belongs. sqlx, async-graphql, bson and rust_xlsxwriter use it through their chrono features. Drop this entry when the replacement lands."
+# Known entries with no fixed release their dependents can use. Each entry
+# expires so it gets looked at again.
