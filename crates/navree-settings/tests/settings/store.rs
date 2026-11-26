@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{Db, Executor, Statement};
 use navree_settings::{
     DatabaseSettingsStore, MemorySettingsStore, ScopeKind, ScopeTarget, SettingsStore,
@@ -26,7 +26,7 @@ fn row(key: &str, scope: ScopeTarget, values: Value) -> StoredSetting {
         key: key.to_owned(),
         scope,
         values: object(values),
-        updated_at: Utc.with_ymd_and_hms(2026, 10, 27, 9, 30, 0).unwrap(),
+        updated_at: Timestamp::utc(2026, 10, 27, 9, 30, 0).unwrap(),
         updated_by: None,
     }
 }
