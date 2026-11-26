@@ -4629,7 +4629,6 @@ version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
- "chrono",
  "flate2",
  "futures-util",
  "harfrust 0.16.1",
@@ -4639,6 +4638,7 @@ dependencies = [
  "mime_guess",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-documents",
  "navree-http",

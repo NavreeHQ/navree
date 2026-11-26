@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use std::io::{Cursor, Write as _};
 
 use bytes::Bytes;
-use chrono::{SecondsFormat, Utc};
+use navree_datetime::{Precision, Timestamp};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, DateTime, ZipWriter};
 
@@ -719,7 +719,7 @@ fn document_relationships(numbering: bool, header: bool, footer: bool, media: &[
 
 /// The title and author (File > Info in Word) and the dates.
 fn core_properties(docx: &Docx) -> String {
-    let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let now = Timestamp::now().to_rfc3339_with(Precision::Secs, true);
     let mut out = format!(
         r#"{XML_DECLARATION}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">"#
     );
@@ -1509,7 +1509,7 @@ mod tests {
             let value = &core[start..];
             let value = value.split('>').nth(1).unwrap().split('<').next().unwrap();
             assert!(
-                chrono::DateTime::parse_from_rfc3339(value).is_ok(),
+                Timestamp::parse_rfc3339(value).is_ok(),
                 "{value}"
             );
             assert!(value.ends_with('Z'), "{value}");

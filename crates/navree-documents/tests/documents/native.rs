@@ -7,8 +7,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
 use navree_contracts::FixedClock;
+use navree_datetime::Timestamp;
 use navree_documents::native::{Align, Cell, Image, List, Paragraph, Run, Table};
 use navree_documents::{
     Documents, DocumentsError, EngineKind, Margins, NativeEngine, Paper, Pdf, PdfDocument,
@@ -604,7 +604,7 @@ async fn headers_and_footers_number_the_pages() {
 #[tokio::test]
 async fn dates_come_from_the_clock() {
     let clock = Arc::new(FixedClock::new(
-        Utc.with_ymd_and_hms(2026, 3, 14, 9, 26, 53).unwrap(),
+        Timestamp::utc(2026, 3, 14, 9, 26, 53).unwrap(),
     ));
     let pdf = engine()
         .clock(clock)

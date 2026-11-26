@@ -135,7 +135,7 @@ async fn save_writes_the_pdf_to_the_documents_disk() {
     assert_eq!(bytes.len() as u64, stored.size);
     assert!(bytes.starts_with(b"%PDF-"));
     let link = stored
-        .temporary_url(chrono::Utc::now() + chrono::Duration::minutes(5))
+        .temporary_url(navree_datetime::Timestamp::now() + navree_datetime::Span::minutes(5))
         .await
         .unwrap();
     assert!(

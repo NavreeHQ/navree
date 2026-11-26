@@ -40,7 +40,6 @@ operations = ["dep:navree-queue", "dep:navree-db"]
 [dependencies]
 base64 = { workspace = true }
 bytes = { workspace = true }
-chrono = { workspace = true }
 futures-util = { workspace = true, optional = true }
 harfrust = { workspace = true, optional = true }
 http = { workspace = true }
@@ -49,6 +48,7 @@ krilla = { workspace = true, optional = true }
 mime_guess = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true, optional = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
