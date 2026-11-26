@@ -6319,7 +6319,6 @@ dependencies = [
 name = "navree-validation"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "form_urlencoded",
  "futures-util",
  "html5ever",
@@ -6327,6 +6326,7 @@ dependencies = [
  "icu_locale_core",
  "memchr",
  "navree-config",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",
