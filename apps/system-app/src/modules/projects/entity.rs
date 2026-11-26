@@ -2,7 +2,7 @@
 //! (`workspace_id`; row isolation, enforced by PostgreSQL row-level
 //! security). [`Project`] is a navree-orm model.
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::search::Searchable;
 use navree::workspace::WorkspaceScoped;
 use serde::Serialize;
@@ -41,9 +41,9 @@ pub struct Project {
     pub created_by: Uuid,
     /// When it was created.
     #[searchable(sort)]
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// Every query through `WorkspaceRepo` is filtered by `workspace_id`.

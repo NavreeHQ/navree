@@ -1,6 +1,6 @@
 //! [`Task`]: a piece of work in a project (`tasks`).
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree::datetime::{Date, Timestamp};
 use navree::openapi::ToSchema;
 use navree::orm::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -48,11 +48,11 @@ pub struct Task {
     /// 1 (highest) to 4.
     pub priority: i32,
     /// When it is due.
-    pub due_on: Option<NaiveDate>,
+    pub due_on: Option<Date>,
     /// Who works on it.
     pub assignee_id: Option<Uuid>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
