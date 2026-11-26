@@ -165,13 +165,36 @@ fn generic_inner<'a>(ty: &'a Type, name: &str) -> Option<&'a Type> {
     })
 }
 
-/// Whether `ty` is `DateTime<Utc>` (`chrono::DateTime<chrono::Utc>` too): the one instant a
-/// form reads as UTC. A `DateTime` in another zone is not.
+/// Whether `ty` is `Timestamp` (`navree::datetime::Timestamp` and `navree_datetime::Timestamp`
+/// too): the one instant a form reads as UTC. `Zoned` and `DateTime` are not.
 pub(crate) fn is_utc_instant(ty: &Type) -> bool {
-    generic_inner(ty, "DateTime").is_some_and(|zone| type_name(zone).as_deref() == Some("Utc"))
+    let Type::Path(path) = ty else { return false };
+    if path.qself.is_some()
+        || path
+            .path
+            .segments
+            .iter()
+            .any(|seg| !matches!(seg.arguments, PathArguments::None))
+    {
+        return false;
+    }
+    let segments: Vec<String> = path
+        .path
+        .segments
+        .iter()
+        .map(|seg| seg.ident.to_string())
+        .collect();
+    let names: Vec<&str> = segments.iter().map(String::as_str).collect();
+    matches!(
+        names.as_slice(),
+        ["Timestamp"]
+            | ["navree", "datetime", "Timestamp"]
+            | ["navree_datetime", "Timestamp"]
+            | ["navree", "prelude", "Timestamp"]
+    )
 }
 
-/// The last segment of a type's path: `chrono::NaiveDate` is `NaiveDate`.
+/// The last segment of a type's path: `navree_datetime::Date` is `Date`.
 pub(crate) fn type_name(ty: &Type) -> Option<String> {
     let Type::Path(path) = ty else { return None };
     Some(path.path.segments.last()?.ident.to_string())
@@ -186,13 +209,18 @@ mod tests {
     }
 
     #[test]
-    fn only_a_datetime_in_utc_is_an_instant() {
-        assert!(utc("DateTime<Utc>"));
-        assert!(utc("chrono::DateTime<chrono::Utc>"));
-        assert!(!utc("DateTime<FixedOffset>"));
-        assert!(!utc("chrono::DateTime<chrono::Local>"));
-        assert!(!utc("NaiveDateTime"));
+    fn only_a_timestamp_is_an_instant() {
+        assert!(utc("Timestamp"));
+        assert!(utc("navree::datetime::Timestamp"));
+        assert!(utc("navree_datetime::Timestamp"));
+        assert!(utc("::navree_datetime::Timestamp"));
+        assert!(!utc("Zoned"));
+        assert!(!utc("navree::datetime::Zoned"));
+        assert!(!utc("navree_datetime::Zoned"));
         assert!(!utc("DateTime"));
-        assert!(!utc("Utc"));
+        assert!(!utc("navree::datetime::DateTime"));
+        assert!(!utc("navree_datetime::DateTime"));
+        assert!(!utc("Date"));
+        assert!(!utc("Time"));
     }
 }

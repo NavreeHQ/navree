@@ -140,9 +140,9 @@ fn inferred_widget(ui: &TokenStream, name: Option<&str>) -> Option<TokenStream> 
         "bool" => quote!(#ui::form::Widget::Checkbox),
         "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize" | "f32"
         | "f64" | "Decimal" => input("Number"),
-        "NaiveDate" => input("Date"),
-        "NaiveTime" => input("Time"),
-        "NaiveDateTime" | "DateTime" => input("DateTime"),
+        "Date" => input("Date"),
+        "Time" => input("Time"),
+        "DateTime" | "Timestamp" => input("DateTime"),
         "Money" => quote!(#ui::form::Widget::Money),
         "Phone" | "PhoneNumber" => quote!(#ui::form::Widget::Phone),
         _ => return None,
