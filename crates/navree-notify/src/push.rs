@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_crypto::webpush;
 use navree_kernel::WeakAppContext;
 use navree_orm::{Model, Record};
@@ -45,9 +45,9 @@ pub struct PushSubscription {
     /// The browser that subscribed (`User-Agent`).
     pub user_agent: Option<String>,
     /// When it subscribed.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When a notification was last pushed to it.
-    pub last_used_at: Option<DateTime<Utc>>,
+    pub last_used_at: Option<Timestamp>,
 }
 
 impl PushSubscription {
@@ -249,7 +249,7 @@ impl PushSubscriptions {
 
     /// Notes a push to subscription `id` at `at` (pool, outside any unit
     /// of work).
-    pub(crate) async fn touch(&self, id: Uuid, at: DateTime<Utc>) -> Result<(), NotifyError> {
+    pub(crate) async fn touch(&self, id: Uuid, at: Timestamp) -> Result<(), NotifyError> {
         let exec = Exec::pool(&self.app).await?;
         on!(&exec, e => PushSubscription::query()
             .where_(PushSubscription::ID.eq(id))

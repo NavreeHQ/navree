@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_contracts::BoxFuture;
 use navree_crypto::webpush::{self, VapidKey, WebPushError};
 use navree_http_client::{HttpClient, HttpClientOptions};
@@ -105,7 +105,7 @@ impl WebPushDriver for VapidWebPush {
                 }
                 other => ChannelError::Config(other.to_string()),
             })?;
-            let expires = (Utc::now() + TimeDelta::hours(SIGNATURE_HOURS)).timestamp();
+            let expires = (Timestamp::now() + Span::hours(SIGNATURE_HOURS)).as_secs();
             let authorization = self
                 .vapid
                 .authorization(&audience(&target.endpoint)?, &self.subject, expires)

@@ -4,7 +4,7 @@
 use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_contracts::{BoxFuture, Clock, Secret, SystemClock};
 use navree_crypto::jose::{Algorithm, SigningKey};
 use navree_http_client::{HttpClient, HttpClientOptions, Response};
@@ -61,7 +61,7 @@ pub struct FcmPush {
     ttl_secs: u32,
     client: HttpClient,
     clock: Arc<dyn Clock>,
-    cached: Mutex<Option<(Secret<String>, DateTime<Utc>)>>,
+    cached: Mutex<Option<(Secret<String>, Timestamp)>>,
 }
 
 /// The fields of a service account key file the driver reads.
@@ -170,8 +170,8 @@ impl FcmPush {
             "iss": self.client_email,
             "scope": SCOPE,
             "aud": self.token_url.as_str(),
-            "iat": now.timestamp(),
-            "exp": now.timestamp() + 3600,
+            "iat": now.as_secs(),
+            "exp": now.as_secs() + 3600,
         });
         let assertion = self.key.sign_jwt(&claims).map_err(|error| {
             ChannelError::Config(format!(
@@ -214,7 +214,7 @@ impl FcmPush {
             })?;
         let lifetime = answer["expires_in"].as_i64().unwrap_or(3600);
         let token = Secret::new(token.to_owned());
-        let until = now + TimeDelta::seconds(lifetime.saturating_sub(60));
+        let until = now + Span::seconds(lifetime.saturating_sub(60));
         *self.cached.lock().unwrap_or_else(PoisonError::into_inner) = Some((token.clone(), until));
         Ok(token)
     }

@@ -1,7 +1,7 @@
 //! [`DatabaseNotification`], the read-state API of [`Notifier`] and
 //! [`NotificationList`], the list query of `GET /api/notifications`.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{Page, PageQuery};
 use navree_orm::list::{Field, ListQuery, ListQueryExt as _, ListResource, ListSpec, Op};
 use navree_orm::{Builder, Executor, Model as _, OrmError};
@@ -24,9 +24,9 @@ pub struct DatabaseNotification {
     /// What [`Notification::to_database`](crate::Notification::to_database) returned.
     pub data: Value,
     /// When the owner read it; `None` while unread.
-    pub read_at: Option<DateTime<Utc>>,
+    pub read_at: Option<Timestamp>,
     /// When it was sent.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl From<Model> for DatabaseNotification {

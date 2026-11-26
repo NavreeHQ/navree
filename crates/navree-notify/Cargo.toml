@@ -41,7 +41,6 @@ ui = ["dep:navree-ui"]
 
 [dependencies]
 base64 = { workspace = true }
-chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
@@ -49,6 +48,7 @@ navree-contracts = { workspace = true }
 # VAPID signatures (ES256 through `jose`), push message encryption and
 # the SigV4 signatures of SNS requests.
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 # The Slack, Teams, Twilio, Vonage, SNS, WhatsApp and push service calls.

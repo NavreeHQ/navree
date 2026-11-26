@@ -7,7 +7,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_contracts::ZoneLevel;
 use navree_kernel::AppContext;
 use navree_orm::{Model, Record};
@@ -109,11 +109,11 @@ pub struct NotificationDeferral {
     #[serde(skip_serializing)]
     pub job: Value,
     /// When it goes out.
-    pub release_at: DateTime<Utc>,
+    pub release_at: Timestamp,
     /// How many releases were attempted.
     pub attempts: i32,
     /// When it was held.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl NotificationDeferral {
@@ -316,7 +316,7 @@ impl Notifier {
             .limit(deferred.batch)
             .get(e)
             .await)?;
-        let retry_at = now + TimeDelta::seconds(i64::try_from(deferred.retry_secs).unwrap_or(300));
+        let retry_at = now + Span::seconds(i64::try_from(deferred.retry_secs).unwrap_or(300));
         let mut claimed = Vec::new();
         for row in due.into_iter().map(Record::into_inner) {
             let attempts = row.attempts.saturating_add(1);
@@ -400,7 +400,7 @@ impl Notifier {
         &self,
         ctx: &AppContext,
         exec: &Exec,
-        now: DateTime<Utc>,
+        now: Timestamp,
         unit: Vec<(NotificationDeferral, SendNotificationJob)>,
         released: &mut Released,
     ) -> Result<(), NotifyError> {
@@ -497,7 +497,7 @@ impl Notifier {
 /// The digest mail job of a recipient's held mails.
 fn digest_job(
     rows: &[(NotificationDeferral, SendNotificationJob)],
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> SendNotificationJob {
     let (first, first_job) = &rows[0];
     let digest = first
@@ -543,7 +543,7 @@ fn deferral(
     job: &SendNotificationJob,
     reason: DeferralReason,
     digest: Option<Digest>,
-    release_at: DateTime<Utc>,
+    release_at: Timestamp,
 ) -> Result<NotificationDeferral, NotifyError> {
     let payload = serde_json::to_value(job).map_err(|error| NotifyError::Queue(Box::new(error)))?;
     Ok(NotificationDeferral {

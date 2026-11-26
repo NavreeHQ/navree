@@ -1,6 +1,6 @@
 //! [`NotifyOptions`]: configuration section `notify`.
 
-use chrono::{NaiveTime, Weekday};
+use navree_datetime::{Time, Weekday};
 use navree_config::__private::{selector_error, selector_name};
 use navree_config::{ConfigSection, ConfigTable, DriverName, DriverNameError};
 use navree_contracts::Secret;
@@ -175,15 +175,14 @@ impl Default for DigestOptions {
 impl DigestOptions {
     /// [`at`](DigestOptions::at), parsed (09:00 when invalid; the options
     /// refuse to load with such a value).
-    pub fn time(&self) -> NaiveTime {
-        parse_hh_mm(&self.at)
-            .unwrap_or_else(|_| NaiveTime::from_hms_opt(9, 0, 0).unwrap_or_default())
+    pub fn time(&self) -> Time {
+        parse_hh_mm(&self.at).unwrap_or_else(|_| Time::new(9, 0, 0).unwrap())
     }
 
     /// [`weekly_on`](DigestOptions::weekly_on), parsed (Monday when
     /// invalid).
     pub fn weekday(&self) -> Weekday {
-        parse_weekday(&self.weekly_on).unwrap_or(Weekday::Mon)
+        parse_weekday(&self.weekly_on).unwrap_or(Weekday::Monday)
     }
 }
 
