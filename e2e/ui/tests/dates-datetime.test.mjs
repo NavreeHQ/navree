@@ -155,14 +155,17 @@ inBrowsers(({ open }) => {
     const sweep = (seconds) =>
       page.evaluate((seconds) => {
         const picker = document.getElementById("dtp-starts");
+        const time = document.getElementById("dtp-starts-time");
         const boxes = [...picker.querySelectorAll("[data-slot=date-time-picker-ui] [data-ui-text]")];
+        const still = [picker, document.getElementById("dtp-starts-date"), time, ...boxes];
+        for (const el of still) el.style.setProperty("transition-property", "none");
         if (seconds) {
-          document.getElementById("dtp-starts-time").setAttribute("data-seconds", "");
+          time.setAttribute("data-seconds", "");
           boxes[1].value = "2:30:45 PM";
         }
         // A line of text in the page, out of sight, drawn in each box's own typeface in turn.
         const ruler = document.createElement("span");
-        for (const [name, value] of [["position", "fixed"], ["left", "0"], ["top", "0"], ["visibility", "hidden"], ["white-space", "pre"]]) ruler.style.setProperty(name, value);
+        for (const [name, value] of [["position", "fixed"], ["left", "0"], ["top", "0"], ["visibility", "hidden"], ["white-space", "pre"], ["transition-property", "none"]]) ruler.style.setProperty(name, value);
         document.body.append(ruler);
         const cut = [];
         const lines = {};
@@ -181,6 +184,7 @@ inBrowsers(({ open }) => {
         }
         ruler.remove();
         picker.style.removeProperty("width");
+        for (const el of still) el.style.removeProperty("transition-property");
         const shown = (button) => button.getClientRects().length > 0;
         return { cut, lines, held: boxes.map((box) => box.value), buttons: boxes.map((box) => [...box.closest("[data-slot=input-group]").querySelectorAll("button")].filter(shown).length) };
       }, seconds);
