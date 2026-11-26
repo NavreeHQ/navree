@@ -1,11 +1,11 @@
 //! A report's table as an Excel file or a PDF, where Navree UI meets the sheets and the
-//! documents engine. navree-ui writes a report's [`ReportTable`](crate::ui::charts::ReportTable) as CSV itself; it cannot
+//! documents engine. navree-ui writes a report's `ReportTable` as CSV itself; it cannot
 //! write the others, because navree-sheets and navree-documents sit above it, so the facade
 //! writes them from the same table.
 //!
-//! - [`ReportTableSheets`](crate::reports::ReportTableSheets) (the `ui` and `sheets` features): an XLSX file, and its
+//! - `ReportTableSheets` (the `ui` and `sheets` features): an XLSX file, and its
 //!   download.
-//! - [`ReportTablePdf`](crate::reports::ReportTablePdf) (the `ui` feature with `documents` or `documents-native`): a PDF,
+//! - `ReportTablePdf` (the `ui` feature with `documents` or `documents-native`): a PDF,
 //!   and its download.
 
 #[cfg(any(
