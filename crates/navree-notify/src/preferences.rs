@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_kernel::WeakAppContext;
 use navree_orm::{Model, Record};
 use serde::{Deserialize, Serialize};
@@ -317,9 +317,9 @@ pub struct NotificationPreference {
     /// The [`Preferences`], as JSON.
     pub preferences: Value,
     /// When the owner first chose.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the owner last changed a choice.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl NotificationPreference {

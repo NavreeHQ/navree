@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeDelta, TimeZone, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_contracts::{Clock, FixedClock, Secret};
 use navree_crypto::jose::{Jws, SigningKey};
 use navree_notify::{
@@ -29,7 +29,7 @@ const SERVICE_ACCOUNT_KEY: &str = include_str!("../fixtures/rsa-2048.pem");
 
 fn clock() -> Arc<FixedClock> {
     Arc::new(FixedClock::new(
-        Utc.with_ymd_and_hms(2026, 11, 12, 9, 30, 0).unwrap(),
+        Timestamp::utc(2026, 11, 12, 9, 30, 0).unwrap(),
     ))
 }
 
@@ -120,7 +120,7 @@ async fn apns_sends_with_the_topic_type_priority_and_expiry() {
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 1);
     let request = &requests[0];
-    let expiry = (clock.now() + TimeDelta::hours(1)).timestamp();
+    let expiry = (clock.now() + Span::hours(1)).as_secs();
     assert_eq!(header_of(request, "apns-expiration"), expiry.to_string());
     let body: Value = serde_json::from_slice(&request.body).unwrap();
     assert_eq!(
@@ -158,7 +158,7 @@ async fn apns_provider_token_is_es256_with_kid_and_iss() {
     let claims: Value = jws.claims().unwrap();
     assert_eq!(
         claims,
-        json!({ "iss": "DEF123GHIJ", "iat": clock.now().timestamp() })
+        json!({ "iss": "DEF123GHIJ", "iat": clock.now().as_secs() })
     );
 }
 
@@ -536,7 +536,7 @@ async fn fcm_exchanges_a_service_account_assertion_for_a_token() {
     assertion.verify(&key.verifying_key()).unwrap();
     assert_eq!(assertion.header().kid.as_deref(), Some("a1b2c3d4e5"));
     let claims: Value = assertion.claims().unwrap();
-    let now = clock.now().timestamp();
+    let now = clock.now().as_secs();
     assert_eq!(
         claims,
         json!({

@@ -4,7 +4,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use chrono::{DateTime, SubsecRound, Utc};
+use navree_datetime::Timestamp;
 use navree_config::DriverName;
 use navree_contracts::{Broadcaster, Clock, Dispatcher, JobEnvelope};
 use navree_db::{Db, Uow};
@@ -829,10 +829,10 @@ impl Notifier {
     }
 
     /// The current time (see [`now`]).
-    pub(crate) async fn now(&self) -> DateTime<Utc> {
+    pub(crate) async fn now(&self) -> Timestamp {
         match self.app.upgrade() {
             Some(ctx) => now(&ctx).await,
-            None => Utc::now().trunc_subsecs(6),
+            None => Timestamp::now().trunc_micros(),
         }
     }
 
@@ -1170,21 +1170,21 @@ fn provider_of(error: &ChannelError) -> Option<String> {
 }
 
 /// [`now`] for a weak app (the system clock once it has shut down).
-pub(crate) async fn now_in(app: &WeakAppContext) -> DateTime<Utc> {
+pub(crate) async fn now_in(app: &WeakAppContext) -> Timestamp {
     match app.upgrade() {
         Some(ctx) => now(&ctx).await,
-        None => Utc::now().trunc_subsecs(6),
+        None => Timestamp::now().trunc_micros(),
     }
 }
 
 /// The app clock's time (`dyn Clock` when registered), in microseconds
 /// like a PostgreSQL timestamp, so stored rows and broadcasts agree.
-pub(crate) async fn now(ctx: &AppContext) -> DateTime<Utc> {
+pub(crate) async fn now(ctx: &AppContext) -> Timestamp {
     let now = match ctx.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
-        None => Utc::now(),
+        None => Timestamp::now(),
     };
-    now.trunc_subsecs(6)
+    now.trunc_micros()
 }
 
 /// Inserts the `notifications` row through `exec` (the pool, or the unit

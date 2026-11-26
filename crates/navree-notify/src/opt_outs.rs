@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_kernel::WeakAppContext;
 use navree_orm::{Model, Record};
 use navree_validation::{Country, Phone};
@@ -54,7 +54,7 @@ pub struct NotificationOptOut {
     /// [`OptOutSource`] as text.
     pub source: String,
     /// When it opted out.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// The opt-out list of the SMS and WhatsApp channels. The

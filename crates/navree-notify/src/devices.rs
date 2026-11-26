@@ -5,7 +5,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{BoxError, BoxFuture, CredentialRevoker, RevokedByKind};
 use navree_kernel::{Injectable, KernelError, ProviderKey, Resolver, WeakAppContext};
 use navree_orm::{Model, Record};
@@ -130,11 +130,11 @@ pub struct PushDevice {
     /// `sandbox` or `production` ([`PushEnvironment`]).
     pub environment: String,
     /// When it first registered.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the app last registered it (each launch does).
-    pub last_seen_at: DateTime<Utc>,
+    pub last_seen_at: Timestamp,
     /// When a notification was last pushed to it.
-    pub last_used_at: Option<DateTime<Utc>>,
+    pub last_used_at: Option<Timestamp>,
 }
 
 impl PushDevice {
@@ -562,7 +562,7 @@ impl PushDevices {
 
     /// Notes a push to device `id` at `at` (pool, outside any unit of
     /// work).
-    pub(crate) async fn touch(&self, id: Uuid, at: DateTime<Utc>) -> Result<(), NotifyError> {
+    pub(crate) async fn touch(&self, id: Uuid, at: Timestamp) -> Result<(), NotifyError> {
         let exec = Exec::pool(&self.app).await?;
         on!(&exec, e => PushDevice::query()
             .where_(PushDevice::ID.eq(id))

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
 use navree_notify::{Channel, Notifier, NotifyOptions};
 use navree_testing::{TestApp, principal};
@@ -16,7 +16,7 @@ use crate::support::{self, DealWon, TestUser};
 /// notifications (`first`, `second`, `third`) and bob one.
 async fn seeded() -> (TestApp, TestUser, TestUser, Vec<Uuid>, Uuid) {
     let clock = Arc::new(FixedClock::new(
-        Utc.with_ymd_and_hms(2026, 10, 1, 9, 0, 0).unwrap(),
+        Timestamp::utc(2026, 10, 1, 9, 0, 0).unwrap(),
     ));
     let app = support::builder(NotifyOptions::default())
         .override_value::<dyn Clock>(clock.clone())

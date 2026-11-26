@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_contracts::BoxFuture;
 use navree_crypto::sigv4::{Credentials, Signer};
 use navree_http_client::HttpClient;
@@ -126,7 +126,7 @@ impl SmsDriver for SnsSms {
                 &url,
                 &[("content-type", FORM)],
                 body.as_bytes(),
-                Utc::now(),
+                Timestamp::now(),
             );
             let mut request = self
                 .client

@@ -1,7 +1,7 @@
 //! The digest mail: several notifications' mails batched into one
 //! ([`DigestItem`], and the mailable that renders them).
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_mail::{MailError, Mailable, Message, TemplateMail};
 use navree_view::Views;
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,7 @@ pub struct DigestItem {
     /// The mail it would have sent.
     pub mail: TemplateMail,
     /// When it was sent.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// The digest of `items`, rendered with `notify.digest.template`.

@@ -1,7 +1,7 @@
 //! Stored notifications as navree-orm models: the database channel writes
 //! them through the ORM, and apps query (and prune) them with it.
 
-use chrono::{TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::Db;
 use navree_notify::{Channel, Notifier, notifications};
 use navree_orm::Model as _;
@@ -61,7 +61,7 @@ async fn old_notifications_are_pruned_with_the_orm() {
         .unwrap();
 
     let db = app.get::<Db>().await;
-    let tomorrow = Utc::now() + TimeDelta::days(1);
+    let tomorrow = Timestamp::now() + Span::days(1);
     let pruned = Stored::query()
         .where_(Stored::CREATED_AT.lt(tomorrow))
         .delete(&*db)

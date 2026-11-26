@@ -249,7 +249,7 @@ pub(crate) fn remove_device_schema() -> (String, Value) {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     use super::*;
@@ -271,7 +271,7 @@ mod tests {
             notification_type: "deal_won".to_owned(),
             data: json!({}),
             read_at: None,
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
         })
         .unwrap();
         let mut fields: Vec<&str> = serialized

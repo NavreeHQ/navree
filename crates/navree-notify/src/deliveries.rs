@@ -4,7 +4,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_kernel::WeakAppContext;
 use navree_orm::{Model, Record};
 use serde::{Deserialize, Serialize};
@@ -124,9 +124,9 @@ pub struct NotificationDelivery {
     /// Why it failed.
     pub error: Option<String>,
     /// When it was first attempted.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When its status last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl NotificationDelivery {

@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
 use navree_db::Db;
 use navree_mail::TemplateMail;
@@ -24,7 +24,7 @@ use uuid::Uuid;
 use crate::support::{self, Fakes};
 
 /// `text` as an instant.
-pub fn at(text: &str) -> DateTime<Utc> {
+pub fn at(text: &str) -> Timestamp {
     text.parse().unwrap()
 }
 

@@ -584,7 +584,7 @@ async fn a_stored_preference_naming_a_channel_no_module_registers_keeps_the_othe
     let app = support::app().await;
     let owner = PreferenceOwner::user(Uuid::now_v7());
     // The times are set: a row's default is the first second of 1970, which MySQL does not store.
-    let now = chrono::Utc::now();
+    let now = navree_datetime::Timestamp::now();
     let row = NotificationPreference {
         id: Uuid::now_v7(),
         owner_type: owner.owner_type.clone(),

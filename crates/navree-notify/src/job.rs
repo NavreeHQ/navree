@@ -1,6 +1,6 @@
 //! [`SendNotificationJob`]: one rendered notification on one channel.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_config::DriverName;
 use navree_contracts::{BoxError, Job, JobContext};
 use navree_mail::TemplateMail;
@@ -34,7 +34,7 @@ pub struct SendNotificationJob {
     /// [`Notifiable::notifiable_id`](crate::Notifiable::notifiable_id).
     pub notifiable_id: String,
     /// When the notification was sent.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// [`Notification::CATEGORY`](crate::Notification::CATEGORY) (`None` in
     /// jobs queued before categories existed).
     #[serde(default, skip_serializing_if = "Option::is_none")]

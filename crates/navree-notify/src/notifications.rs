@@ -7,7 +7,7 @@
 //! notifications.
 //!
 //! ```no_run
-//! use chrono::{TimeDelta, Utc};
+//! use navree_datetime::{Span, Timestamp};
 //! use navree_db::Db;
 //! use navree_notify::notifications::Model as Stored;
 //! use navree_orm::Model as _;
@@ -15,13 +15,13 @@
 //! // Read notifications older than 90 days go.
 //! let pruned = Stored::query()
 //!     .where_not_null(Stored::READ_AT)
-//!     .where_(Stored::CREATED_AT.lt(Utc::now() - TimeDelta::days(90)))
+//!     .where_(Stored::CREATED_AT.lt(Timestamp::now() - Span::days(90)))
 //!     .delete(&db)
 //!     .await?;
 //! # Ok(()) }
 //! ```
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -45,7 +45,7 @@ pub struct Model {
     /// What [`Notification::to_database`](crate::Notification::to_database) returned.
     pub data: Value,
     /// When the owner read it.
-    pub read_at: Option<DateTime<Utc>>,
+    pub read_at: Option<Timestamp>,
     /// When it was sent.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }

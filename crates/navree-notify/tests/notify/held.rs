@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_contracts::{Dispatcher, ZoneLevel, ZoneOwner};
 use navree_notify::{Channel, DeferralReason, Delivery, Digest, Notifier, NotifyOptions, Released};
 use navree_time::{TimeModule, TimeOptions, ZonesFake};
@@ -509,7 +509,7 @@ async fn the_release_command_runs_and_the_schedule_is_registered() {
     let notifier = app.get::<Notifier>().await;
     let ada = Person::in_zone(Some("UTC"));
     notifier.send(&ada, DealUpdate::new("Agra")).await.unwrap();
-    clock.set(at("2026-10-28T09:00:00Z") + TimeDelta::seconds(5));
+    clock.set(at("2026-10-28T09:00:00Z") + Span::seconds(5));
 
     let command = app
         .ctx()

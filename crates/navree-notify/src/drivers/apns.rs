@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_contracts::{BoxFuture, Clock, SystemClock};
 use navree_crypto::jose::SigningKey;
 use navree_http_client::{HttpClient, HttpClientOptions, Response};
@@ -59,7 +59,7 @@ pub struct ApnsPush {
 /// One `.p8` key and the provider token it signed last.
 struct Signer {
     key: SigningKey,
-    cached: Mutex<Option<(String, DateTime<Utc>)>>,
+    cached: Mutex<Option<(String, Timestamp)>>,
 }
 
 impl Signer {
@@ -83,18 +83,18 @@ impl Signer {
     fn token(
         &self,
         team_id: &str,
-        now: DateTime<Utc>,
+        now: Timestamp,
         stale: Option<&str>,
     ) -> Result<String, ChannelError> {
         let mut cached = self.cached.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some((token, issued)) = &*cached {
             let age = now - *issued;
-            let fresh = age >= TimeDelta::zero() && age < TimeDelta::minutes(TOKEN_MINUTES);
+            let fresh = age >= Span::ZERO && age < Span::minutes(TOKEN_MINUTES);
             if fresh && stale != Some(token.as_str()) {
                 return Ok(token.clone());
             }
         }
-        let claims = json!({ "iss": team_id, "iat": now.timestamp() });
+        let claims = json!({ "iss": team_id, "iat": now.as_secs() });
         let token = self
             .key
             .sign_json(&self.key.header(), &claims)
@@ -216,7 +216,7 @@ impl ApnsPush {
         let expiration = if ttl == 0 {
             0
         } else {
-            (self.clock.now() + TimeDelta::seconds(i64::from(ttl))).timestamp()
+            (self.clock.now() + Span::seconds(i64::from(ttl))).as_secs()
         };
         let mut request = self
             .client

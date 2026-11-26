@@ -4,7 +4,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, NaiveTime, TimeDelta, Timelike, Utc, Weekday};
+use navree_datetime::{Span, Time, Timestamp, Weekday};
 use navree_time::{LocalDay, SendWindow, Zone};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -56,25 +56,24 @@ impl Digest {
     /// for [`Digest::Off`].
     pub fn next_at(
         self,
-        now: DateTime<Utc>,
+        now: Timestamp,
         zone: &Zone,
-        at: NaiveTime,
+        at: Time,
         weekly_on: Weekday,
-    ) -> Option<DateTime<Utc>> {
+    ) -> Option<Timestamp> {
         let today = LocalDay::of(now, zone);
         match self {
             Digest::Off => None,
             Digest::Hourly => {
-                let local = zone.local(now).naive_local();
-                let hour = local
-                    .with_minute(0)
-                    .and_then(|t| t.with_second(0))
-                    .and_then(|t| t.with_nanosecond(0))
+                let local = zone.local(now).date_time();
+                let hour = Time::new(local.time().hour(), 0, 0)
+                    .map(|t| local.date().at(t))
                     .unwrap_or(local);
                 // The next local hour that starts after `now` (a DST change
                 // can make two local hours map to one instant).
                 (1..=3)
-                    .map(|hours| zone.to_utc(hour + TimeDelta::hours(hours)))
+                    .filter_map(|hours| hour.add(Span::hours(hours)))
+                    .map(|next| zone.to_utc(next))
                     .find(|at| *at > now)
             }
             Digest::Daily => (0..=2)
@@ -127,8 +126,8 @@ impl FromStr for Digest {
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct QuietHours {
-    start: NaiveTime,
-    end: NaiveTime,
+    start: Time,
+    end: Time,
 }
 
 impl QuietHours {
@@ -141,17 +140,17 @@ impl QuietHours {
     }
 
     /// Quiet from `start` to `end`.
-    pub fn between(start: NaiveTime, end: NaiveTime) -> QuietHours {
+    pub fn between(start: Time, end: Time) -> QuietHours {
         QuietHours { start, end }
     }
 
     /// When the quiet hours start.
-    pub fn start(&self) -> NaiveTime {
+    pub fn start(&self) -> Time {
         self.start
     }
 
     /// When they end.
-    pub fn end(&self) -> NaiveTime {
+    pub fn end(&self) -> Time {
         self.end
     }
 
@@ -161,13 +160,13 @@ impl QuietHours {
     }
 
     /// Whether `at` falls in the quiet hours on `zone`'s clock.
-    pub fn contains(&self, at: DateTime<Utc>, zone: &Zone) -> bool {
+    pub fn contains(&self, at: Timestamp, zone: &Zone) -> bool {
         self.ends_after(at, zone) != at
     }
 
     /// When the quiet hours around `at` end on `zone`'s clock, or `at`
     /// itself when it is not in quiet hours.
-    pub fn ends_after(&self, at: DateTime<Utc>, zone: &Zone) -> DateTime<Utc> {
+    pub fn ends_after(&self, at: Timestamp, zone: &Zone) -> Timestamp {
         if self.is_empty() {
             return at;
         }
@@ -219,19 +218,19 @@ impl<'de> Deserialize<'de> for QuietHours {
 }
 
 /// A local 24-hour `HH:MM` time (`7:05` and `07:05` alike).
-pub(crate) fn parse_hh_mm(text: &str) -> Result<NaiveTime, String> {
+pub(crate) fn parse_hh_mm(text: &str) -> Result<Time, String> {
     let invalid = || format!("`{text}` is not a 24-hour HH:MM time");
     let (hour, minute) = text.trim().split_once(':').ok_or_else(invalid)?;
     let digits = |s: &str, max: usize| {
         (!s.is_empty() && s.len() <= max && s.bytes().all(|b| b.is_ascii_digit()))
-            .then(|| s.parse::<u32>().ok())
+            .then(|| s.parse::<u8>().ok())
             .flatten()
     };
     let hour = digits(hour, 2).ok_or_else(invalid)?;
     let minute = digits(minute, 2)
         .filter(|_| minute.len() == 2)
         .ok_or_else(invalid)?;
-    NaiveTime::from_hms_opt(hour, minute, 0).ok_or_else(invalid)
+    Time::new(hour, minute, 0).map_err(|_| invalid())
 }
 
 /// A weekday by its English name (`monday`, `Mon`).
@@ -244,11 +243,11 @@ pub(crate) fn parse_weekday(text: &str) -> Result<Weekday, String> {
 /// The first instant at or after `from` that is inside `window` (when
 /// given) and outside `quiet` (when given), on `zone`'s clock.
 pub(crate) fn next_open(
-    from: DateTime<Utc>,
+    from: Timestamp,
     zone: &Zone,
     window: Option<&SendWindow>,
     quiet: Option<&QuietHours>,
-) -> DateTime<Utc> {
+) -> Timestamp {
     let mut at = from;
     // Each step only moves forward; a window and quiet hours settle in a
     // few steps (a window that always falls in quiet hours never would).
@@ -277,7 +276,7 @@ pub(crate) fn next_open(
 mod tests {
     use super::*;
 
-    fn at(text: &str) -> DateTime<Utc> {
+    fn at(text: &str) -> Timestamp {
         text.parse().unwrap()
     }
 
@@ -285,8 +284,8 @@ mod tests {
         Zone::parse(name).unwrap()
     }
 
-    fn nine() -> NaiveTime {
-        NaiveTime::from_hms_opt(9, 0, 0).unwrap()
+    fn nine() -> Time {
+        Time::new(9, 0, 0).unwrap()
     }
 
     #[test]
@@ -307,19 +306,19 @@ mod tests {
         let kolkata = zone("Asia/Kolkata");
         // 08:00 in Kolkata: today 09:00 there.
         let next =
-            Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &kolkata, nine(), Weekday::Mon);
+            Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &kolkata, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-10-29T03:30:00Z")));
         // 09:00 exactly: tomorrow.
         let next =
-            Digest::Daily.next_at(at("2026-10-29T03:30:00Z"), &kolkata, nine(), Weekday::Mon);
+            Digest::Daily.next_at(at("2026-10-29T03:30:00Z"), &kolkata, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-10-30T03:30:00Z")));
         // The same instant is still yesterday evening in New York.
         let new_york = zone("America/New_York");
         let next =
-            Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &new_york, nine(), Weekday::Mon);
+            Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &new_york, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-10-29T13:00:00Z")));
         assert_eq!(
-            Digest::Off.next_at(at("2026-10-29T02:30:00Z"), &kolkata, nine(), Weekday::Mon),
+            Digest::Off.next_at(at("2026-10-29T02:30:00Z"), &kolkata, nine(), Weekday::Monday),
             None
         );
     }
@@ -329,7 +328,7 @@ mod tests {
         // Europe/Paris leaves summer time on Sunday 25 October 2026.
         let paris = zone("Europe/Paris");
         let saturday_noon = at("2026-10-24T10:00:00Z");
-        let next = Digest::Daily.next_at(saturday_noon, &paris, nine(), Weekday::Mon);
+        let next = Digest::Daily.next_at(saturday_noon, &paris, nine(), Weekday::Monday);
         // 09:00 CET on Sunday is 08:00 UTC (it was 07:00 UTC on Saturday).
         assert_eq!(next, Some(at("2026-10-25T08:00:00Z")));
     }
@@ -339,10 +338,10 @@ mod tests {
         let kolkata = zone("Asia/Kolkata");
         // 10:15 in Kolkata (+05:30): 11:00 there, 05:30 UTC.
         let next =
-            Digest::Hourly.next_at(at("2026-10-29T04:45:00Z"), &kolkata, nine(), Weekday::Mon);
+            Digest::Hourly.next_at(at("2026-10-29T04:45:00Z"), &kolkata, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-10-29T05:30:00Z")));
         let utc = Zone::UTC;
-        let next = Digest::Hourly.next_at(at("2026-10-29T04:00:00Z"), &utc, nine(), Weekday::Mon);
+        let next = Digest::Hourly.next_at(at("2026-10-29T04:00:00Z"), &utc, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-10-29T05:00:00Z")));
     }
 
@@ -350,13 +349,13 @@ mod tests {
     fn weekly_digests_go_out_on_the_next_chosen_day() {
         let utc = Zone::UTC;
         // Thursday 29 October 2026: Monday 2 November 09:00.
-        let next = Digest::Weekly.next_at(at("2026-10-29T12:00:00Z"), &utc, nine(), Weekday::Mon);
+        let next = Digest::Weekly.next_at(at("2026-10-29T12:00:00Z"), &utc, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-11-02T09:00:00Z")));
         // Monday 08:00: the same day.
-        let next = Digest::Weekly.next_at(at("2026-11-02T08:00:00Z"), &utc, nine(), Weekday::Mon);
+        let next = Digest::Weekly.next_at(at("2026-11-02T08:00:00Z"), &utc, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-11-02T09:00:00Z")));
         // Monday 10:00: the next Monday.
-        let next = Digest::Weekly.next_at(at("2026-11-02T10:00:00Z"), &utc, nine(), Weekday::Mon);
+        let next = Digest::Weekly.next_at(at("2026-11-02T10:00:00Z"), &utc, nine(), Weekday::Monday);
         assert_eq!(next, Some(at("2026-11-09T09:00:00Z")));
     }
 
@@ -416,8 +415,8 @@ mod tests {
                 "{bad}"
             );
         }
-        assert_eq!(parse_weekday("monday"), Ok(Weekday::Mon));
-        assert_eq!(parse_weekday("Fri"), Ok(Weekday::Fri));
+        assert_eq!(parse_weekday("monday"), Ok(Weekday::Monday));
+        assert_eq!(parse_weekday("Fri"), Ok(Weekday::Friday));
         assert!(parse_weekday("someday").is_err());
     }
 

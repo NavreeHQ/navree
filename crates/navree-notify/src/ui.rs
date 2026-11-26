@@ -461,7 +461,6 @@ mod tests {
         }
     }
 
-    use chrono::Utc;
     use serde_json::json;
 
     use super::*;
@@ -471,7 +470,7 @@ mod tests {
             id: Uuid::nil(),
             notification_type: "contact.moved".to_owned(),
             data,
-            read_at: read.then(Utc::now),
+            read_at: read.then(navree_datetime::Timestamp::now),
             created_at: "2026-11-06T10:30:00Z".parse().unwrap(),
         }
     }
