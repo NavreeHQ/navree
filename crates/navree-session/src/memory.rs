@@ -109,13 +109,13 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use chrono::{TimeDelta, Utc};
     use navree_contracts::FixedClock;
+    use navree_datetime::{Span, Timestamp};
     use serde_json::json;
 
     use super::*;
 
-    fn record(expires_at: Option<chrono::DateTime<Utc>>) -> SessionRecord {
+    fn record(expires_at: Option<Timestamp>) -> SessionRecord {
         let mut record = SessionRecord {
             expires_at,
             ..SessionRecord::default()
@@ -138,15 +138,15 @@ mod tests {
 
     #[tokio::test]
     async fn expired_records_are_pruned() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let clock = Arc::new(FixedClock::new(now));
         let store = MemoryStore::new().with_clock(clock.clone());
         store
-            .save("short", record(Some(now + TimeDelta::minutes(1))))
+            .save("short", record(Some(now + Span::minutes(1))))
             .await
             .unwrap();
         store
-            .save("long", record(Some(now + TimeDelta::minutes(10))))
+            .save("long", record(Some(now + Span::minutes(10))))
             .await
             .unwrap();
         store.save("forever", record(None)).await.unwrap();
@@ -165,15 +165,12 @@ mod tests {
 
     #[tokio::test]
     async fn saving_prunes_now_and_then() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let clock = Arc::new(FixedClock::new(now));
         let store = MemoryStore::new().with_clock(clock.clone());
         for i in 0..10 {
             store
-                .save(
-                    &format!("old{i}"),
-                    record(Some(now + TimeDelta::seconds(1))),
-                )
+                .save(&format!("old{i}"), record(Some(now + Span::seconds(1))))
                 .await
                 .unwrap();
         }

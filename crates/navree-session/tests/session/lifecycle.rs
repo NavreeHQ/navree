@@ -260,7 +260,7 @@ async fn a_remembered_session_outlives_the_configured_lifetime() {
     let record = store.load(&id).await.unwrap().expect("the record");
     assert_eq!(
         record.expires_at,
-        Some(clock.now() + chrono::TimeDelta::days(days)),
+        Some(clock.now() + navree_datetime::Span::days(days)),
         "the record lives as long"
     );
 

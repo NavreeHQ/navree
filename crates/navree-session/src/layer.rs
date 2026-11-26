@@ -4,7 +4,6 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use chrono::TimeDelta;
 use cookie::Cookie;
 use http::header::{
     AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderName, ORIGIN, SET_COOKIE, USER_AGENT,
@@ -14,6 +13,7 @@ use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, Clock, RequestId, SessionRecord, SessionStore, SystemClock,
 };
 use navree_crypto::Encrypter;
+use navree_datetime::Span;
 use navree_glob::Glob;
 use navree_http::body::Body;
 use navree_http::csrf::{TokenChecked, token_matches};
@@ -135,14 +135,14 @@ pub(crate) async fn clock_of(r: &Resolver) -> Arc<dyn Clock> {
 }
 
 /// `minutes` as a duration.
-fn minutes(minutes: u64) -> TimeDelta {
-    TimeDelta::minutes(i64::try_from(minutes).unwrap_or(i64::MAX))
+fn minutes(minutes: u64) -> Span {
+    Span::try_minutes(i64::try_from(minutes).unwrap_or(i64::MAX)).unwrap_or(Span::MAX)
 }
 
 /// How long after a write a request extends the session again: a minute,
 /// or half the lifetime when that is shorter.
-fn touch_interval(lifetime: TimeDelta) -> TimeDelta {
-    TimeDelta::minutes(1).min(lifetime / 2)
+fn touch_interval(lifetime: Span) -> Span {
+    Span::minutes(1).min(lifetime / 2)
 }
 
 /// The [`LayerSlot::Session`] layer.
@@ -363,7 +363,7 @@ impl SessionManager {
         name: &str,
         value: String,
         http_only: bool,
-        lifetime: TimeDelta,
+        lifetime: Span,
     ) -> Cookie<'static> {
         let options = &self.options;
         let mut cookie = Cookie::build((name.to_owned(), value))
@@ -375,7 +375,7 @@ impl SessionManager {
                 SameSite::Lax => cookie::SameSite::Lax,
                 SameSite::None => cookie::SameSite::None,
             })
-            .max_age(cookie::time::Duration::seconds(lifetime.num_seconds()));
+            .max_age(cookie::time::Duration::seconds(lifetime.as_seconds()));
         if let Some(domain) = &options.domain {
             cookie = cookie.domain(domain.clone());
         }
@@ -809,13 +809,7 @@ mod tests {
 
     #[test]
     fn the_touch_interval_is_a_minute_or_half_the_lifetime() {
-        assert_eq!(
-            touch_interval(TimeDelta::minutes(120)),
-            TimeDelta::minutes(1)
-        );
-        assert_eq!(
-            touch_interval(TimeDelta::minutes(1)),
-            TimeDelta::seconds(30)
-        );
+        assert_eq!(touch_interval(Span::minutes(120)), Span::minutes(1));
+        assert_eq!(touch_interval(Span::minutes(1)), Span::seconds(30));
     }
 }
