@@ -496,7 +496,7 @@ impl AuthService {
                 challenge: request.code_challenge.clone().unwrap_or_default(),
                 state: request.state.clone(),
                 was_signed_in,
-                started_at: self.clock.now().timestamp(),
+                started_at: self.clock.now().as_secs(),
                 attempt: Some(attempt),
                 confirm,
                 asked_after: None,
@@ -548,7 +548,7 @@ impl AuthService {
             self.hand_over_refused(None, &error, meta).await;
             return Err(error);
         };
-        if self.clock.now().timestamp() - pending.started_at > PENDING_TTL_SECS {
+        if self.clock.now().as_secs() - pending.started_at > PENDING_TTL_SECS {
             return Err(self
                 .end_hand_over(
                     session,
@@ -915,7 +915,7 @@ impl AuthService {
                     platform: pending.platform.clone(),
                     app: pending.app.clone(),
                     challenge: pending.challenge.clone(),
-                    expires_at: now.timestamp() + i64::try_from(APP_CODE_TTL_SECS).unwrap_or(60),
+                    expires_at: now.as_secs() + i64::try_from(APP_CODE_TTL_SECS).unwrap_or(60),
                     auth_time: Some(signed_in.auth_time),
                     finished: Some(source.finished),
                     session_id: Some(signed_in.session_id),
@@ -1019,7 +1019,7 @@ impl AuthService {
         if !self.cache.forget(&key).await? {
             return Err(refused("code already used"));
         }
-        if self.clock.now().timestamp() >= issued.expires_at {
+        if self.clock.now().as_secs() >= issued.expires_at {
             return Err(refused("code expired"));
         }
         if issued.platform != platform || issued.app != app {

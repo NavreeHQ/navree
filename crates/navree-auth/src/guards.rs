@@ -209,8 +209,8 @@ impl Guard for RecentAuth {
                 return refused();
             };
             let now = match &ctx {
-                Some(ctx) => clock_of(ctx).await.now().timestamp(),
-                None => chrono::Utc::now().timestamp(),
+                Some(ctx) => clock_of(ctx).await.now().as_secs(),
+                None => navree_datetime::Timestamp::now().as_secs(),
             };
             let max_age = i64::try_from(self.max_age.as_secs()).unwrap_or(i64::MAX);
             if now.saturating_sub(auth_time) > max_age {
@@ -297,7 +297,7 @@ mod tests {
     #[tokio::test]
     async fn recent_auth_compares_auth_time_with_the_clock() {
         let guard = recent_auth(Duration::from_secs(600));
-        let now = chrono::Utc::now().timestamp();
+        let now = navree_datetime::Timestamp::now().as_secs();
         let check = |claims: Option<AccessClaims>| {
             let guard = guard.clone();
             async move {

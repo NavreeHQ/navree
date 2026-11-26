@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_auth::{JwtService, TokenType, User};
 use navree_contracts::{Clock, FixedClock};
 use navree_db::Db;
@@ -40,7 +40,7 @@ async fn bearer_access_token_sets_principal() {
 
 #[tokio::test]
 async fn expired_or_tampered_access_token_is_401() {
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = support::builder()
         .override_value::<dyn Clock>(clock.clone())
         .build()

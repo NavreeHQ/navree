@@ -1,7 +1,7 @@
 //! [`UserResource`], the API representation of a user, and
 //! [`UserResourceExtension`]s that add app-specific fields to it.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{BoxError, BoxFuture};
 use navree_openapi::{ComponentProperties, Schema, ToSchema};
 use serde::Serialize;
@@ -35,9 +35,9 @@ pub struct UserResource {
     /// The email address.
     pub email: String,
     /// When the email address was verified, if it was.
-    pub email_verified_at: Option<DateTime<Utc>>,
+    pub email_verified_at: Option<Timestamp>,
     /// When the account was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl From<&User> for UserResource {

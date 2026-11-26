@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_contracts::AuditKind;
 use navree_crypto::{random_token, sha256_hex};
 use serde::{Deserialize, Serialize};
@@ -171,7 +171,7 @@ impl AuthService {
         seed.extend_from_slice(random_token(43).as_bytes());
         seed.extend_from_slice(digest.as_bytes());
         let challenge = base64_url(&sha256(&seed));
-        let ttl = TimeDelta::seconds(i64::try_from(CONFIRM_TTL_SECS).unwrap_or(120));
+        let ttl = Span::seconds(i64::try_from(CONFIRM_TTL_SECS).unwrap_or(120));
         self.cache
             .put(
                 &pending_key(&challenge),
@@ -179,7 +179,7 @@ impl AuthService {
                     user_id,
                     session_id,
                     action: digest,
-                    expires_at: (self.clock.now() + ttl).timestamp(),
+                    expires_at: (self.clock.now() + ttl).as_secs(),
                 },
                 Duration::from_secs(CONFIRM_TTL_SECS + 5),
             )
@@ -283,7 +283,7 @@ impl AuthService {
         if !self.cache.forget(&key).await? {
             return Err(refused("challenge already used"));
         }
-        if self.clock.now().timestamp() >= pending.expires_at {
+        if self.clock.now().as_secs() >= pending.expires_at {
             return Err(refused("challenge expired"));
         }
         if pending.user_id != user.id {

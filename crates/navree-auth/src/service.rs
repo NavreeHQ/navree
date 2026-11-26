@@ -5,7 +5,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_crypto::{CryptoError, Encrypter, Hasher, constant_time_eq, random_token};
@@ -133,9 +133,9 @@ pub(crate) enum SessionKind {
     #[cfg_attr(not(feature = "session"), allow(dead_code))]
     HandedOver {
         /// When the user last authenticated in the session it came from.
-        authenticated_at: DateTime<Utc>,
+        authenticated_at: Timestamp,
         /// When it ends.
-        expires_at: DateTime<Utc>,
+        expires_at: Timestamp,
     },
 }
 
@@ -146,8 +146,8 @@ pub(crate) struct SessionState {
     pub(crate) family_id: Uuid,
     /// When the family's refresh tokens stop working: sliding for app
     /// sessions, fixed for impersonation and platform sessions.
-    pub(crate) expires_at: DateTime<Utc>,
-    pub(crate) authenticated_at: Option<DateTime<Utc>>,
+    pub(crate) expires_at: Timestamp,
+    pub(crate) authenticated_at: Option<Timestamp>,
     pub(crate) impersonator: Option<Uuid>,
     pub(crate) audience: Option<String>,
 }
@@ -916,7 +916,7 @@ impl AuthService {
         presented: &RefreshSecret,
         next: &RefreshSecret,
         meta: &ClientMeta,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<Rotation, AuthError> {
         let Some(row) = RefreshToken::find(uow, presented.id()).await? else {
             return Ok(Rotation::Invalid);
@@ -1181,16 +1181,16 @@ enum Rotation {
 pub(crate) fn session_claims(session: &SessionState) -> SessionClaims {
     SessionClaims {
         session_id: Some(session.family_id),
-        auth_time: session.authenticated_at.map(|at| at.timestamp()),
+        auth_time: session.authenticated_at.map(|at| at.as_secs()),
         impersonator: session.impersonator,
     }
 }
 
 /// `at` plus `secs` seconds (saturating).
-pub(crate) fn after_secs(at: DateTime<Utc>, secs: u64) -> DateTime<Utc> {
+pub(crate) fn after_secs(at: Timestamp, secs: u64) -> Timestamp {
     let secs = i64::try_from(secs).unwrap_or(i64::MAX);
-    at.checked_add_signed(TimeDelta::try_seconds(secs).unwrap_or(TimeDelta::MAX))
-        .unwrap_or(DateTime::<Utc>::MAX_UTC)
+    at.checked_add(Span::try_seconds(secs).unwrap_or(Span::MAX))
+        .unwrap_or(Timestamp::MAX)
 }
 
 /// Records `entry`, adding the impersonator of the task's unit of work
@@ -1229,7 +1229,7 @@ fn same_hash(row: &RefreshToken, presented: &RefreshSecret) -> bool {
 pub(crate) async fn revoke_family<E: Executor + ?Sized>(
     exec: &E,
     family_id: Uuid,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<u64, AuthError> {
     Ok(RefreshToken::query()
         .where_(RefreshToken::FAMILY_ID.eq(family_id))
@@ -1242,7 +1242,7 @@ pub(crate) async fn revoke_family<E: Executor + ?Sized>(
 pub(crate) async fn revoke_user<E: Executor + ?Sized>(
     exec: &E,
     user_id: Uuid,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<u64, AuthError> {
     Ok(RefreshToken::query()
         .where_(RefreshToken::USER_ID.eq(user_id))

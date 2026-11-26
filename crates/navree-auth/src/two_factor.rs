@@ -504,7 +504,7 @@ impl AuthService {
             .map_err(|error| AuthError::TwoFactor(error.to_string()))?;
         let totp = self.totp(user, secret)?;
         let code: String = code.chars().filter(|c| !c.is_whitespace()).collect();
-        let now = u64::try_from(self.clock.now().timestamp()).unwrap_or(0);
+        let now = u64::try_from(self.clock.now().as_secs()).unwrap_or(0);
         let Some(step) = totp.check(&code, now) else {
             return Ok(false);
         };

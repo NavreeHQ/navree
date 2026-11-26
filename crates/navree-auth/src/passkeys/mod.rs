@@ -41,7 +41,7 @@ pub(crate) mod webauthn;
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::AuditKind;
 use navree_crypto::{constant_time_eq, random_token, sha256_hex};
 use navree_openapi::ToSchema;
@@ -80,9 +80,9 @@ pub struct PasskeyResource {
     /// The transports the browser reported (`internal`, `hybrid`, ...).
     pub transports: Vec<String>,
     /// When it was registered.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last signed the user in.
-    pub last_used_at: Option<DateTime<Utc>>,
+    pub last_used_at: Option<Timestamp>,
 }
 
 impl From<&Passkey> for PasskeyResource {

@@ -47,7 +47,6 @@ notify = ["dep:navree-notify"]
 # and passkeys (WebAuthn signatures), until navree_crypto::jose carries them.
 # The service's own tokens, TOTP codes and QR codes are navree-crypto's.
 base64 = { workspace = true }
-chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
 # `User` is the access subject `User` (no module import).
@@ -56,6 +55,7 @@ navree-cache = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 # Fetching trusted issuers' key sets (`auth.trusted_issuers.*.jwks_url`).

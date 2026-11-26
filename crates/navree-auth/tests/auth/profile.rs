@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_auth::User;
 use navree_contracts::AuditSink;
 use navree_db::Db;
@@ -118,7 +118,7 @@ async fn update_profile_changes_name_and_email() {
     let db = app.get::<Db>().await;
     User::query()
         .where_key(user.id)
-        .update(&*db, [User::EMAIL_VERIFIED_AT.set(Some(Utc::now()))])
+        .update(&*db, [User::EMAIL_VERIFIED_AT.set(Some(Timestamp::now()))])
         .await
         .unwrap();
     let client = app.client();

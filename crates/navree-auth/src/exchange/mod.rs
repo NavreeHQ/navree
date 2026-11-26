@@ -172,7 +172,7 @@ impl AuthService {
             return Ok(Err(refuse(named, "bad signature")));
         }
         let claims = &jws.payload;
-        let now = self.clock.now().timestamp();
+        let now = self.clock.now().as_secs();
         let audience_ok = match &claims["aud"] {
             Value::String(aud) => *aud == issuer.audience,
             Value::Array(auds) => auds
@@ -238,7 +238,7 @@ impl AuthService {
         let Some(url) = &issuer.jwks_url else {
             return Err("no key configured".to_owned());
         };
-        let now = self.clock.now().timestamp();
+        let now = self.clock.now().as_secs();
         let max_age = i64::try_from(issuer.jwks_cache_secs).unwrap_or(i64::MAX);
         if let Some(cached) = self.exchange.get(name) {
             let fresh = now.saturating_sub(cached.fetched_at) < max_age;

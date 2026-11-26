@@ -26,7 +26,7 @@
 //!   sign-in then continues like a password login: a two-factor challenge
 //!   when the user has two-factor authentication on, a session otherwise.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::AuditKind;
 use navree_crypto::{constant_time_eq, hmac_sha256, sha256_hex};
 use navree_orm::{Model as _, Record};
@@ -114,7 +114,7 @@ impl AuthService {
         &self,
         token: &str,
         meta: &ClientMeta,
-    ) -> Result<(User, DateTime<Utc>), AuthError> {
+    ) -> Result<(User, Timestamp), AuthError> {
         if !self.options.magic_link.enabled {
             return Err(AuthError::Disabled("magic links"));
         }
@@ -202,7 +202,7 @@ impl AuthService {
         email: &str,
         code: &str,
         meta: &ClientMeta,
-    ) -> Result<(User, DateTime<Utc>), AuthError> {
+    ) -> Result<(User, Timestamp), AuthError> {
         let options = &self.options.otp;
         if !options.enabled {
             return Err(AuthError::Disabled("sign-in codes"));
@@ -296,7 +296,7 @@ impl AuthService {
     async fn pending_link(
         &self,
         presented: &RefreshSecret,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<Option<(Uuid, User)>, AuthError> {
         let Some(row) = LoginToken::find(&self.db, presented.id()).await? else {
             return Ok(None);
@@ -368,7 +368,7 @@ impl AuthService {
 
     /// Marks the token used; `false` when a concurrent request got there
     /// first.
-    async fn claim_login_token(&self, id: Uuid, now: DateTime<Utc>) -> Result<bool, AuthError> {
+    async fn claim_login_token(&self, id: Uuid, now: Timestamp) -> Result<bool, AuthError> {
         self.write(None, |uow| async move {
             let claimed = LoginToken::query()
                 .where_key(id)
@@ -385,7 +385,7 @@ impl AuthService {
     async fn count_wrong_code(
         &self,
         row: &LoginToken,
-        now: DateTime<Utc>,
+        now: Timestamp,
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
         let attempts = row.attempts.saturating_add(1);
@@ -414,7 +414,7 @@ impl AuthService {
         user: User,
         method: SignInMethod,
         meta: &ClientMeta,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<LoginOutcome, AuthError> {
         match self
             .passwordless_step(user, method.clone(), meta, now)
@@ -451,7 +451,7 @@ impl AuthService {
         mut user: User,
         method: SignInMethod,
         meta: &ClientMeta,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<PasswordStep, AuthError> {
         self.check_sign_in(&SignInAttempt::of(&user, method.clone()), meta)
             .await?;

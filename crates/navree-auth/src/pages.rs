@@ -1329,7 +1329,7 @@ impl PagesController {
             NativeThen::new(
                 self.paths.with_next(&then, next).as_str(),
                 issued.ticket,
-                issued.expires_at.timestamp(),
+                issued.expires_at.as_secs(),
             ),
         ))
     }

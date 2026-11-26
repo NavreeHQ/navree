@@ -5,7 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_cache::Cache;
 use navree_contracts::{
     BoxFuture, CallTickets, Clock, IssuedTicket, RedeemedTicket, TicketCheck, TicketError,
@@ -97,7 +97,7 @@ impl SealedTickets {
     ) -> Result<RedeemedTicket, TicketError> {
         let sealed = self.open(ticket)?;
         let now = self.clock.now();
-        if now.timestamp() >= sealed.e {
+        if now.as_secs() >= sealed.e {
             return Err(TicketError::Expired);
         }
         if sealed.u != check.holder.user || sealed.s != session_hash(&check.holder) {
@@ -111,7 +111,7 @@ impl SealedTickets {
         {
             return Err(TicketError::WrongRoute);
         }
-        let left = u64::try_from(sealed.e - now.timestamp()).unwrap_or(1);
+        let left = u64::try_from(sealed.e - now.as_secs()).unwrap_or(1);
         let first = self
             .cache
             .add(
@@ -143,8 +143,8 @@ fn session_hash(holder: &TicketHolder) -> Option<String> {
         .map(|session| sha256_hex(session.as_bytes()))
 }
 
-fn at(seconds: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp(seconds, 0).unwrap_or_default()
+fn at(seconds: i64) -> Timestamp {
+    Timestamp::from_secs(seconds).ok().unwrap_or_default()
 }
 
 impl CallTickets for SealedTickets {
@@ -153,7 +153,7 @@ impl CallTickets for SealedTickets {
         let ttl = request
             .ttl
             .clamp(Duration::from_secs(1), TicketRequest::MAX_TTL);
-        let expires_at = now + TimeDelta::from_std(ttl).unwrap_or_else(|_| TimeDelta::seconds(300));
+        let expires_at = now + Span::try_from(ttl).unwrap_or_else(|_| Span::seconds(300));
         let sealed = Sealed {
             v: VERSION.to_owned(),
             n: random_token(22),
@@ -163,8 +163,8 @@ impl CallTickets for SealedTickets {
             m: request.method.clone(),
             p: request.path.clone(),
             b: request.binding.clone(),
-            i: now.timestamp(),
-            e: expires_at.timestamp(),
+            i: now.as_secs(),
+            e: expires_at.as_secs(),
         };
         let ticket = self
             .encrypter
@@ -212,7 +212,7 @@ mod tests {
     use super::*;
 
     fn tickets() -> (SealedTickets, Arc<FixedClock>) {
-        let clock = Arc::new(FixedClock::new(Utc::now()));
+        let clock = Arc::new(FixedClock::new(Timestamp::now()));
         let tickets = SealedTickets::new(
             Arc::new(Encrypter::new(AppKey::generate())),
             Cache::memory(),
@@ -275,7 +275,7 @@ mod tests {
     #[tokio::test]
     async fn tickets_are_sealed_with_a_key_of_their_own() {
         let general = Arc::new(Encrypter::new(AppKey::generate()));
-        let clock = Arc::new(FixedClock::new(Utc::now()));
+        let clock = Arc::new(FixedClock::new(Timestamp::now()));
         let tickets = SealedTickets::new(general.clone(), Cache::memory(), clock.clone());
         let check = TicketCheck::new(holder("phone"), "scan_code").at("POST", "/stock/scan");
 
@@ -291,7 +291,7 @@ mod tests {
         assert!(general.decrypt(&issued.ticket).is_err());
 
         // Nor does anything it seals open as a ticket, even a ticket's inside.
-        let now = clock.now().timestamp();
+        let now = clock.now().as_secs();
         let inside = Sealed {
             v: VERSION.to_owned(),
             n: random_token(22),

@@ -309,7 +309,7 @@ impl AuthService {
                 SESSION_PASSKEY_CALL_KEY,
                 &PasskeyCall {
                     challenge: sha256_hex(challenge.as_bytes()),
-                    expires_at: self.clock.now().timestamp().saturating_add(ttl),
+                    expires_at: self.clock.now().as_secs().saturating_add(ttl),
                 },
             )
             .map_err(session_error)?;
@@ -371,7 +371,7 @@ impl AuthService {
         let Some(waiting) = waiting else {
             return Err("no challenge asked for in this session");
         };
-        if self.clock.now().timestamp() >= waiting.expires_at {
+        if self.clock.now().as_secs() >= waiting.expires_at {
             return Err("challenge expired");
         }
         let answered = credential
@@ -599,8 +599,8 @@ impl AuthService {
         let remembered = signed_in_at.saturating_add(longest);
         let ends_at = ends_by.map_or(remembered, |ends_by| ends_by.min(remembered));
         let times = (
-            chrono::DateTime::from_timestamp(signed_in_at, 0),
-            chrono::DateTime::from_timestamp(ends_at, 0),
+            navree_datetime::Timestamp::from_secs(signed_in_at).ok(),
+            navree_datetime::Timestamp::from_secs(ends_at).ok(),
         );
         let (Some(authenticated_at), Some(expires_at)) = times else {
             return Err(AuthError::HandOverRefused(
@@ -647,7 +647,7 @@ impl AuthService {
             SignedIn {
                 user: user.id,
                 sid: state.family_id,
-                at: at.unwrap_or_else(|| self.clock.now().timestamp()),
+                at: at.unwrap_or_else(|| self.clock.now().as_secs()),
                 setup: typ == TokenType::TwoFactorSetup,
                 remember,
                 impersonator: None,
@@ -732,7 +732,7 @@ impl AuthService {
             session,
             SignedIn {
                 sid: state.family_id,
-                at: self.clock.now().timestamp(),
+                at: self.clock.now().as_secs(),
                 ..signed_in
             },
         )
@@ -824,7 +824,7 @@ impl AuthService {
                 &SignedIn {
                     user: target.id,
                     sid: state.family_id,
-                    at: self.clock.now().timestamp(),
+                    at: self.clock.now().as_secs(),
                     setup: false,
                     remember: false,
                     impersonator: Some(current.user),
@@ -934,7 +934,7 @@ impl AuthService {
             .where_(RefreshToken::EXPIRES_AT.gt(now))
             .first(&self.db)
             .await?
-            .map(|row| row.into_inner().expires_at.timestamp()))
+            .map(|row| row.into_inner().expires_at.as_secs()))
     }
 }
 
