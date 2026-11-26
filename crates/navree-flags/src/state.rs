@@ -1,6 +1,6 @@
 //! [`FlagState`] and [`FlagOverride`]: what is stored about a flag.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,7 +20,7 @@ pub struct FlagState {
     /// Whether the kill switch is on: off for everyone, overrides included.
     pub killed: bool,
     /// When the state last changed (`None` for a flag never changed).
-    pub updated_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<Timestamp>,
     /// Who made the last change, when a user did.
     pub updated_by: Option<Uuid>,
 }

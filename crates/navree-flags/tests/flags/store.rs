@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_db::DatabaseModule;
 use navree_flags::{
     FlagOverride, FlagState, FlagStore, FlagsModule, MemoryFlagStore, Rollout, ScopeType,
@@ -21,7 +21,7 @@ async fn conformance(store: &dyn FlagStore) {
     assert!(store.override_counts(None).await.unwrap().is_empty());
 
     // Global state: insert, then replace by name.
-    let at = Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap();
+    let at = Timestamp::utc(2026, 10, 26, 9, 0, 0).unwrap();
     let actor = Uuid::now_v7();
     let mut state = FlagState {
         everyone: Some(true),

@@ -18,7 +18,7 @@
 
 /// `feature_flags`: the global state of each flag.
 pub mod feature_flag {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::{Deserialize, Serialize};
     use uuid::Uuid;
 
@@ -35,7 +35,7 @@ pub mod feature_flag {
         /// The kill switch.
         pub killed: bool,
         /// When the state last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
         /// Who changed it, when a user did.
         pub updated_by: Option<Uuid>,
     }

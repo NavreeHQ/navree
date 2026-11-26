@@ -4726,7 +4726,6 @@ dependencies = [
 name = "navree-flags"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree-access",
  "navree-api",
@@ -4735,6 +4734,7 @@ dependencies = [
  "navree-cache",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
