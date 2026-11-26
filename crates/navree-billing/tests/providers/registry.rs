@@ -8,7 +8,6 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use hmac::{Hmac, KeyInit, Mac};
 use http::{HeaderMap, HeaderValue};
 use navree_billing::{
@@ -17,6 +16,7 @@ use navree_billing::{
     WebhookAction, WebhookError, WebhookEvent,
 };
 use navree_contracts::Secret;
+use navree_datetime::Timestamp;
 use navree_db::DatabaseModule;
 use navree_events::{EventBus, EventsModule};
 use navree_kernel::{BoxError, BoxFuture};
@@ -140,7 +140,8 @@ impl BillingProvider for AgraPay {
             // The body has no id; `webhook_event_id` reads the header.
             id: String::new(),
             event_type: event["event"].as_str().unwrap_or_default().to_owned(),
-            occurred_at: Timestamp::from_secs(event["created_at"].as_i64().unwrap_or(0)).ok()
+            occurred_at: Timestamp::from_secs(event["created_at"].as_i64().unwrap_or(0))
+                .ok()
                 .ok_or_else(|| decode("bad created_at"))?,
             actions: vec![WebhookAction::Payment(ProviderPayment {
                 id: entity["order_id"].as_str().unwrap_or_default().to_owned(),

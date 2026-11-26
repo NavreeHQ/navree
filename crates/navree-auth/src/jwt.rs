@@ -351,8 +351,8 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use navree_datetime::Timestamp;
     use navree_contracts::FixedClock;
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     use super::*;

@@ -709,10 +709,10 @@ fn a_date_time_picker_reads_what_it_posts_and_nothing_else() {
     let at = day(2026, 11, 12).at(time(14, 30));
     assert_eq!(DateTimePicker::read("2026-11-12T14:30"), Some(at));
     assert_eq!(DateTimePicker::read(" 2026-11-12T14:30 "), Some(at));
-    assert_eq!(
-        DateTimePicker::read("2026-11-12T14:30:15"),
-        { let __date = day(2026, 11, 12); Time::new(14, 30, 15).ok().map(|t| __date.at(t)) }
-    );
+    assert_eq!(DateTimePicker::read("2026-11-12T14:30:15"), {
+        let __date = day(2026, 11, 12);
+        Time::new(14, 30, 15).ok().map(|t| __date.at(t))
+    });
     for refused in [
         "",
         "2026-11-12",
@@ -1055,10 +1055,7 @@ fn very_large_rules_cost_a_bounded_page() {
     let json = json_attr(&big, "data-ui-dates=\"calendar\"", "data-ui-rules");
     assert!(json["r"].as_array().unwrap().len() <= 1000);
     // The server's check still knows every one of them.
-    assert!(
-        many.check(start.add_days(9_999 * 3).unwrap())
-            .is_err()
-    );
+    assert!(many.check(start.add_days(9_999 * 3).unwrap()).is_err());
 }
 
 #[test]

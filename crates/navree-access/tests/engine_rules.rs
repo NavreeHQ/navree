@@ -673,8 +673,8 @@ fn build_panics_on_an_invalid_rule() {
 
 #[test]
 fn cond_values_from_uuids_and_timestamps() {
-    use navree_datetime::Timestamp;
     use navree_access::engine::Cond;
+    use navree_datetime::Timestamp;
 
     let user = uuid::Uuid::from_u128(0x0190_aaaa_bbbb_7ccc_8ddd_eeee_ffff_0001);
     let owned = field("author_id").eq(user);

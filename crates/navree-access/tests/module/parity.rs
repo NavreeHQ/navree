@@ -7,11 +7,11 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use navree_datetime::{Span, Timestamp};
 use navree_access::{
     Ability, Accessible, ActionMarker, Cond, Conditions, Delete, Read, Rule, Subject, TypedColumns,
     Update, row_json,
 };
+use navree_datetime::{Span, Timestamp};
 use navree_db::navree_schema::{Dialect, Schema};
 use navree_db::record::{self, Filter};
 use navree_db::{Db, Executor, Kind, Record};
@@ -61,8 +61,7 @@ struct Pools {
 
 impl Pools {
     fn new() -> Self {
-        let base = Timestamp::parse_rfc3339("2026-10-25T12:00:00Z")
-            .unwrap();
+        let base = Timestamp::parse_rfc3339("2026-10-25T12:00:00Z").unwrap();
         let mut owners = [Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7()];
         owners.sort();
         Pools {
@@ -83,7 +82,8 @@ impl Pools {
 
     fn time(&self, seed: u8) -> Value {
         json!(
-            self.times[usize::from(seed) % 5].to_rfc3339_with(navree_datetime::Precision::Micros, true)
+            self.times[usize::from(seed) % 5]
+                .to_rfc3339_with(navree_datetime::Precision::Micros, true)
         )
     }
 }

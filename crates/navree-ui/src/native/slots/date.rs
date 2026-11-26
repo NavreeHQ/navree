@@ -270,7 +270,10 @@ mod tests {
                     DateRules::new()
                         .disable_dates([day(2026, 11, 14), day(2026, 11, 16)])
                         .disable_range(day(2026, 11, 20), day(2026, 11, 22))
-                        .disable_weekdays([navree_datetime::Weekday::Sunday, navree_datetime::Weekday::Saturday]),
+                        .disable_weekdays([
+                            navree_datetime::Weekday::Sunday,
+                            navree_datetime::Weekday::Saturday,
+                        ]),
                 )
                 .today(day(2026, 11, 12)),
         ));

@@ -97,11 +97,19 @@ fuzz_target!(|data: &[u8]| {
     };
     match generate(text) {
         Ok(generated) => {
-            assert!(generated.schema.starts_with("/**\n * This file was auto-generated"));
+            assert!(
+                generated
+                    .schema
+                    .starts_with("/**\n * This file was auto-generated")
+            );
             for name in ["paths", "webhooks", "components", "$defs", "operations"] {
                 assert!(
-                    generated.schema.contains(&format!("\nexport type {name} = "))
-                        || generated.schema.contains(&format!("\nexport interface {name} {{")),
+                    generated
+                        .schema
+                        .contains(&format!("\nexport type {name} = "))
+                        || generated
+                            .schema
+                            .contains(&format!("\nexport interface {name} {{")),
                     "{name} is not declared"
                 );
             }

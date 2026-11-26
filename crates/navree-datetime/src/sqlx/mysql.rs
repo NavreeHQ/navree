@@ -25,12 +25,7 @@ fn mysql_binary_type_info(column_type: &str) -> MySqlTypeInfo {
 
 fn date_time_encoded_len(dt: DateTime) -> u8 {
     let time = dt.time();
-    match (
-        time.hour(),
-        time.minute(),
-        time.second(),
-        time.nanosecond(),
-    ) {
+    match (time.hour(), time.minute(), time.second(), time.nanosecond()) {
         (0, 0, 0, 0) => 4,
         (_, _, _, 0) => 7,
         _ => 11,
@@ -311,7 +306,9 @@ impl<'r> Decode<'r, MySql> for Time {
     fn decode(value: MySqlValueRef<'r>) -> Result<Self, BoxDynError> {
         let time = MySqlTime::decode(value)?;
         if time.sign() != MySqlTimeSign::Positive {
-            return Err(format!("Cannot convert negative `MySqlTime` value to `Time`: {time}").into());
+            return Err(
+                format!("Cannot convert negative `MySqlTime` value to `Time`: {time}").into(),
+            );
         }
         let hour = u8::try_from(time.hours())
             .map_err(|_| format!("Cannot convert `MySqlTime` value to `Time`: {time}"))?;

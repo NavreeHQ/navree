@@ -6,10 +6,10 @@
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use navree_datetime::Timestamp;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, MANAGE, Rules};
 use navree_contracts::{AuthVia, Clock, FixedClock, Principal};
 use navree_crypto::{CryptoModule, generate_key};
+use navree_datetime::Timestamp;
 use navree_db::DatabaseModule;
 use navree_directory::{
     ChangeAction, CreatedConnection, Directory, DirectoryFake, DirectoryModule, DirectorySink,
@@ -31,8 +31,7 @@ pub const OTHER: Uuid = Uuid::from_u128(2);
 
 /// 2026-10-28T08:00:00Z.
 pub fn start() -> Timestamp {
-    Timestamp::parse_rfc3339("2026-10-28T08:00:00Z")
-        .unwrap()
+    Timestamp::parse_rfc3339("2026-10-28T08:00:00Z").unwrap()
 }
 
 pub fn principal(user_id: Uuid) -> Principal {

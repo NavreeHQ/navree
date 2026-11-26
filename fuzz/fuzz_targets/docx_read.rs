@@ -24,8 +24,8 @@ const RELATIONSHIPS: &str = r#"<?xml version="1.0" encoding="UTF-8"?><Relationsh
 /// A package whose main part is `document`.
 fn package(document: &[u8]) -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored);
+    let options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     for (name, data) in [
         ("[Content_Types].xml", CONTENT_TYPES.as_bytes()),
         ("_rels/.rels", RELATIONSHIPS.as_bytes()),

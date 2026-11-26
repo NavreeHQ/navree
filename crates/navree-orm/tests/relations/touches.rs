@@ -3,8 +3,8 @@
 //! many-to-many writes touch the parent when the related model touches the
 //! relation.
 
-use navree_datetime::Span;
 use navree_contracts::FixedClock;
+use navree_datetime::Span;
 use navree_db::Db;
 use navree_orm::prelude::*;
 use navree_orm::relations::{is_ignoring_touch, without_touching, without_touching_on};

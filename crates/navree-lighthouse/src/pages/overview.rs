@@ -198,7 +198,12 @@ fn requests_chart(overview: &Overview) -> Node {
     }
     let mut chart = Chart::bar("Requests and exceptions")
         .hide_title()
-        .times(overview.timeline.iter().map(|point| point.at.date_time_utc()))
+        .times(
+            overview
+                .timeline
+                .iter()
+                .map(|point| point.at.date_time_utc()),
+        )
         .series(Series::new(
             "Requests",
             overview.timeline.iter().map(|point| point.count),

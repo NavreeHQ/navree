@@ -1,8 +1,8 @@
 //! [`SendNotificationJob`]: one rendered notification on one channel.
 
-use navree_datetime::Timestamp;
 use navree_config::DriverName;
 use navree_contracts::{BoxError, Job, JobContext};
+use navree_datetime::Timestamp;
 use navree_mail::TemplateMail;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};

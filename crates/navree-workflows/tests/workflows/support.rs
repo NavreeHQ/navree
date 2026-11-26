@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use navree_contracts::{Backoff, Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, Db};
 use navree_events::{Event, EventBus, EventsModule};
 use navree_kernel::{BoxError, Module, ModuleBuilder};

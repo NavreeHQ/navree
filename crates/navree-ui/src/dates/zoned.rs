@@ -184,8 +184,8 @@ fn gap<Z: WallZone>(local: DateTime, tz: &Z) -> Resolved {
     let by = |seconds: i64| local.add(Span::seconds(seconds));
     // The offsets a day and a half either side are the ones before and after.
     let day_and_a_half = 36 * 3600;
-    let before = by(-day_and_a_half)
-        .map_or_else(|| offset_seconds(tz, local), |at| offset_seconds(tz, at));
+    let before =
+        by(-day_and_a_half).map_or_else(|| offset_seconds(tz, local), |at| offset_seconds(tz, at));
     let after = by(day_and_a_half).map_or(before, |at| offset_seconds(tz, at));
     // The change happened in (local - after, local - before]: find the first second at the
     // new offset.

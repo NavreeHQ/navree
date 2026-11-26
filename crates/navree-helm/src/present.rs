@@ -1,7 +1,7 @@
 //! Turning [`RawRecord`]s into what the screens and the API show.
 
-use navree_datetime::{Span, Timestamp, Zoned};
 use navree_access::{DELETE, READ, UPDATE};
+use navree_datetime::{Span, Timestamp, Zoned};
 use navree_http::AppError;
 use navree_storage::Storage;
 use serde::Serialize;
@@ -386,11 +386,7 @@ async fn display(
         FieldKind::DateTime => {
             let text = key_text(value).unwrap_or_default();
             let pretty = Zoned::parse_rfc3339(&text)
-                .map(|d| {
-                    d.timestamp()
-                        .format("%-d %b %Y %H:%M UTC")
-                        .to_string()
-                })
+                .map(|d| d.timestamp().format("%-d %b %Y %H:%M UTC").to_string())
                 .unwrap_or_else(|_| text.clone());
             Display::Time {
                 iso: text,
@@ -429,10 +425,7 @@ async fn display(
             let url = match storage.and_then(|s| s.disk(disk).ok()) {
                 Some(disk) => match disk.url(&path) {
                     Ok(url) => Some(url),
-                    Err(_) => disk
-                        .temporary_url(&path, now + Span::hours(1))
-                        .await
-                        .ok(),
+                    Err(_) => disk.temporary_url(&path, now + Span::hours(1)).await.ok(),
                 },
                 None => None,
             };

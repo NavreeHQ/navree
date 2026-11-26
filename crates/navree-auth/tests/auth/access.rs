@@ -4,9 +4,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use navree_auth::{JwtService, TokenType, User};
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_orm::Model as _;
 use serde_json::{Value, json};

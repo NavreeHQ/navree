@@ -4,7 +4,6 @@
 
 use std::borrow::Cow;
 
-
 use super::{Lowerer, normalize_operator};
 use crate::error::{OrmError, Result};
 use crate::ir::{

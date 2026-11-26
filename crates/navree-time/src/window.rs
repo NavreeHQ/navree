@@ -297,7 +297,8 @@ fn parse_time(text: &str, allow_midnight: bool) -> Result<Option<Time>, WindowEr
     let minute = digits(minute, 2)
         .filter(|_| minute.len() == 2)
         .ok_or_else(invalid)?;
-    Time::new(hour, minute, 0).ok()
+    Time::new(hour, minute, 0)
+        .ok()
         .map(Some)
         .ok_or_else(invalid)
 }
@@ -324,14 +325,8 @@ mod tests {
 
     #[test]
     fn times_are_strict_hh_mm() {
-        assert_eq!(
-            parse_time("09:00", false).unwrap(),
-            Time::new(9, 0, 0).ok()
-        );
-        assert_eq!(
-            parse_time("7:05", false).unwrap(),
-            Time::new(7, 5, 0).ok()
-        );
+        assert_eq!(parse_time("09:00", false).unwrap(), Time::new(9, 0, 0).ok());
+        assert_eq!(parse_time("7:05", false).unwrap(), Time::new(7, 5, 0).ok());
         assert_eq!(parse_time("24:00", true).unwrap(), None);
         for bad in ["24:00", "12:5", "12", "noon", "", "12:60", "-1:00"] {
             assert!(parse_time(bad, false).is_err(), "{bad}");

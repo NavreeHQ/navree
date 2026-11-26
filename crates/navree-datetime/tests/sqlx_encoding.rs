@@ -8,15 +8,14 @@
     feature = "sqlx-sqlite"
 ))]
 
+use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned};
 #[cfg(any(feature = "sqlx-postgres", feature = "sqlx-sqlite"))]
 use navree_datetime::{Offset, Zone};
-use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned};
 use sqlx::{Encode, Type, TypeInfo as _};
 
 fn recorded(file: &str) -> Vec<serde_json::Value> {
     let path = format!("{}/tests/golden/{file}", env!("CARGO_MANIFEST_DIR"));
-    let content =
-        std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"));
+    let content = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"));
     content
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -142,7 +141,8 @@ fn the_never_expires_value_round_trips() {
     // SQLite text: full nanosecond precision with `+00:00`, byte for byte.
     let bound = sqlite_text(&never_expires).expect("SQLite encode Timestamp::MAX");
     assert_eq!(bound, "+262142-12-31T23:59:59.999999999+00:00");
-    let decoded_sqlite = decode_sqlite_timestamp_text(&bound).expect("SQLite decode Timestamp::MAX");
+    let decoded_sqlite =
+        decode_sqlite_timestamp_text(&bound).expect("SQLite decode Timestamp::MAX");
     assert_eq!(decoded_sqlite, never_expires);
 
     // PostgreSQL binary: 8-byte big-endian microseconds since 2000-01-01T00:00:00Z.
@@ -196,7 +196,10 @@ fn sqlx_type_names_are_chronos() {
 
             match text(&line, "type") {
                 "DateTime<Utc>" => {
-                    assert_eq!(<Timestamp as Type<Postgres>>::type_info().name(), expected_info);
+                    assert_eq!(
+                        <Timestamp as Type<Postgres>>::type_info().name(),
+                        expected_info
+                    );
                     assert_eq!(
                         <Timestamp as PgHasArrayType>::array_type_info().name(),
                         expected_array
@@ -215,7 +218,10 @@ fn sqlx_type_names_are_chronos() {
                     assert_eq!(compatible_names::<Postgres, Zoned>(&infos), expected_compat);
                 }
                 "NaiveDateTime" => {
-                    assert_eq!(<DateTime as Type<Postgres>>::type_info().name(), expected_info);
+                    assert_eq!(
+                        <DateTime as Type<Postgres>>::type_info().name(),
+                        expected_info
+                    );
                     assert_eq!(
                         <DateTime as PgHasArrayType>::array_type_info().name(),
                         expected_array
@@ -279,7 +285,10 @@ fn sqlx_type_names_are_chronos() {
 
             match text(&line, "type") {
                 "DateTime<Utc>" => {
-                    assert_eq!(<Timestamp as Type<MySql>>::type_info().name(), expected_info);
+                    assert_eq!(
+                        <Timestamp as Type<MySql>>::type_info().name(),
+                        expected_info
+                    );
                     assert_eq!(<Zoned as Type<MySql>>::type_info().name(), expected_info);
                     assert_eq!(
                         compatible_names::<MySql, Timestamp>(&infos),
@@ -332,7 +341,10 @@ fn sqlx_type_names_are_chronos() {
 
             match text(&line, "type") {
                 "DateTime<Utc>" => {
-                    assert_eq!(<Timestamp as Type<Sqlite>>::type_info().name(), expected_info);
+                    assert_eq!(
+                        <Timestamp as Type<Sqlite>>::type_info().name(),
+                        expected_info
+                    );
                     assert_eq!(
                         compatible_names::<Sqlite, Timestamp>(&infos),
                         expected_compat
@@ -343,7 +355,10 @@ fn sqlx_type_names_are_chronos() {
                     assert_eq!(compatible_names::<Sqlite, Zoned>(&infos), expected_compat);
                 }
                 "NaiveDateTime" => {
-                    assert_eq!(<DateTime as Type<Sqlite>>::type_info().name(), expected_info);
+                    assert_eq!(
+                        <DateTime as Type<Sqlite>>::type_info().name(),
+                        expected_info
+                    );
                     assert_eq!(
                         compatible_names::<Sqlite, DateTime>(&infos),
                         expected_compat
@@ -433,14 +448,19 @@ fn sqlx_encodings_are_chronos_bytes() {
                     assert_eq!(hex(&buf), expected, "{line}");
                     assert_eq!(
                         decode_postgres_time_binary(&buf).unwrap(),
-                        value.with_nanos(value.nanosecond() / 1_000 * 1_000).unwrap(),
+                        value
+                            .with_nanos(value.nanosecond() / 1_000 * 1_000)
+                            .unwrap(),
                         "{line}"
                     );
                 }
                 other => panic!("unexpected Postgres type `{other}` in {line}"),
             }
         }
-        assert!(checked > 5_000, "expected full postgres.jsonl, checked {checked}");
+        assert!(
+            checked > 5_000,
+            "expected full postgres.jsonl, checked {checked}"
+        );
     }
 
     #[cfg(feature = "sqlx-mysql")]
@@ -516,7 +536,10 @@ fn sqlx_encodings_are_chronos_bytes() {
                 other => panic!("unexpected MySQL type `{other}` in {line}"),
             }
         }
-        assert!(checked > 4_000, "expected full mysql.jsonl, checked {checked}");
+        assert!(
+            checked > 4_000,
+            "expected full mysql.jsonl, checked {checked}"
+        );
     }
 
     #[cfg(feature = "sqlx-sqlite")]
@@ -597,6 +620,9 @@ fn sqlx_encodings_are_chronos_bytes() {
                 other => panic!("unexpected SQLite type `{other}` in {line}"),
             }
         }
-        assert!(checked > 6_000, "expected full sqlite.jsonl, checked {checked}");
+        assert!(
+            checked > 6_000,
+            "expected full sqlite.jsonl, checked {checked}"
+        );
     }
 }

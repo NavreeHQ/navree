@@ -5,9 +5,9 @@
 //! facade's `tests/mail_inbound_docs.rs`.
 
 use bytes::Bytes;
-use navree_datetime::Timestamp;
 use navree_config::{Config, ConfigSources};
 use navree_contracts::Secret;
+use navree_datetime::Timestamp;
 use navree_events::Event;
 use navree_mail::inbound::{
     Address, Attachment, Compose, Envelope, Header, INVALID_MAIL_CODE, INVALID_REPLY_TOKEN_CODE,

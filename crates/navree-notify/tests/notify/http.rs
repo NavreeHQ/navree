@@ -3,8 +3,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_notify::{Channel, Notifier, NotifyOptions};
 use navree_testing::{TestApp, principal};
 use serde_json::{Value, json};

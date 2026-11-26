@@ -235,11 +235,7 @@ impl Aggregates {
     /// `now` (they are written; no new observation can land in them).
     pub(crate) fn evict(&mut self, now: Timestamp) {
         self.rows.retain(|key, (_, dirty)| {
-            *dirty
-                || key.bucket
-                    + Span::seconds(i64::from(key.resolution))
-                    + Span::minutes(2)
-                    > now
+            *dirty || key.bucket + Span::seconds(i64::from(key.resolution)) + Span::minutes(2) > now
         });
     }
 

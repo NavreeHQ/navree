@@ -6,9 +6,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use navree_datetime::__private::{Entry, LocalPeriods, Period};
-use navree_datetime::{
-    DateTime, Disambiguation, Error, ErrorKind, Offset, Span, Timestamp, Zoned,
-};
+use navree_datetime::{DateTime, Disambiguation, Error, ErrorKind, Offset, Span, Timestamp, Zoned};
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -82,9 +80,7 @@ impl<T> LocalTime<T> {
         match self {
             LocalTime::None => LocalTime::None,
             LocalTime::Single(value) => LocalTime::Single(f(value)),
-            LocalTime::Ambiguous(earliest, latest) => {
-                LocalTime::Ambiguous(f(earliest), f(latest))
-            }
+            LocalTime::Ambiguous(earliest, latest) => LocalTime::Ambiguous(f(earliest), f(latest)),
         }
     }
 }
@@ -159,11 +155,13 @@ impl Tz {
                 Some(pair) => LocalTime::Single(pair),
                 None => LocalTime::None,
             },
-            LocalTime::Ambiguous(earliest, latest) => match (instant_at(earliest), instant_at(latest)) {
-                (Some(a), Some(b)) => LocalTime::Ambiguous(a, b),
-                (Some(a), None) | (None, Some(a)) => LocalTime::Single(a),
-                (None, None) => LocalTime::None,
-            },
+            LocalTime::Ambiguous(earliest, latest) => {
+                match (instant_at(earliest), instant_at(latest)) {
+                    (Some(a), Some(b)) => LocalTime::Ambiguous(a, b),
+                    (Some(a), None) | (None, Some(a)) => LocalTime::Single(a),
+                    (None, None) => LocalTime::None,
+                }
+            }
         }
     }
 
@@ -190,7 +188,9 @@ impl Tz {
                 }
             },
             LocalPeriods::Gap => match how {
-                Disambiguation::Compatible | Disambiguation::Later => self.0.offset_before_gap(wall),
+                Disambiguation::Compatible | Disambiguation::Later => {
+                    self.0.offset_before_gap(wall)
+                }
                 Disambiguation::Earlier => self.0.offset_after_gap(wall),
                 Disambiguation::Reject => {
                     return Err(Error::new(

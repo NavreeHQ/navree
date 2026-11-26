@@ -662,8 +662,7 @@ async fn the_nightly_reset_runs_at_reset_at() {
 
     let scheduler = world.app.get::<Scheduler>().await;
     let tick = |hour: u8, minute: u8| {
-        navree_datetime::Timestamp::utc(2026, 10, 27, hour, minute, 0)
-            .unwrap()
+        navree_datetime::Timestamp::utc(2026, 10, 27, hour, minute, 0).unwrap()
     };
     world.clock.set(tick(3, 29));
     scheduler.tick(tick(3, 29)).await.unwrap();
@@ -692,8 +691,7 @@ async fn read_only_demos_are_not_reset_on_the_schedule() {
         .send()
         .await
         .assert_status(200);
-    let at = navree_datetime::Timestamp::utc(2026, 10, 27, 3, 30, 0)
-        .unwrap();
+    let at = navree_datetime::Timestamp::utc(2026, 10, 27, 3, 30, 0).unwrap();
     world.clock.set(at);
     world.app.get::<Scheduler>().await.tick(at).await.unwrap();
     assert_eq!(world.deal_titles(demo.id).await.len(), 4);

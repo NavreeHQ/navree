@@ -571,7 +571,9 @@ impl Report {
             };
             let (period, group) = (key.div_euclid(width), key.rem_euclid(width) as usize);
             let index = if timescale {
-                Timestamp::from_secs(period).ok().and_then(|at| self.bucket_of(at.max(start)))
+                Timestamp::from_secs(period)
+                    .ok()
+                    .and_then(|at| self.bucket_of(at.max(start)))
             } else {
                 usize::try_from(period).ok().filter(|i| *i < count)
             };
@@ -595,7 +597,8 @@ impl Report {
         matches!(time, TimeColumn::Timestamp(_))
             && (self.grain() == Grain::Hour
                 || (self.zone().is_some()
-                    && (self.grain() != Grain::Week || self.week_start() == navree_datetime::Weekday::Monday)))
+                    && (self.grain() != Grain::Week
+                        || self.week_start() == navree_datetime::Weekday::Monday)))
     }
 
     /// `EXTRACT(EPOCH FROM time_bucket(..))`: the first second of each row's bucket.
@@ -648,9 +651,7 @@ impl Report {
         let on = |unit: i64| {
             self.buckets().iter().all(|b| {
                 [b.start, b.end].iter().all(|at| {
-                    *at == latest
-                        || (at.subsec_nanos() == 0
-                            && at.as_secs().rem_euclid(unit) == 0)
+                    *at == latest || (at.subsec_nanos() == 0 && at.as_secs().rem_euclid(unit) == 0)
                 })
             })
         };

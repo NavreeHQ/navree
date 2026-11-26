@@ -4,9 +4,9 @@
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
-use navree_datetime::Span;
 use navree_contracts::{Dispatcher, Job as _, JobEnvelope, Secret};
 use navree_crypto::{random_token, sha256_hex};
+use navree_datetime::Span;
 use navree_db::Uow;
 use navree_integrations::{Level, Owner};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle};
@@ -705,8 +705,7 @@ impl Directory {
             .get(&*rt.db)
             .await?
             .into_models();
-        let stale_before =
-            rt.now() - Span::minutes(i64::from(rt.options.sync.stale_after_mins));
+        let stale_before = rt.now() - Span::minutes(i64::from(rt.options.sync.stale_after_mins));
         for run in going {
             if run.created_at > stale_before {
                 return Err(DirectoryError::SyncRunning);

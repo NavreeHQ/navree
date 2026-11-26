@@ -3,14 +3,11 @@
 
 #![cfg(feature = "serde")]
 
-use navree_datetime::{
-    Date, DateTime, Month, Offset, Span, Time, Timestamp, Weekday, Zone, Zoned,
-};
+use navree_datetime::{Date, DateTime, Month, Offset, Span, Time, Timestamp, Weekday, Zone, Zoned};
 
 fn recorded(file: &str) -> Vec<serde_json::Value> {
     let path = format!("{}/tests/golden/{file}", env!("CARGO_MANIFEST_DIR"));
-    let content =
-        std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"));
+    let content = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"));
     content
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -228,8 +225,8 @@ fn serde_writes_and_reads_what_chrono_wrote() {
 
         match text(&line, "type") {
             "DateTime<Utc>" => {
-                let parsed: Timestamp = serde_json::from_str(input)
-                    .unwrap_or_else(|error| panic!("{line}: {error}"));
+                let parsed: Timestamp =
+                    serde_json::from_str(input).unwrap_or_else(|error| panic!("{line}: {error}"));
                 let expected_nanos = if leap {
                     999_999_999
                 } else {
@@ -239,8 +236,8 @@ fn serde_writes_and_reads_what_chrono_wrote() {
                 assert_eq!(parsed.subsec_nanos(), expected_nanos, "{line}");
             }
             "DateTime<FixedOffset>" => {
-                let parsed: Zoned = serde_json::from_str(input)
-                    .unwrap_or_else(|error| panic!("{line}: {error}"));
+                let parsed: Zoned =
+                    serde_json::from_str(input).unwrap_or_else(|error| panic!("{line}: {error}"));
                 let expected_nanos = if leap {
                     999_999_999
                 } else {
@@ -248,13 +245,17 @@ fn serde_writes_and_reads_what_chrono_wrote() {
                 };
                 let expected_offset = i32::try_from(number(&line, "offset")).unwrap();
                 assert!(parsed.zone().is_fixed(), "{line}");
-                assert_eq!(parsed.timestamp().as_secs(), number(&line, "secs"), "{line}");
+                assert_eq!(
+                    parsed.timestamp().as_secs(),
+                    number(&line, "secs"),
+                    "{line}"
+                );
                 assert_eq!(parsed.timestamp().subsec_nanos(), expected_nanos, "{line}");
                 assert_eq!(parsed.offset().seconds(), expected_offset, "{line}");
             }
             "NaiveDateTime" => {
-                let parsed: DateTime = serde_json::from_str(input)
-                    .unwrap_or_else(|error| panic!("{line}: {error}"));
+                let parsed: DateTime =
+                    serde_json::from_str(input).unwrap_or_else(|error| panic!("{line}: {error}"));
                 let expected_nanos = if leap {
                     999_999_999
                 } else {
@@ -279,13 +280,13 @@ fn serde_writes_and_reads_what_chrono_wrote() {
                 assert_eq!(parsed.time().nanosecond(), expected_nanos, "{line}");
             }
             "NaiveDate" => {
-                let parsed: Date = serde_json::from_str(input)
-                    .unwrap_or_else(|error| panic!("{line}: {error}"));
+                let parsed: Date =
+                    serde_json::from_str(input).unwrap_or_else(|error| panic!("{line}: {error}"));
                 assert_eq!(parsed, date_of(&line), "{line}");
             }
             "NaiveTime" => {
-                let parsed: Time = serde_json::from_str(input)
-                    .unwrap_or_else(|error| panic!("{line}: {error}"));
+                let parsed: Time =
+                    serde_json::from_str(input).unwrap_or_else(|error| panic!("{line}: {error}"));
                 let expected_nanos = if leap {
                     999_999_999
                 } else {
@@ -305,13 +306,13 @@ fn serde_writes_and_reads_what_chrono_wrote() {
                 assert_eq!(parsed.nanosecond(), expected_nanos, "{line}");
             }
             "TimeDelta" => {
-                let parsed: Span = serde_json::from_str(input)
-                    .unwrap_or_else(|error| panic!("{line}: {error}"));
+                let parsed: Span =
+                    serde_json::from_str(input).unwrap_or_else(|error| panic!("{line}: {error}"));
                 assert_eq!(parsed, span_of(&line), "{line}");
             }
             "FixedOffset" => {
-                let parsed: Offset = serde_json::from_str(input)
-                    .unwrap_or_else(|error| panic!("{line}: {error}"));
+                let parsed: Offset =
+                    serde_json::from_str(input).unwrap_or_else(|error| panic!("{line}: {error}"));
                 assert_eq!(
                     i64::from(parsed.seconds()),
                     number(&line, "offset"),
@@ -319,8 +320,8 @@ fn serde_writes_and_reads_what_chrono_wrote() {
                 );
             }
             "Weekday" => {
-                let parsed: Weekday = serde_json::from_str(input)
-                    .unwrap_or_else(|error| panic!("{line}: {error}"));
+                let parsed: Weekday =
+                    serde_json::from_str(input).unwrap_or_else(|error| panic!("{line}: {error}"));
                 assert_eq!(
                     i64::from(parsed.days_from_monday()),
                     number(&line, "from_monday"),
@@ -328,8 +329,8 @@ fn serde_writes_and_reads_what_chrono_wrote() {
                 );
             }
             "Month" => {
-                let parsed: Month = serde_json::from_str(input)
-                    .unwrap_or_else(|error| panic!("{line}: {error}"));
+                let parsed: Month =
+                    serde_json::from_str(input).unwrap_or_else(|error| panic!("{line}: {error}"));
                 assert_eq!(
                     i64::from(parsed.number()),
                     number(&line, "number"),

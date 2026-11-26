@@ -398,7 +398,9 @@ fn line_chart_default() -> Chart {
 }
 
 fn line_chart_hours() -> Chart {
-    let midnight = Date::new(2026, 11, 3).unwrap_or_default().at(Time::MIDNIGHT);
+    let midnight = Date::new(2026, 11, 3)
+        .unwrap_or_default()
+        .at(Time::MIDNIGHT);
     Chart::line("Orders by hour")
         .id("line-chart-hours")
         .description("3 November, on the clock of Asia/Kolkata")
@@ -1069,8 +1071,7 @@ fn reports_default() -> Stack {
     let start = report.bounds().0;
     let orders: Vec<Timestamp> = (0..7)
         .flat_map(|day| {
-            (0..40 + day * 7 % 23 * 3)
-                .map(move |k| start + Span::days(day) + Span::minutes(k * 12))
+            (0..40 + day * 7 % 23 * 3).map(move |k| start + Span::days(day) + Span::minutes(k * 12))
         })
         .collect();
     let placed = report.count(orders);
@@ -1133,8 +1134,7 @@ fn reports_refused() -> Stack {
     let start = report.bounds().0;
     let orders: Vec<Timestamp> = (0..30)
         .flat_map(|day| {
-            (0..30 + day * 7 % 23 * 2)
-                .map(move |k| start + Span::days(day) + Span::minutes(k * 18))
+            (0..30 + day * 7 % 23 * 2).map(move |k| start + Span::days(day) + Span::minutes(k * 18))
         })
         .collect();
     let placed = report.count(orders);
@@ -1165,8 +1165,7 @@ fn reports_live() -> Card {
     let start = report.bounds().0;
     let orders: Vec<Timestamp> = (0..7)
         .flat_map(|day| {
-            (0..40 + day * 7 % 23 * 3)
-                .map(move |k| start + Span::days(day) + Span::minutes(k * 12))
+            (0..40 + day * 7 % 23 * 3).map(move |k| start + Span::days(day) + Span::minutes(k * 12))
         })
         .collect();
     let placed = report.count(orders);

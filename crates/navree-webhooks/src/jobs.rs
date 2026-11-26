@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use navree_contracts::{BoxError, Job, JobContext};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;

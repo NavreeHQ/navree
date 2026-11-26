@@ -31,7 +31,6 @@
 
 use std::collections::BTreeMap;
 
-use navree_datetime::Timestamp;
 use http::Method;
 use navree_billing::{
     BillingProvider, CheckoutRequest, Interval, Money, NewCustomer, PADDLE_API_VERSION,
@@ -39,6 +38,7 @@ use navree_billing::{
     RefundReason, RefundRequest, RefundStatus, STRIPE_API_VERSION, STRIPE_EVENTS, StripeProvider,
 };
 use navree_contracts::Secret;
+use navree_datetime::Timestamp;
 use navree_http_client::{HttpClient, HttpClientOptions};
 use serde_json::{Value, json};
 use uuid::Uuid;

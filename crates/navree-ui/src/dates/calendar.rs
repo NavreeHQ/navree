@@ -439,10 +439,7 @@ impl Calendar {
             .attr("data-mode", self.mode.as_str())
             .attr("data-month", format!("{year:04}-{month:02}"))
             .attr("data-today", self.today.to_string())
-            .attr(
-                "data-week-start",
-                i64::from(first_day.days_from_sunday()),
-            )
+            .attr("data-week-start", i64::from(first_day.days_from_sunday()))
             .attr("data-months", i64::from(self.months))
             .attr("data-ui-loc", self.locale.client().to_string())
             .attr("data-ui-rules", self.rules_json(year, month))

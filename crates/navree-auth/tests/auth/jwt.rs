@@ -8,13 +8,13 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use navree_datetime::Timestamp;
 use navree_auth::{
     AuthError, JwtOptions, JwtService, LEEWAY_SECS, MAX_TOKEN_LEN, SessionClaims, SignInMethod,
     TokenType,
 };
 use navree_contracts::FixedClock;
 use navree_crypto::jose::{Algorithm, Jws, SigningKey};
+use navree_datetime::Timestamp;
 use ring::hmac;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
@@ -133,8 +133,7 @@ fn legacy() -> Value {
 
 fn legacy_service(fixture: &Value, which: &str) -> (JwtService, Arc<FixedClock>) {
     let clock = Arc::new(FixedClock::new(
-        Timestamp::from_secs(fixture["issued_at"].as_i64().unwrap())
-            .unwrap(),
+        Timestamp::from_secs(fixture["issued_at"].as_i64().unwrap()).unwrap(),
     ));
     let secret = fixture["secret"].as_str().unwrap().as_bytes();
     let options = if which == "crm" {
@@ -249,10 +248,7 @@ fn tokens_minted_by_the_previous_implementation_still_verify() {
         // The expiry is the same: valid through exp + leeway, then expired.
         clock.set(Timestamp::from_secs(issued_at + 900 + LEEWAY_SECS).unwrap());
         assert!(jwt.verify(token, expected_type).is_ok(), "{name}");
-        clock.set(
-            Timestamp::from_secs(issued_at + 900 + LEEWAY_SECS + 1)
-                .unwrap(),
-        );
+        clock.set(Timestamp::from_secs(issued_at + 900 + LEEWAY_SECS + 1).unwrap());
         assert!(matches!(
             jwt.verify(token, expected_type),
             Err(AuthError::TokenExpired)

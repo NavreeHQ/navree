@@ -4,9 +4,9 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use navree_datetime::Timestamp;
 use navree_config::DriverName;
 use navree_contracts::{Broadcaster, Clock, Dispatcher, JobEnvelope};
+use navree_datetime::Timestamp;
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_mail::{MailScope, Mailable, Mailer};

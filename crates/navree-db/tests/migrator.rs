@@ -274,7 +274,10 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
     );
     let applied_at = after[0].applied_at.unwrap();
     assert!(
-        (navree_datetime::Timestamp::now() - applied_at).as_minutes().abs() < 5,
+        (navree_datetime::Timestamp::now() - applied_at)
+            .as_minutes()
+            .abs()
+            < 5,
         "{applied_at}"
     );
 

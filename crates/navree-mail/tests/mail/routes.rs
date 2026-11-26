@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use navree_datetime::Timestamp;
 use http::Method;
 use navree_config::__private::register_in;
 use navree_config::DriverName;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::PageQuery;
 use navree_http_client::{FakeResponse, FakeServer, HttpClient};
 use navree_mail::{
@@ -388,8 +388,7 @@ fn sns_message(name: &str) -> Value {
 
 /// 2026-10-27 at `time`, UTC (the bounce was published at 10:00:02).
 fn on_the_27th(time: &str) -> Timestamp {
-    Timestamp::parse_rfc3339(&format!("2026-10-27T{time}Z"))
-        .unwrap()
+    Timestamp::parse_rfc3339(&format!("2026-10-27T{time}Z")).unwrap()
 }
 
 /// The SES events route on topic `SES_TOPIC`, a fake client that serves

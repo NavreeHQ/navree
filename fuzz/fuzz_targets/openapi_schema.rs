@@ -19,7 +19,10 @@ fuzz_target!(|data: &[u8]| {
             assert_eq!(schema.to_value(), value);
             let nullable = schema.nullable();
             let written = nullable.to_value();
-            assert_eq!(Schema::from_value(written.clone()).unwrap().to_value(), written);
+            assert_eq!(
+                Schema::from_value(written.clone()).unwrap().to_value(),
+                written
+            );
         }
         Err(_) => assert!(!value.is_object()),
     }

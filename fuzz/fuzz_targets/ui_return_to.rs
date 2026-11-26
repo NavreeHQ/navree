@@ -51,7 +51,10 @@ fuzz_target!(|data: &[u8]| {
         assert!(address.starts_with('/'));
         assert!(!address.starts_with("//") && !address.starts_with("/\\"));
         assert!(address.len() <= navree_ui::pages::return_to::MOST);
-        for base in ["https://site.example/", "http://site.example:8080/a/b/c?x#y"] {
+        for base in [
+            "https://site.example/",
+            "http://site.example:8080/a/b/c?x#y",
+        ] {
             let base = url::Url::parse(base).unwrap();
             let joined = base.join(address).expect("an accepted address resolves");
             assert_eq!(joined.scheme(), base.scheme());

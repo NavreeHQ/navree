@@ -89,9 +89,7 @@ impl Entry {
             return None;
         }
         let at = BY_LOWER
-            .binary_search_by(|&entry| {
-                cmp_ignoring_ascii_case(ENTRIES[usize::from(entry)].0, name)
-            })
+            .binary_search_by(|&entry| cmp_ignoring_ascii_case(ENTRIES[usize::from(entry)].0, name))
             .ok()?;
         Some(Entry(BY_LOWER[at]))
     }

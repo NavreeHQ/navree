@@ -4,8 +4,8 @@
 
 use std::time::Duration;
 
-use navree_datetime::Span;
 use navree_contracts::{Dispatcher, ZoneLevel, ZoneOwner};
+use navree_datetime::Span;
 use navree_notify::{Channel, DeferralReason, Delivery, Digest, Notifier, NotifyOptions, Released};
 use navree_time::{TimeModule, TimeOptions, ZonesFake};
 use serde_json::json;

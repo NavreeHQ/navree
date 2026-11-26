@@ -3,8 +3,8 @@
 
 use std::sync::Arc;
 
-use navree_datetime::Timestamp;
 use http::{Method, Uri};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_http::{
     ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, Path, RouteDef,

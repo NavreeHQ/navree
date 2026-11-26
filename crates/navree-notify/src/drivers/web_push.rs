@@ -2,9 +2,9 @@
 
 use std::fmt;
 
-use navree_datetime::{Span, Timestamp};
 use navree_contracts::BoxFuture;
 use navree_crypto::webpush::{self, VapidKey, WebPushError};
+use navree_datetime::{Span, Timestamp};
 use navree_http_client::{HttpClient, HttpClientOptions};
 use url::Url;
 

@@ -6,9 +6,9 @@
 
 use std::collections::BTreeMap;
 
-use navree_datetime::Timestamp;
 use navree_config::{Config, ConfigSources};
 use navree_contracts::Secret;
+use navree_datetime::Timestamp;
 use navree_events::Event;
 use navree_http_client::FakeServer;
 use navree_integrations::{

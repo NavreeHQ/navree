@@ -688,10 +688,7 @@ async fn the_expiry_is_scheduled_daily_at_two_thirty_ist() {
     assert_eq!(expire.next_run, Some(due_utc));
 
     // Not due one minute before 02:30 IST.
-    let outcomes = scheduler
-        .tick(due_utc - Span::minutes(1))
-        .await
-        .unwrap();
+    let outcomes = scheduler.tick(due_utc - Span::minutes(1)).await.unwrap();
     assert!(outcomes.is_empty());
 
     // Fires cleanly at 02:30 IST (21:00 UTC).

@@ -29,10 +29,10 @@ use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;
 
-use navree_datetime::{Date, Precision, Timestamp, Zoned};
 use navree_access::{
     Ability, Accessible, ActionMarker, SqlColumn, SqlColumns, SqlFilter, SqlOp, Subject,
 };
+use navree_datetime::{Date, Precision, Timestamp, Zoned};
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::{BoxError, BoxFuture};
@@ -176,11 +176,7 @@ impl<M: Model> ModelColumns<M> {
             Some(Stored::Bool) => value.is_boolean(),
             Some(Stored::Integer | Stored::Float) => value.is_number(),
             Some(
-                Stored::Text
-                | Stored::Uuid
-                | Stored::Timestamp
-                | Stored::DateTime
-                | Stored::Date,
+                Stored::Text | Stored::Uuid | Stored::Timestamp | Stored::DateTime | Stored::Date,
             ) => value.is_string(),
             Some(Stored::Decimal | Stored::Other) => true,
         }

@@ -125,7 +125,10 @@ fn series_card(kind: &str, at: usize, series: &MetricSeries, waits: bool) -> Car
 
 /// The moments of `points`.
 fn times(points: &[MetricPoint]) -> Vec<DateTime> {
-    points.iter().map(|point| point.at.date_time_utc()).collect()
+    points
+        .iter()
+        .map(|point| point.at.date_time_utc())
+        .collect()
 }
 
 /// Jobs finished per minute.

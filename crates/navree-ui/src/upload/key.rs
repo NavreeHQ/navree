@@ -13,8 +13,8 @@
 
 use std::convert::Infallible;
 
-use navree_datetime::{Span, Timestamp};
 use http::request::Parts;
+use navree_datetime::{Span, Timestamp};
 use navree_http::extract::{FromRequestParts, urlencoded};
 use navree_http::{CurrentPrincipal, UrlSigner};
 use sha2::{Digest, Sha256};

@@ -604,10 +604,7 @@ mod tests {
             ("age", text("٣٦")),
             ("score", text("3,5")),
             ("active", text("Yes")),
-            (
-                "joined",
-                Cell::Date(Date::new(2026, 1, 2).unwrap()),
-            ),
+            ("joined", Cell::Date(Date::new(2026, 1, 2).unwrap())),
             ("status", text("Customer")),
             ("tags", text("vip; new |  ")),
             ("id", Cell::Empty),

@@ -4,8 +4,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use navree_datetime::{Span, Timestamp};
 use navree_contracts::{Job, JobContext, JobOptions};
+use navree_datetime::{Span, Timestamp};
 use navree_db::Uow;
 use navree_kernel::BoxError;
 use navree_orm::{Model as _, Record};
@@ -614,8 +614,7 @@ impl Runtime {
                         assignments.push(models::Connection::LAST_SYNCED_AT.set(Some(now)));
                     }
                     if connection.sync_interval_mins > 0 && !dry_run {
-                        let next =
-                            now + Span::minutes(i64::from(connection.sync_interval_mins));
+                        let next = now + Span::minutes(i64::from(connection.sync_interval_mins));
                         assignments.push(models::Connection::NEXT_SYNC_AT.set(Some(next)));
                     }
                     models::Connection::query()

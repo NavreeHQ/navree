@@ -7,10 +7,10 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, MANAGE, Rules};
 use navree_contracts::{AuthVia, Clock, FixedClock, Principal};
 use navree_crypto::{CryptoModule, generate_key};
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, Db};
 use navree_events::{Event, EventsModule, Listener, ModuleBuilderEventsExt};
 use navree_http_client::{HttpClientModule, HttpClientOptions, SsrfPolicy};
@@ -43,8 +43,7 @@ pub const PEM: &str = include_str!("../fixtures/rsa-2048.pem");
 
 /// 2026-10-27T08:00:00Z.
 pub fn start() -> Timestamp {
-    Timestamp::parse_rfc3339("2026-10-27T08:00:00Z")
-        .unwrap()
+    Timestamp::parse_rfc3339("2026-10-27T08:00:00Z").unwrap()
 }
 
 pub fn principal(user_id: Uuid) -> Principal {

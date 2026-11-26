@@ -229,12 +229,7 @@ impl XlsxBuilder {
                     }
                     Cell::DateTime(at_time) => {
                         let value = excel_datetime(*at_time)?;
-                        worksheet.write_datetime_with_format(
-                            at,
-                            col,
-                            &value,
-                            &formats.datetime,
-                        )?;
+                        worksheet.write_datetime_with_format(at, col, &value, &formats.datetime)?;
                     }
                 }
             }
@@ -378,9 +373,10 @@ mod tests {
             &[vec![
                 Cell::Text(emoji),
                 Cell::DateTime(
-                    Date::new(2026, 11, 25)
+                    Date::new(2026, 11, 25).unwrap().at(Time::new(14, 30, 5)
                         .unwrap()
-                        .at(Time::new(14, 30, 5).unwrap().with_nanos(250_000_000).unwrap()),
+                        .with_nanos(250_000_000)
+                        .unwrap()),
                 ),
             ]],
         )

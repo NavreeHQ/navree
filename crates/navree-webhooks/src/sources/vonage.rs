@@ -3,8 +3,8 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use navree_datetime::Timestamp;
 use http::HeaderMap;
+use navree_datetime::Timestamp;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 
@@ -123,8 +123,8 @@ impl WebhookSource for Vonage {
 
 #[cfg(test)]
 mod tests {
-    use navree_datetime::Timestamp;
     use http::HeaderValue;
+    use navree_datetime::Timestamp;
 
     use super::*;
 

@@ -78,11 +78,17 @@ fn an_edit_form_shows_the_values_the_browser_can_hold() {
     let invoice = Invoice {
         total: "1234.50".parse().unwrap(),
         discount: None,
-        due: Date::new(2026, 11, 4).unwrap().at(Time::new(14, 30, 0).unwrap()),
-        sent_at: Date::new(2026, 11, 4).unwrap().at(Time::new(9, 5, 0).unwrap())
+        due: Date::new(2026, 11, 4)
+            .unwrap()
+            .at(Time::new(14, 30, 0).unwrap()),
+        sent_at: Date::new(2026, 11, 4)
+            .unwrap()
+            .at(Time::new(9, 5, 0).unwrap())
             .in_utc(),
         reminder: Some(
-            Date::new(2026, 11, 5).unwrap().at(Time::new(8, 0, 30).unwrap())
+            Date::new(2026, 11, 5)
+                .unwrap()
+                .at(Time::new(8, 0, 30).unwrap())
                 .in_utc(),
         ),
     };
@@ -118,12 +124,16 @@ fn a_good_post_decodes() {
     assert_eq!(invoice.discount, None, "an empty optional is absent");
     assert_eq!(
         invoice.due,
-        Date::new(2026, 11, 4).unwrap().at(Time::new(14, 30, 0).unwrap()),
+        Date::new(2026, 11, 4)
+            .unwrap()
+            .at(Time::new(14, 30, 0).unwrap()),
         "a browser posts the minute and no seconds"
     );
     assert_eq!(
         invoice.sent_at,
-        Date::new(2026, 11, 4).unwrap().at(Time::new(9, 5, 0).unwrap())
+        Date::new(2026, 11, 4)
+            .unwrap()
+            .at(Time::new(9, 5, 0).unwrap())
             .in_utc(),
         "an instant is read as UTC"
     );
@@ -290,10 +300,7 @@ fn a_bad_date_and_time_says_one_thing_about_itself() {
 #[test]
 fn a_full_path_instant_is_read_as_utc_and_says_so() {
     let starts = Booking::FIELDS.iter().find(|f| f.name == "starts").unwrap();
-    assert!(
-        starts.instant,
-        "navree_datetime::Timestamp is an instant"
-    );
+    assert!(starts.instant, "navree_datetime::Timestamp is an instant");
     assert!(!field("total").instant && !field("due").instant);
     // The input tells the person which clock it is.
     let html = render(&FormView::<Invoice>::new().post("/i").into());

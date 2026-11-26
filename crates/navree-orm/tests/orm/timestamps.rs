@@ -1,7 +1,7 @@
 //! Timestamps from the app's clock.
 
-use navree_datetime::Span;
 use navree_contracts::FixedClock;
+use navree_datetime::Span;
 use navree_orm::{Model, Record};
 
 use crate::models::{Company, Deal, Setting};

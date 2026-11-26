@@ -53,12 +53,7 @@ async fn pivot_columns_and_timestamps_load_with_the_related_records() {
     assert_eq!(pivot.value::<i64>("tag_id").unwrap(), Some(crm.vip.id));
     let added: Option<Timestamp> = pivot.value("created_at").unwrap();
     assert!(added.is_some(), "attaching set the pivot timestamps");
-    assert!(
-        pivot
-            .value::<Timestamp>("updated_at")
-            .unwrap()
-            .is_some()
-    );
+    assert!(pivot.value::<Timestamp>("updated_at").unwrap().is_some());
     assert!(pivot.has_timestamp_attributes());
     assert_eq!(
         tags[1].pivot_value::<Option<String>>("role").unwrap(),
@@ -98,12 +93,7 @@ async fn pivot_columns_and_timestamps_load_with_the_related_records() {
     only_updated.attach(&t.db, [crm.hot.id]).await.unwrap();
     let hot = only_updated.get(&t.db).await.unwrap();
     let pivot = hot[0].pivot().unwrap();
-    assert!(
-        pivot
-            .value::<Timestamp>("updated_at")
-            .unwrap()
-            .is_some()
-    );
+    assert!(pivot.value::<Timestamp>("updated_at").unwrap().is_some());
     assert_eq!(pivot.get("created_at"), None, "not loaded");
     assert!(!pivot.has_timestamp_attributes());
 }

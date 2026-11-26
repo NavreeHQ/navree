@@ -10,8 +10,8 @@ use std::fmt;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use navree_datetime::{Precision, Timestamp};
 use navree_crypto::hmac_sha256;
+use navree_datetime::{Precision, Timestamp};
 use url::Url;
 
 /// The SAS version the links name. Every version from 2020-12-06 signs the

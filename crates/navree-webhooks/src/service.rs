@@ -7,10 +7,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use navree_datetime::{Precision, Span, Timestamp};
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue, USER_AGENT};
 use navree_contracts::{Clock, Dispatcher, Job, JobEnvelope, JobOptions, SystemClock};
 use navree_crypto::Encrypter;
+use navree_datetime::{Precision, Span, Timestamp};
 use navree_db::{Db, Page, PageQuery, Uow, prune_time_series};
 use navree_events::EventBus;
 use navree_http_client::{HttpClient, HttpClientError};
@@ -588,10 +588,7 @@ impl Webhooks {
         let deps = self.deps().await?;
         let db = deps.db()?;
         let now = deps.now();
-        let cutoff = |n: u64| {
-            now.checked_sub(days_of(n))
-                .unwrap_or(Timestamp::MIN)
-        };
+        let cutoff = |n: u64| now.checked_sub(days_of(n)).unwrap_or(Timestamp::MIN);
         let deliveries_before = cutoff(days.unwrap_or(self.options().retain_days));
         let receipts_before = cutoff(days.unwrap_or(self.options().incoming.receipt_days));
         self.in_uow(db, |uow| async move {

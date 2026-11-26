@@ -232,7 +232,9 @@ pub(crate) fn seconds_of(at: DateTime) -> i64 {
 
 /// The wall-clock time `seconds` stands for, when `Timestamp` holds it.
 pub(crate) fn time_of(seconds: i64) -> Option<DateTime> {
-    Timestamp::from_secs(seconds).ok().map(|at| at.date_time_utc())
+    Timestamp::from_secs(seconds)
+        .ok()
+        .map(|at| at.date_time_utc())
 }
 
 /// One tick of a time axis.
@@ -329,7 +331,8 @@ impl Unit {
                 None
             }
             Self::Month(n) => {
-                let (mut year, mut month) = (from.date().year(), u32::from(from.date().month_number()));
+                let (mut year, mut month) =
+                    (from.date().year(), u32::from(from.date().month_number()));
                 let start = Date::new(year, u8::try_from(month).ok()?, 1)
                     .ok()?
                     .at(Time::MIDNIGHT);
@@ -386,8 +389,7 @@ impl Unit {
             }
             Self::Week => at.add(Span::days(7)),
             Self::Month(n) => {
-                let (mut year, mut month) =
-                    (at.date().year(), u32::from(at.date().month_number()));
+                let (mut year, mut month) = (at.date().year(), u32::from(at.date().month_number()));
                 for _ in 0..n {
                     (year, month) = next_month(year, month)?;
                 }
@@ -593,9 +595,7 @@ mod tests {
     }
 
     fn at(y: i32, m: u8, d: u8, h: u8) -> i64 {
-        seconds_of(
-            Date::new(y, m, d).unwrap().at(Time::new(h, 0, 0).unwrap()),
-        )
+        seconds_of(Date::new(y, m, d).unwrap().at(Time::new(h, 0, 0).unwrap()))
     }
 
     fn labels(from: i64, to: i64, most: usize) -> Vec<String> {

@@ -1,7 +1,7 @@
 //! Downloads of rows a handler has: `Download` and `Exports`, CSV and XLSX.
 
-use navree_datetime::Date;
 use futures_util::stream;
+use navree_datetime::Date;
 use navree_http::response::IntoResponse;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_sheets::{

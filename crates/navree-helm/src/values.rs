@@ -276,7 +276,11 @@ pub(crate) fn datetime(input: &Json, tz_offset_minutes: Option<i32>) -> Option<T
     ]
     .iter()
     .find_map(|format| DateTime::parse(format, s).ok())
-    .or_else(|| Date::parse("%Y-%m-%d", s).ok().map(|d| d.at(Time::MIDNIGHT)))?;
+    .or_else(|| {
+        Date::parse("%Y-%m-%d", s)
+            .ok()
+            .map(|d| d.at(Time::MIDNIGHT))
+    })?;
     // `getTimezoneOffset()` is UTC minus local time, in minutes.
     let offset = Offset::west(tz_offset_minutes.unwrap_or(0).saturating_mul(60)).ok()?;
     Zone::fixed(offset)
@@ -311,7 +315,9 @@ pub(crate) fn date_bound(shape: Shape, at: Timestamp) -> Value {
     match shape {
         Shape::Date => Value::Date(at.date_time_utc().date()),
         Shape::DateTime(Instant::Naive) => Value::DateTime(at.date_time_utc()),
-        Shape::DateTime(Instant::Offset) => Value::TimestampTz(at.in_zone(Zone::fixed(Offset::UTC))),
+        Shape::DateTime(Instant::Offset) => {
+            Value::TimestampTz(at.in_zone(Zone::fixed(Offset::UTC)))
+        }
         Shape::Text | Shape::Other => Value::String(at.to_rfc3339()),
         _ => Value::Timestamp(at),
     }

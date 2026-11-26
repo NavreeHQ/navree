@@ -146,7 +146,9 @@ pub fn read_xlsx(bytes: &[u8]) -> (Vec<String>, Vec<Vec<Data>>) {
                     _ => {
                         let n: f64 = text.parse().unwrap();
                         if dates.get(style).copied().unwrap_or(false) {
-                            let epoch = Date::new(1899, 12, 30).unwrap().at(Time::new(0, 0, 0).unwrap());
+                            let epoch = Date::new(1899, 12, 30)
+                                .unwrap()
+                                .at(Time::new(0, 0, 0).unwrap());
                             let ms = (n * 86_400_000.0).round() as i64;
                             Data::DateTime(epoch.add(Span::millis(ms)).unwrap())
                         } else {

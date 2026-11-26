@@ -587,12 +587,7 @@ mod tests {
         assert_eq!(names, ["Jan", "Feb", "Mar", "Apr", "May", "Jun"], "{html}");
         // A start two days before a month ends gives that month no name of its own.
         let chart = CalendarHeatmap::new("Load")
-            .days((0..60).map(|d| {
-                (
-                    Date::new(2026, 1, 30).unwrap().add_days(d).unwrap(),
-                    1,
-                )
-            }))
+            .days((0..60).map(|d| (Date::new(2026, 1, 30).unwrap().add_days(d).unwrap(), 1)))
             .week_start(Weekday::Sunday);
         let html = render(&chart.into());
         assert!(!html.contains(">Jan<"), "{html}");
@@ -636,12 +631,7 @@ mod tests {
         // Years of days: the latest are drawn, and the page says so.
         let long = render(
             &CalendarHeatmap::new("Load")
-                .days((0..2_000).map(|d| {
-                    (
-                        Date::new(2020, 1, 1).unwrap().add_days(d).unwrap(),
-                        3,
-                    )
-                }))
+                .days((0..2_000).map(|d| (Date::new(2020, 1, 1).unwrap().add_days(d).unwrap(), 3)))
                 .into(),
         );
         assert!(

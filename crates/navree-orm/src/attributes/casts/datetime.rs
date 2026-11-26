@@ -234,10 +234,12 @@ fn timestamp_input(input: serde_json::Value, millis: bool) -> Result<Timestamp, 
         _ => None,
     };
     match number {
-        Some(n) if millis => {
-            Timestamp::from_millis(n).ok().ok_or_else(|| out_of_range(n, "milliseconds"))
-        }
-        Some(n) => Timestamp::from_secs(n).ok().ok_or_else(|| out_of_range(n, "seconds")),
+        Some(n) if millis => Timestamp::from_millis(n)
+            .ok()
+            .ok_or_else(|| out_of_range(n, "milliseconds")),
+        Some(n) => Timestamp::from_secs(n)
+            .ok()
+            .ok_or_else(|| out_of_range(n, "seconds")),
         None => Timestamp::from_json(input).map_err(CastError::from),
     }
 }
@@ -322,13 +324,9 @@ macro_rules! unix_casts {
 unix_casts!(UnixTimestamp, false, "seconds", as_secs, |s| {
     Timestamp::from_secs(s).ok()
 });
-unix_casts!(
-    UnixTimestampMs,
-    true,
-    "milliseconds",
-    as_millis,
-    |s| Timestamp::from_millis(s).ok()
-);
+unix_casts!(UnixTimestampMs, true, "milliseconds", as_millis, |s| {
+    Timestamp::from_millis(s).ok()
+});
 
 #[cfg(test)]
 mod tests {
@@ -425,8 +423,8 @@ mod tests {
 
     #[tokio::test]
     async fn preparation_drops_the_fractions_that_are_not_stored() {
-        let mut at = Timestamp::utc(2026, 10, 27, 8, 30, 0).unwrap()
-            + navree_datetime::Span::millis(1_234);
+        let mut at =
+            Timestamp::utc(2026, 10, 27, 8, 30, 0).unwrap() + navree_datetime::Span::millis(1_234);
         UnixTimestampMs::prepare(&mut at, &CastContext::new())
             .await
             .unwrap();

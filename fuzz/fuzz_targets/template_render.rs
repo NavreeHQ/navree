@@ -35,17 +35,24 @@ fn environment(settings: u8) -> Environment {
     limits.max_operations = 200_000;
     limits.max_output_bytes = 1 << 20;
     env.set_limits(limits);
-    env.add_template("layout.html", "{% block a %}A{% endblock %}|{% block b %}{{ v }}{% endblock %}")
-        .expect("layout compiles");
+    env.add_template(
+        "layout.html",
+        "{% block a %}A{% endblock %}|{% block b %}{{ v }}{% endblock %}",
+    )
+    .expect("layout compiles");
     env.add_template(
         "macros.html",
         "{% macro m(x, y=1) %}<{{ x }}{{ y }}{{ caller() if caller is defined }}>{% endmacro %}",
     )
     .expect("macros compile");
-    env.add_template("text.txt", "{{ v }}").expect("text compiles");
-    env.add_template("data.json", "{{ v }}").expect("data compiles");
-    env.add_template("list.json", "{{ [v, 'a'|safe]|join(',') }}").expect("data compiles");
-    env.add_template("swap.json", "{{ 'a'|e|replace('a', v) }}").expect("data compiles");
+    env.add_template("text.txt", "{{ v }}")
+        .expect("text compiles");
+    env.add_template("data.json", "{{ v }}")
+        .expect("data compiles");
+    env.add_template("list.json", "{{ [v, 'a'|safe]|join(',') }}")
+        .expect("data compiles");
+    env.add_template("swap.json", "{{ 'a'|e|replace('a', v) }}")
+        .expect("data compiles");
     env.add_template("plain.txt", "{% macro p(x) %}{{ x }}{% endmacro %}")
         .expect("macros compile");
     env.add_template(
@@ -138,10 +145,17 @@ fuzz_target!(|data: &[u8]| {
         );
     }
     let in_script = env
-        .render_str("t.html", "<script>{{ v|tojson }}{% include 'data.json' %}", &ctx)
+        .render_str(
+            "t.html",
+            "<script>{{ v|tojson }}{% include 'data.json' %}",
+            &ctx,
+        )
         .expect("printing a string renders");
     assert!(
-        !in_script.get(8..).unwrap_or("").contains(['<', '>', '&', '\'']),
+        !in_script
+            .get(8..)
+            .unwrap_or("")
+            .contains(['<', '>', '&', '\'']),
         "a script can end: {in_script:?}"
     );
 });

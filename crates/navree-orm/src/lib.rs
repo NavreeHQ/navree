@@ -179,7 +179,8 @@ pub use global_scopes::ClosureScope;
 pub use ir::{Expr, LockMode, VectorMetric};
 pub use lifecycle::ModelLifecycle;
 pub use model::{
-    ColumnMeta, DateSerializer, KeyKind, Model, ModelMeta, PartialSchemaFn, PrimaryKey, HasTimestamps,
+    ColumnMeta, DateSerializer, HasTimestamps, KeyKind, Model, ModelMeta, PartialSchemaFn,
+    PrimaryKey,
 };
 pub use module::{
     ConfiguredOrmModule, ModuleBuilderOrmExt, OrmModule, OrmRuntime, RegisteredModel,

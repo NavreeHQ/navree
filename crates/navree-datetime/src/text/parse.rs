@@ -147,10 +147,7 @@ pub(super) fn read<'t, 'p>(
                     s = s.trim_start_matches(|c: char| !c.is_whitespace());
                 }
 
-                Fixed::Offset
-                | Fixed::OffsetColon
-                | Fixed::OffsetSeconds
-                | Fixed::OffsetHours => {
+                Fixed::Offset | Fixed::OffsetColon | Fixed::OffsetSeconds | Fixed::OffsetHours => {
                     let (rest, offset) = scan::timezone_offset(
                         s.trim_start(),
                         scan::colon_or_space,
@@ -253,10 +250,7 @@ pub(super) fn relaxed_rfc3339<'t>(parsed: &mut Parsed, s: &'t str) -> Scan<&'t s
     let s = read(
         parsed,
         s,
-        HOUR_AND_MINUTE
-            .iter()
-            .chain(SECOND_AND_FRACTION)
-            .copied(),
+        HOUR_AND_MINUTE.iter().chain(SECOND_AND_FRACTION).copied(),
     )?;
     let s = s.trim_start();
     let (s, offset) = if s.len() >= 3 && s.as_bytes()[..3].eq_ignore_ascii_case(b"UTC") {

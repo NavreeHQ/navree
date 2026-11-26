@@ -57,12 +57,12 @@ fn a_number_format_given_a_built_in_id_is_that_format_in_every_format() {
 
 fn at(day: u8, hour: u8, minute: u8, second: u8, milli: u32) -> Cell {
     Cell::DateTime(
-        Date::new(2026, 3, day).unwrap().at(
-            navree_datetime::Time::new(hour, minute, second)
+        Date::new(2026, 3, day)
+            .unwrap()
+            .at(navree_datetime::Time::new(hour, minute, second)
                 .unwrap()
                 .with_nanos(milli * 1_000_000)
-                .unwrap(),
-        ),
+                .unwrap()),
     )
 }
 

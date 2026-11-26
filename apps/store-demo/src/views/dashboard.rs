@@ -119,9 +119,7 @@ pub const METHODS: [&str; 3] = ["upi", "card", "cod"];
 /// The days the sales charts cover: the last 30, a day at a time on India's clock,
 /// today the last and still counting.
 pub fn sales_report(today: Date) -> Report {
-    let first = today
-        .add_days(-(SALES_DAYS as i64 - 1))
-        .unwrap_or(today);
+    let first = today.add_days(-(SALES_DAYS as i64 - 1)).unwrap_or(today);
     // India keeps one offset all year, so a fixed one cuts the same days as the zone.
     match Offset::east(OFFSET) {
         Ok(zone) => Report::new(DateRange::new(first, today), Grain::Day, &zone),

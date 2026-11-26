@@ -194,10 +194,7 @@ fn kind(cron: &CronExpression, zone: Tz, minute: i64, croner_has_it: bool) -> &'
         zone.resolve_local(now),
         LocalTime::Ambiguous((first, _), _) if first != at
     );
-    let after_gap = local(at - Span::minutes(1))
-        .add(Span::minutes(1))
-        .unwrap()
-        < now;
+    let after_gap = local(at - Span::minutes(1)).add(Span::minutes(1)).unwrap() < now;
     match (
         croner_has_it,
         second_pass,

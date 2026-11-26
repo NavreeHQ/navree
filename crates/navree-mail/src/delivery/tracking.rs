@@ -3,8 +3,8 @@
 
 use std::sync::Arc;
 
-use navree_datetime::Span;
 use navree_contracts::Clock;
+use navree_datetime::Span;
 use navree_http::UrlSigner;
 use uuid::Uuid;
 

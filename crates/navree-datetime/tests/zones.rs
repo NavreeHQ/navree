@@ -207,7 +207,11 @@ fn new_york_spring_gap_is_compatible_later() {
 
     // The gap is the hour from 02:00:00 to 02:59:59, and nothing else.
     assert_eq!(
-        read(new_york, wall(2026, 3, 8, 1, 59, 59), Disambiguation::Reject),
+        read(
+            new_york,
+            wall(2026, 3, 8, 1, 59, 59),
+            Disambiguation::Reject
+        ),
         utc(2026, 3, 8, 6, 59, 59)
     );
     assert_eq!(refused(new_york, wall(2026, 3, 8, 2, 0, 0)), ErrorKind::Gap);
@@ -248,7 +252,10 @@ fn new_york_spring_gap_is_compatible_later() {
         east(-5 * HOUR)
     );
     assert_eq!(new_york.abbreviation_at(utc(2026, 3, 8, 6, 59, 59)), "EST");
-    assert_eq!(new_york.offset_at(utc(2026, 3, 8, 7, 0, 0)), east(-4 * HOUR));
+    assert_eq!(
+        new_york.offset_at(utc(2026, 3, 8, 7, 0, 0)),
+        east(-4 * HOUR)
+    );
     assert_eq!(new_york.abbreviation_at(utc(2026, 3, 8, 7, 0, 0)), "EDT");
 }
 
@@ -284,7 +291,11 @@ fn london_fall_fold_compatible_is_earlier() {
 
     // The fold is the hour from 01:00:00 to 01:59:59, and nothing else.
     assert_eq!(
-        read(london, wall(2026, 10, 25, 0, 59, 59), Disambiguation::Reject),
+        read(
+            london,
+            wall(2026, 10, 25, 0, 59, 59),
+            Disambiguation::Reject
+        ),
         utc(2026, 10, 24, 23, 59, 59)
     );
     assert_eq!(
@@ -352,7 +363,11 @@ fn lord_howe_half_hour_dst() {
         utc(2026, 10, 3, 15, 29, 59)
     );
     assert_eq!(
-        read(lord_howe, wall(2026, 10, 4, 2, 30, 0), Disambiguation::Reject),
+        read(
+            lord_howe,
+            wall(2026, 10, 4, 2, 30, 0),
+            Disambiguation::Reject
+        ),
         utc(2026, 10, 3, 15, 30, 0)
     );
 
@@ -404,7 +419,11 @@ fn chatham_offset_1245() {
     assert_eq!(chatham.offset_at(utc(2026, 9, 26, 13, 59, 59)), standard);
     assert_eq!(chatham.offset_at(utc(2026, 9, 26, 14, 0, 0)), summer);
     assert_eq!(
-        read(chatham, wall(2026, 9, 27, 2, 44, 59), Disambiguation::Reject),
+        read(
+            chatham,
+            wall(2026, 9, 27, 2, 44, 59),
+            Disambiguation::Reject
+        ),
         utc(2026, 9, 26, 13, 59, 59)
     );
     let skipped = wall(2026, 9, 27, 3, 0, 0);
@@ -474,7 +493,10 @@ fn aliases_map_to_canonical() {
     ] {
         assert_eq!(zone(name).name(), name);
         assert_eq!(zone(&name.to_ascii_lowercase()).name(), name);
-        assert_eq!(zone(&format!(" {} ", name.to_ascii_uppercase())).name(), name);
+        assert_eq!(
+            zone(&format!(" {} ", name.to_ascii_uppercase())).name(),
+            name
+        );
         assert_eq!(format!("{:?}", zone(name)), format!("Zone({name:?})"));
     }
 
@@ -573,7 +595,11 @@ fn every_zone_and_link_of_the_tables_parses() {
             Some(zone),
             "{name}"
         );
-        assert_eq!(Entry::of(zone).map(Entry::name), Some(zone.name()), "{name}");
+        assert_eq!(
+            Entry::of(zone).map(Entry::name),
+            Some(zone.name()),
+            "{name}"
+        );
 
         // A current name is its own zone. A legacy name is the zone it
         // stands for, which keeps the offset the legacy name kept.
@@ -596,7 +622,11 @@ fn start_of_day_in_a_midnight_gap_is_the_first_instant_that_exists() {
     // 00:00 is never shown, and the day starts at 01:00.
     let changes = [
         ("America/Havana", date(2026, 3, 8), utc(2026, 3, 8, 5, 0, 0)),
-        ("America/Santiago", date(2026, 9, 6), utc(2026, 9, 6, 4, 0, 0)),
+        (
+            "America/Santiago",
+            date(2026, 9, 6),
+            utc(2026, 9, 6, 4, 0, 0),
+        ),
         ("Asia/Beirut", date(2026, 3, 29), utc(2026, 3, 28, 22, 0, 0)),
     ];
     for (name, day, first_instant) in changes {
@@ -667,7 +697,10 @@ fn start_of_day_in_a_midnight_gap_is_the_first_instant_that_exists() {
     let second_midnight = start + Span::hours(1);
     assert_eq!(second_midnight.time(), Time::MIDNIGHT);
     assert_eq!(second_midnight.offset(), east(-5 * HOUR));
-    assert_eq!(second_midnight.start_of_day().timestamp(), start.timestamp());
+    assert_eq!(
+        second_midnight.start_of_day().timestamp(),
+        start.timestamp()
+    );
     let next = date(2026, 11, 2).start_of_day(havana).unwrap();
     assert_eq!(next.timestamp() - start.timestamp(), Span::hours(25));
 
@@ -732,7 +765,10 @@ fn add_days_keeps_the_wall_clock_across_dst() {
     assert_eq!(next.zone(), new_york);
     assert_eq!(next.offset(), east(-4 * HOUR));
     assert_eq!(next.add_days(-1).unwrap().timestamp(), evening.timestamp());
-    assert_eq!(evening.add_days(0).unwrap().timestamp(), evening.timestamp());
+    assert_eq!(
+        evening.add_days(0).unwrap().timestamp(),
+        evening.timestamp()
+    );
     assert_eq!(
         evening.add_days(7).unwrap().date_time(),
         wall(2026, 3, 14, 20, 0, 0)
@@ -768,7 +804,10 @@ fn add_days_keeps_the_wall_clock_across_dst() {
     let with_a_fraction = instant(evening.timestamp().as_secs(), 123_456_789).in_zone(new_york);
     let next = with_a_fraction.add_days(1).unwrap();
     assert_eq!(next.timestamp().subsec_nanos(), 123_456_789);
-    assert_eq!(next.timestamp().as_secs(), utc(2026, 3, 9, 0, 0, 0).as_secs());
+    assert_eq!(
+        next.timestamp().as_secs(),
+        utc(2026, 3, 9, 0, 0, 0).as_secs()
+    );
 
     // In a zone that never moves its clocks, a day is 24 hours.
     let kolkata = zone("Asia/Kolkata");
@@ -1139,9 +1178,17 @@ fn a_zone_far_past_its_last_change_follows_its_standing_rule() {
         ("Antarctica/Troll", 0, 2 * HOUR),
         // South of the equator the summer is in January.
         ("Australia/Lord_Howe", 11 * HOUR, 10 * HOUR + 30 * MINUTE),
-        ("Pacific/Chatham", 13 * HOUR + 45 * MINUTE, 12 * HOUR + 45 * MINUTE),
+        (
+            "Pacific/Chatham",
+            13 * HOUR + 45 * MINUTE,
+            12 * HOUR + 45 * MINUTE,
+        ),
         // And a zone with no rule keeps its last offset.
-        ("Asia/Kolkata", 5 * HOUR + 30 * MINUTE, 5 * HOUR + 30 * MINUTE),
+        (
+            "Asia/Kolkata",
+            5 * HOUR + 30 * MINUTE,
+            5 * HOUR + 30 * MINUTE,
+        ),
     ] {
         let zone = zone(name);
         assert_eq!(zone.offset_at(winter), east(in_january), "{name}");
@@ -1174,7 +1221,11 @@ fn a_zone_far_past_its_last_change_follows_its_standing_rule() {
         ErrorKind::Ambiguous
     );
     assert_eq!(
-        read(new_york, wall(2400, 3, 12, 1, 59, 59), Disambiguation::Reject),
+        read(
+            new_york,
+            wall(2400, 3, 12, 1, 59, 59),
+            Disambiguation::Reject
+        ),
         utc(2400, 3, 12, 6, 59, 59)
     );
 
@@ -1196,10 +1247,7 @@ fn the_ends_of_the_range_have_a_wall_clock() {
 
     // Ahead of UTC the last instant is on the day after the last day.
     let last = Timestamp::MAX.in_zone(kolkata);
-    assert_eq!(
-        wall_numbers(last),
-        (262_143, 1, 1, 5, 29, 59, 999_999_999)
-    );
+    assert_eq!(wall_numbers(last), (262_143, 1, 1, 5, 29, 59, 999_999_999));
     assert_eq!(
         read(kolkata, last.date_time(), Disambiguation::Reject),
         Timestamp::MAX
@@ -1227,10 +1275,7 @@ fn the_ends_of_the_range_have_a_wall_clock() {
 
     // A time on a clock whose instant is past the range is refused.
     let error = new_york
-        .to_timestamp(
-            Date::MAX.at(time(23, 59, 59)),
-            Disambiguation::Compatible,
-        )
+        .to_timestamp(Date::MAX.at(time(23, 59, 59)), Disambiguation::Compatible)
         .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::OutOfRange);
     let error = kolkata
@@ -1265,7 +1310,11 @@ fn a_fixed_zone_keeps_one_offset() {
         Disambiguation::Later,
         Disambiguation::Reject,
     ] {
-        assert_eq!(read(fixed, local, how), utc(2026, 3, 7, 21, 0, 0), "{how:?}");
+        assert_eq!(
+            read(fixed, local, how),
+            utc(2026, 3, 7, 21, 0, 0),
+            "{how:?}"
+        );
     }
     let zoned = utc(2026, 3, 7, 21, 0, 0).in_zone(fixed);
     assert_eq!(zoned.date_time(), local);
@@ -1273,10 +1322,7 @@ fn a_fixed_zone_keeps_one_offset() {
         zoned.add_days(1).unwrap().timestamp() - zoned.timestamp(),
         Span::hours(24)
     );
-    assert_eq!(
-        zoned.start_of_day().timestamp(),
-        utc(2026, 3, 7, 18, 30, 0)
-    );
+    assert_eq!(zoned.start_of_day().timestamp(), utc(2026, 3, 7, 18, 30, 0));
 
     // Two fixed zones are the same zone when their offsets are, and a
     // fixed zone is never a named one: not Kolkata, whose offset this is,
@@ -1341,10 +1387,7 @@ fn a_zoned_value_is_its_instant_seen_in_a_zone() {
     // Before the epoch, and with a fraction of a second.
     let old = instant(-1, 750_000_000).in_zone(kolkata);
     assert_eq!(old.date(), date(1970, 1, 1));
-    assert_eq!(
-        old.time(),
-        time(5, 29, 59).with_nanos(750_000_000).unwrap()
-    );
+    assert_eq!(old.time(), time(5, 29, 59).with_nanos(750_000_000).unwrap());
 }
 
 #[test]
@@ -1369,10 +1412,7 @@ fn countries_have_their_zones() {
         assert!(Zone::in_country(unknown).is_empty(), "{unknown}");
     }
 
-    let american: Vec<&str> = Zone::in_country("US")
-        .into_iter()
-        .map(Zone::name)
-        .collect();
+    let american: Vec<&str> = Zone::in_country("US").into_iter().map(Zone::name).collect();
     assert_eq!(american[0], "America/New_York");
     assert!(american.contains(&"America/Los_Angeles"));
     assert!(american.contains(&"Pacific/Honolulu"));

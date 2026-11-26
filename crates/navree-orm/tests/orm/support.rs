@@ -4,8 +4,8 @@
 
 use std::sync::Arc;
 
-use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db, DbOptions};
 use navree_kernel::Module;

@@ -1508,10 +1508,7 @@ mod tests {
                 .unwrap();
             let value = &core[start..];
             let value = value.split('>').nth(1).unwrap().split('<').next().unwrap();
-            assert!(
-                Timestamp::parse_rfc3339(value).is_ok(),
-                "{value}"
-            );
+            assert!(Timestamp::parse_rfc3339(value).is_ok(), "{value}");
             assert!(value.ends_with('Z'), "{value}");
         }
         let bare = part(&Docx::new(), "docProps/core.xml");

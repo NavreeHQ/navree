@@ -109,7 +109,11 @@ impl Module for Pruning {
     }
 }
 
-async fn log(db: &navree_db::Db, message: &str, at: navree_datetime::Timestamp) -> Record<LogEntry> {
+async fn log(
+    db: &navree_db::Db,
+    message: &str,
+    at: navree_datetime::Timestamp,
+) -> Record<LogEntry> {
     LogEntry::create(
         db,
         LogEntry {

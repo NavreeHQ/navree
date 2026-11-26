@@ -612,9 +612,7 @@ impl Fleet {
     ) -> Result<Vec<CompletedJob>, FleetError> {
         let minutes = i64::try_from(self.options.trim.recent_minutes).unwrap_or(i64::MAX / 60_000);
         let since = self.now() - Span::minutes(minutes);
-        self.store
-            .jobs(since.as_millis(), search, LIST_LIMIT)
-            .await
+        self.store.jobs(since.as_millis(), search, LIST_LIMIT).await
     }
 
     /// Stores finished attempts (a master does this for its workers).

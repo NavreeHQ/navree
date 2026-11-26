@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use navree_datetime::Timestamp;
 use http::Method;
 use navree_contracts::{Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_http_client::{FakeResponse, FakeServer, HttpClient};
 use navree_mail::inbound::{InboundStatus, StoredMail, Verdict, Verdicts};
 use navree_mail::{InboundError, Incoming};
@@ -199,8 +199,7 @@ fn sns_senders() -> (HttpClient, FakeServer) {
 /// A minute after the receipt notifications were published
 /// (2026-10-27 09:14:03 UTC).
 fn after_receipt() -> Timestamp {
-    Timestamp::parse_rfc3339("2026-10-27T09:15:00Z")
-        .unwrap()
+    Timestamp::parse_rfc3339("2026-10-27T09:15:00Z").unwrap()
 }
 
 /// The SES route, with `client` fetching the signing certificate and the
@@ -387,8 +386,7 @@ async fn ses_mail_is_received_only_from_messages_sns_signed() {
 #[tokio::test]
 async fn ses_mail_published_more_than_an_hour_ago_is_refused() {
     // Published at 09:14:03.7; an hour and a minute later.
-    let late = Timestamp::parse_rfc3339("2026-10-27T10:15:04Z")
-        .unwrap();
+    let late = Timestamp::parse_rfc3339("2026-10-27T10:15:04Z").unwrap();
     let mail = inbound_app(MAILBOXES, ses_config(sns_senders().0, late)).await;
 
     mail.app
@@ -427,8 +425,7 @@ async fn ses_mail_signed_by_another_key_is_refused() {
 #[tokio::test]
 async fn ses_subscription_confirmations_receive_nothing() {
     let (client, server) = sns_senders();
-    let confirmation_time = Timestamp::parse_rfc3339("2026-10-27T09:14:30Z")
-        .unwrap();
+    let confirmation_time = Timestamp::parse_rfc3339("2026-10-27T09:14:30Z").unwrap();
     let mail = inbound_app(MAILBOXES, ses_config(client, confirmation_time)).await;
     let messages: Value = serde_json::from_str(&sns_fixture("sns-messages.json")).unwrap();
     let confirmation = &messages["inbound_subscription_confirmation_v2"];

@@ -3,10 +3,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_datetime::Timestamp;
 use navree_auth::password_reset_token;
 use navree_contracts::{AuditSink, Clock, FixedClock};
 use navree_crypto::sha256_hex;
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_orm::Model as _;

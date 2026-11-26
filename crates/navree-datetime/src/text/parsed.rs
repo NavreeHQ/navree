@@ -514,9 +514,7 @@ impl Parsed {
                     // second before it, or as the one after.
                     59 => {}
                     0 => {
-                        date_time = date_time
-                            .add(Span::seconds(-1))
-                            .ok_or(Reason::OutOfRange)?;
+                        date_time = date_time.add(Span::seconds(-1)).ok_or(Reason::OutOfRange)?;
                     }
                     _ => return Err(Reason::Impossible),
                 }

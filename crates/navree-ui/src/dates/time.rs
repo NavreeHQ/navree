@@ -216,7 +216,10 @@ impl TimeRules {
         let min = match self.min {
             Some(min) if self.strict && !whole => {
                 let aligned = minute_of(min).div_ceil(self.step) * self.step;
-                match (u8::try_from(aligned / 60).ok(), u8::try_from(aligned % 60).ok()) {
+                match (
+                    u8::try_from(aligned / 60).ok(),
+                    u8::try_from(aligned % 60).ok(),
+                ) {
                     (Some(h), Some(m)) => Time::new(h, m, 0).ok().map(text),
                     _ => None,
                 }

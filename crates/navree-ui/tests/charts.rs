@@ -478,9 +478,7 @@ fn time_axes_read_on_the_wall_clock() {
         out.contains("Nov 3, 2026, 2:00 PM"),
         "the table names the hour"
     );
-    let months: Vec<Date> = (1..=12)
-        .map(|m| Date::new(2026, m, 1).unwrap())
-        .collect();
+    let months: Vec<Date> = (1..=12).map(|m| Date::new(2026, m, 1).unwrap()).collect();
     let out = html(
         Chart::bar("x")
             .days(months)

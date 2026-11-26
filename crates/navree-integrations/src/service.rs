@@ -4,8 +4,8 @@
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
-use navree_datetime::Span;
 use navree_contracts::{AuditEntry, AuditKind, Secret};
+use navree_datetime::Span;
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle};
 use navree_orm::{Model as _, Record};
 use serde_json::json;
@@ -835,8 +835,7 @@ impl Integrations {
         if interval == 0 {
             return Ok(CheckSummary::default());
         }
-        let cutoff =
-            rt.now() - Span::minutes(i64::try_from(interval).unwrap_or(i64::MAX / 120));
+        let cutoff = rt.now() - Span::minutes(i64::try_from(interval).unwrap_or(i64::MAX / 120));
         let ids = Row::query()
             .where_group(|due| {
                 due.where_(Row::LAST_CHECKED_AT.is_null())

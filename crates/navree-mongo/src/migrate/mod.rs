@@ -10,8 +10,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bson::{Bson, Document, doc};
-use navree_datetime::Timestamp;
 use futures_util::TryStreamExt;
+use navree_datetime::Timestamp;
 use navree_kernel::{AppContext, BoxFuture};
 use serde::Serialize;
 

@@ -50,9 +50,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use navree_datetime::{
-    Date, DateTime, Offset, Span, Time, Timestamp, Weekday, Zone, civil,
-};
+use navree_datetime::{Date, DateTime, Offset, Span, Time, Timestamp, Weekday, Zone, civil};
 use navree_time::Tz;
 
 /// The longest expression accepted, in bytes.
@@ -823,11 +821,7 @@ impl CronExpression {
     /// search jumps to the next matching local time while the UTC offset
     /// stays the same, and looks at the minute where the offset changes,
     /// because the local clock jumps there.
-    fn next_on_the_wall_clock<Z: CronZone>(
-        &self,
-        after: Timestamp,
-        zone: &Z,
-    ) -> Option<Timestamp> {
+    fn next_on_the_wall_clock<Z: CronZone>(&self, after: Timestamp, zone: &Z) -> Option<Timestamp> {
         let offset_at = |seconds: i64| -> Option<i64> {
             let utc = Timestamp::from_secs(seconds).ok()?;
             Some(zone.offset_seconds_at(utc))

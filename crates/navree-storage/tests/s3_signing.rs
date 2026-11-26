@@ -9,12 +9,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
-use navree_datetime::Timestamp;
 use futures_util::TryStreamExt;
 use http::StatusCode;
 use navree_contracts::Secret;
 use navree_crypto::sha256_hex;
 use navree_crypto::sigv4::{self, Signer};
+use navree_datetime::Timestamp;
 use navree_http::AppRouter;
 use navree_http::extract::Request as HttpRequest;
 use navree_http::response::{IntoResponse, Response as HttpResponse};
@@ -126,8 +126,7 @@ impl Hands {
 fn sigv4_matches_the_published_test_suite() {
     let fixtures: FixtureFile = serde_json::from_str(FIXTURE).unwrap();
     let suite_creds = &fixtures.suite_credentials;
-    let signed_at = Timestamp::parse_rfc3339(&suite_creds.timestamp)
-        .unwrap();
+    let signed_at = Timestamp::parse_rfc3339(&suite_creds.timestamp).unwrap();
     let signer = Signer::new(
         Credentials::new(&suite_creds.access_key_id, &suite_creds.secret_access_key),
         &suite_creds.region,
@@ -173,8 +172,7 @@ fn sigv4_matches_the_published_test_suite() {
     // S3 header-signed requests include and sign x-amz-content-sha256.
     assert!(!fixtures.s3_header_vectors.is_empty());
     for vector in &fixtures.s3_header_vectors {
-        let now = Timestamp::parse_rfc3339(&vector.timestamp)
-            .unwrap();
+        let now = Timestamp::parse_rfc3339(&vector.timestamp).unwrap();
         let method: Method = vector.method.parse().unwrap();
         let url = Url::parse(&vector.url).unwrap();
         let mut request = Request::new(method, url).with_body(vector.body.clone());
@@ -206,8 +204,7 @@ async fn a_presigned_get_matches_the_documented_example() {
     assert!(!fixtures.s3_presigned_vectors.is_empty());
 
     for vector in &fixtures.s3_presigned_vectors {
-        let now = Timestamp::parse_rfc3339(&vector.timestamp)
-            .unwrap();
+        let now = Timestamp::parse_rfc3339(&vector.timestamp).unwrap();
         let method: Method = vector.method.parse().unwrap();
         let url = Url::parse(&vector.url).unwrap();
         let creds = Credentials::new(&vector.access_key_id, &vector.secret_access_key);
@@ -236,8 +233,7 @@ async fn a_presigned_get_matches_the_documented_example() {
 
     // Through S3Store::signed_url on virtual-hosted AWS at the documented instant.
     let doc = &fixtures.s3_presigned_vectors[0];
-    let instant = Timestamp::parse_rfc3339(&doc.timestamp)
-        .unwrap();
+    let instant = Timestamp::parse_rfc3339(&doc.timestamp).unwrap();
     let fixed_time = SystemTime::UNIX_EPOCH + Duration::from_secs(instant.as_secs() as u64);
     let config = S3Config::new("examplebucket")
         .region(&doc.region)
@@ -1150,8 +1146,7 @@ async fn s3_store_lists_pages_reads_ranges_and_deletes_missing_as_not_found() {
 
 #[test]
 fn presign_and_header_signing_handle_multibyte_query_keys_and_literal_plus() {
-    let now = Timestamp::parse_rfc3339("2026-11-26T06:00:00Z")
-        .unwrap();
+    let now = Timestamp::parse_rfc3339("2026-11-26T06:00:00Z").unwrap();
     let creds = Credentials::new("AKIALUDHIANA", "ludhiana-secret-key");
 
     // Multi-byte UTF-8 query keys where byte index 6 splits a multi-byte scalar

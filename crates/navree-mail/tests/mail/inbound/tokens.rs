@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use navree_datetime::{Span, Timestamp};
 use navree_contracts::Clock;
+use navree_datetime::{Span, Timestamp};
 use navree_mail::{InboundError, ReplyTokens};
 use navree_testing::TestApp;
 use uuid::Uuid;

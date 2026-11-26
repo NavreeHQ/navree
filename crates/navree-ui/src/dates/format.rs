@@ -119,10 +119,7 @@ impl DateLocale {
 
     /// A time to show in a hint, for 2:30 in the afternoon.
     pub fn example_time(&self) -> String {
-        self.format_time(
-            Time::new(14, 30, 0).ok().unwrap_or(Time::MIDNIGHT),
-            false,
-        )
+        self.format_time(Time::new(14, 30, 0).ok().unwrap_or(Time::MIDNIGHT), false)
     }
 
     /// The time as it is typed here: `14:30`, or `2:30 PM` on a 12 hour clock.

@@ -1,7 +1,7 @@
 //! Trials with and without a subscription.
 
-use navree_datetime::Span;
 use navree_billing::{BillingError, SubscriptionStatus};
+use navree_datetime::Span;
 
 use crate::support::{World, builder, start};
 

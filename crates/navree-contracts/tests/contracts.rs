@@ -187,15 +187,9 @@ fn fixed_clock_can_be_set_and_advanced() {
     let clock = FixedClock::new(start);
     assert_eq!(clock.now(), start);
     clock.advance(Duration::from_secs(90));
-    assert_eq!(
-        clock.now(),
-        Timestamp::utc(2026, 10, 25, 9, 1, 30).unwrap()
-    );
+    assert_eq!(clock.now(), Timestamp::utc(2026, 10, 25, 9, 1, 30).unwrap());
     clock.advance(Span::seconds(30));
-    assert_eq!(
-        clock.now(),
-        Timestamp::utc(2026, 10, 25, 9, 2, 0).unwrap()
-    );
+    assert_eq!(clock.now(), Timestamp::utc(2026, 10, 25, 9, 2, 0).unwrap());
     let later = Timestamp::utc(2027, 1, 1, 0, 0, 0).unwrap();
     clock.set(later);
     assert_eq!(clock.now(), later);

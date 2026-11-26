@@ -30,8 +30,8 @@ use std::collections::BTreeMap;
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use navree_datetime::{Date, DateTime, Time, Zoned};
 use http::request::Parts;
+use navree_datetime::{Date, DateTime, Time, Zoned};
 use navree_http::extract::FromRequestParts;
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, Json, Query};
@@ -344,16 +344,14 @@ fn untag(tagged: &serde_json::Value) -> Result<Value> {
         "date" => Value::Date(text()?.parse::<Date>().map_err(|_| invalid())?),
         "time" => Value::Time(text()?.parse::<Time>().map_err(|_| invalid())?),
         "naive" => Value::DateTime(
-            DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", text()?)
-                .map_err(|_| invalid())?,
+            DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", text()?).map_err(|_| invalid())?,
         ),
         "utc" => Value::Timestamp(
             Zoned::parse_rfc3339(text()?)
-                .map_err(|_| invalid())?.timestamp(),
+                .map_err(|_| invalid())?
+                .timestamp(),
         ),
-        "tz" => Value::TimestampTz(
-            Zoned::parse_rfc3339(text()?).map_err(|_| invalid())?,
-        ),
+        "tz" => Value::TimestampTz(Zoned::parse_rfc3339(text()?).map_err(|_| invalid())?),
         "uuid" => Value::Uuid(Uuid::parse_str(text()?).map_err(|_| invalid())?),
         "dec" => Value::Decimal(text()?.parse::<Decimal>().map_err(|_| invalid())?),
         "enum" => {
@@ -601,8 +599,7 @@ mod tests {
 
     #[test]
     fn cursors_round_trip_with_their_types() {
-        let at = Timestamp::parse_rfc3339("2026-10-27T08:30:00.123456Z")
-            .unwrap();
+        let at = Timestamp::parse_rfc3339("2026-10-27T08:30:00.123456Z").unwrap();
         let cursor = Cursor {
             towards: Towards::Previous,
             columns: vec![

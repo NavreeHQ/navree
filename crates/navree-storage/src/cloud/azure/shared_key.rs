@@ -17,8 +17,8 @@ use ::http::header::{
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use navree_datetime::Timestamp;
 use navree_crypto::hmac_sha256;
+use navree_datetime::Timestamp;
 use percent_encoding::percent_decode_str;
 
 use crate::cloud::Result;

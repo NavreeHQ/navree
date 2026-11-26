@@ -2,8 +2,8 @@
 
 use std::fmt;
 
-use navree_datetime::Timestamp;
 use navree_crypto::{constant_time_eq, hmac_sha256};
+use navree_datetime::Timestamp;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 
 /// Characters escaped in URL path segments: everything but RFC 3986
