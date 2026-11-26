@@ -35,7 +35,6 @@ test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 base64 = { workspace = true }
-chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
 navree-auth = { workspace = true }
@@ -45,6 +44,7 @@ navree-contracts = { workspace = true }
 # Sealed state, and `jose`: ID tokens verified against provider key sets,
 # Apple's ES256 client secret.
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }

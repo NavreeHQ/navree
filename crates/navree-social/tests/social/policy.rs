@@ -2,11 +2,11 @@
 //! sign in elsewhere (single sign-on enforced, say) is refused with 403
 //! `sso_required`, before any account is created or linked.
 
-use chrono::Utc;
 use navree_auth::{
     AuthError, AuthService, JwtService, ModuleBuilderAuthExt, SignInAttempt, SignInMethod,
     SignInPolicy, TokenType, User,
 };
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_orm::Model as _;
@@ -58,7 +58,10 @@ async fn two_factor_on(app: &TestApp, id: uuid::Uuid) {
     let db = app.get::<Db>().await;
     User::query()
         .where_key(id)
-        .update(&*db, [User::TWO_FACTOR_CONFIRMED_AT.set(Some(Utc::now()))])
+        .update(
+            &*db,
+            [User::TWO_FACTOR_CONFIRMED_AT.set(Some(Timestamp::now()))],
+        )
         .await
         .unwrap();
 }
@@ -81,7 +84,7 @@ async fn social_sign_in_is_refused_for_an_enforced_domain() {
     let db = app.get::<Db>().await;
     User::query()
         .where_key(ada.id)
-        .update(&*db, [User::EMAIL_VERIFIED_AT.set(Some(Utc::now()))])
+        .update(&*db, [User::EMAIL_VERIFIED_AT.set(Some(Timestamp::now()))])
         .await
         .unwrap();
     fake.on_code("github", "anu", github("2", Some("anu@corp.test")));

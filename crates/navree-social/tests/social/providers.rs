@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_http_client::HttpClient;
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_social::{
@@ -58,7 +58,7 @@ async fn callback(app: &TestApp, key: &str, body: Value) -> TestResponse {
 }
 
 fn now() -> i64 {
-    Utc::now().timestamp()
+    Timestamp::now().as_secs()
 }
 
 /// Checks the token request: the code, the redirect URI, the client id and

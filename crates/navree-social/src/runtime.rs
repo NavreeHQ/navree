@@ -5,12 +5,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex as StdMutex, PoisonError};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use navree_auth::{AppsOptions, AuthOptions, AuthService};
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditSink, Clock, SystemClock};
 use navree_crypto::jose::JwkSet;
 use navree_crypto::{Encrypter, Hasher};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
 use navree_http_client::{HttpClient, HttpClientOptions};
@@ -144,7 +144,7 @@ impl Runtime {
         format!("{}/{key}", self.options.redirect_base.trim_end_matches('/'))
     }
 
-    pub(crate) fn now(&self) -> DateTime<Utc> {
+    pub(crate) fn now(&self) -> Timestamp {
         self.clock.now()
     }
 
@@ -216,8 +216,8 @@ async fn record(sink: Arc<dyn AuditSink>, entry: AuditEntry) {
 /// A fetched key set: when it was fetched and until when it is used.
 struct CachedSet {
     set: JwkSet,
-    fetched: DateTime<Utc>,
-    expires: DateTime<Utc>,
+    fetched: Timestamp,
+    expires: Timestamp,
 }
 
 /// Fetched JSON Web Key Sets, by URL.
@@ -247,7 +247,7 @@ impl JwksCache {
         &self,
         url: &str,
         kid: Option<&str>,
-        now: DateTime<Utc>,
+        now: Timestamp,
         fetch: F,
     ) -> Result<JwkSet, SocialError>
     where
@@ -281,12 +281,12 @@ impl JwksCache {
     /// The cached set at `url` when it can answer a request for `kid` at
     /// `now`: it is fresh, and has the key or was fetched less than 30
     /// seconds ago.
-    fn usable(&self, url: &str, kid: Option<&str>, now: DateTime<Utc>) -> Option<JwkSet> {
+    fn usable(&self, url: &str, kid: Option<&str>, now: Timestamp) -> Option<JwkSet> {
         let sets = self.sets.lock().unwrap_or_else(PoisonError::into_inner);
         let cached = sets.get(url)?;
         let fresh = now < cached.expires;
         let knows_kid = kid.is_none_or(|kid| cached.set.has_kid(kid));
-        let refetched_lately = now.signed_duration_since(cached.fetched) < delta(JWKS_MIN_REFETCH);
+        let refetched_lately = now.duration_since(cached.fetched) < delta(JWKS_MIN_REFETCH);
         (fresh && (knows_kid || refetched_lately)).then(|| cached.set.clone())
     }
 
@@ -297,8 +297,8 @@ impl JwksCache {
     }
 }
 
-fn delta(duration: Duration) -> chrono::TimeDelta {
-    chrono::TimeDelta::from_std(duration).unwrap_or(chrono::TimeDelta::MAX)
+fn delta(duration: Duration) -> Span {
+    Span::try_from(duration).unwrap_or(Span::MAX)
 }
 
 /// How long a key set is used: the `max-age` of its `Cache-Control` header
@@ -338,8 +338,8 @@ mod tests {
         }
     }
 
-    fn at(seconds: i64) -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(1_800_000_000 + seconds, 0).unwrap()
+    fn at(seconds: i64) -> Timestamp {
+        Timestamp::from_secs(1_800_000_000 + seconds).unwrap()
     }
 
     #[tokio::test]

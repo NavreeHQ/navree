@@ -5,8 +5,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
 use navree_contracts::Clock;
+use navree_datetime::Timestamp;
 use navree_social::SocialUser;
 use navree_testing::{FixedClock, TestApp};
 use serde_json::json;
@@ -100,7 +100,7 @@ async fn a_new_github_user_gets_an_account_and_tokens_and_the_state_works_once()
 #[tokio::test]
 async fn forged_expired_and_foreign_states_are_refused() {
     let clock = Arc::new(FixedClock::new(
-        Utc.with_ymd_and_hms(2026, 10, 26, 8, 0, 0).unwrap(),
+        Timestamp::utc(2026, 10, 26, 8, 0, 0).unwrap(),
     ));
     let (app, fake) = fake_app(|b| {
         b.config("social.providers.google.client_id", "google-client")
@@ -145,7 +145,7 @@ async fn forged_expired_and_foreign_states_are_refused() {
 #[tokio::test]
 async fn the_state_lifetime_is_configurable() {
     let clock = Arc::new(FixedClock::new(
-        Utc.with_ymd_and_hms(2026, 10, 26, 8, 0, 0).unwrap(),
+        Timestamp::utc(2026, 10, 26, 8, 0, 0).unwrap(),
     ));
     let (app, fake) = fake_app(|b| {
         b.config("social.state_ttl_secs", 60)

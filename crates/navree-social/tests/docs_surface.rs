@@ -6,10 +6,10 @@
 
 use std::collections::BTreeMap;
 
-use chrono::Utc;
 use navree_auth::{ClientMeta, LoginOutcome, User};
 use navree_config::{Config, ConfigSources};
 use navree_contracts::Secret;
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_events::Event;
 use navree_social::{
@@ -55,7 +55,7 @@ fn the_documented_values_have_their_fields() {
         scopes,
     } = ProviderToken::new("a")
         .refresh_token("r")
-        .expires_at(Utc::now())
+        .expires_at(Timestamp::now())
         .scopes(["s"]);
     let _: (
         &Secret<String>,
@@ -96,7 +96,7 @@ fn the_documented_values_have_their_fields() {
         email: None,
         name: None,
         avatar_url: None,
-        linked_at: Utc::now(),
+        linked_at: Timestamp::now(),
     };
     let listed = serde_json::to_value(&account).unwrap();
     for key in [

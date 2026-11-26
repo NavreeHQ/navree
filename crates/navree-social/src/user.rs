@@ -5,8 +5,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use chrono::{DateTime, Utc};
 use navree_contracts::Secret;
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -23,7 +23,7 @@ pub struct ProviderToken {
     /// The refresh token, when the provider issued one.
     pub refresh_token: Option<Secret<String>>,
     /// When the access token expires, when the provider said.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
     /// The OpenID Connect ID token, when the provider issued one.
     pub id_token: Option<Secret<String>>,
     /// The scopes the provider granted (when it said).
@@ -49,7 +49,7 @@ impl ProviderToken {
     }
 
     /// Sets when the access token expires.
-    pub fn expires_at(mut self, expires_at: DateTime<Utc>) -> Self {
+    pub fn expires_at(mut self, expires_at: Timestamp) -> Self {
         self.expires_at = Some(expires_at);
         self
     }
@@ -402,7 +402,7 @@ pub struct LinkedAccount {
     /// The avatar URL the provider reported.
     pub avatar_url: Option<String>,
     /// When the account was linked.
-    pub linked_at: DateTime<Utc>,
+    pub linked_at: Timestamp,
 }
 
 #[cfg(test)]
