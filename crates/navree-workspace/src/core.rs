@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{Broadcaster, Clock, SystemClock};
 use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
@@ -64,7 +64,7 @@ impl Core {
     }
 
     /// The current time, from the app's `dyn Clock` when there is one.
-    pub(crate) fn now(&self) -> DateTime<Utc> {
+    pub(crate) fn now(&self) -> Timestamp {
         self.clock.now()
     }
 

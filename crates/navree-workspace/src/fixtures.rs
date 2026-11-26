@@ -16,14 +16,14 @@
 
 use std::path::{Component, Path};
 
-use chrono::{DateTime, Duration, SecondsFormat, Utc};
+use navree_datetime::{Precision, Span, Timestamp};
 use navree_kernel::BoxError;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 /// Parses fixture `text` (JSON), resolves its placeholders against `now`
 /// and deserializes it.
-pub(crate) fn parse<T: DeserializeOwned>(text: &str, now: DateTime<Utc>) -> Result<T, BoxError> {
+pub(crate) fn parse<T: DeserializeOwned>(text: &str, now: Timestamp) -> Result<T, BoxError> {
     let mut value: Value = serde_json::from_str(text)?;
     resolve(&mut value, now)?;
     Ok(serde_json::from_value(value)?)
@@ -34,7 +34,7 @@ pub(crate) fn parse<T: DeserializeOwned>(text: &str, now: DateTime<Utc>) -> Resu
 pub(crate) fn read<T: DeserializeOwned>(
     dir: &Path,
     name: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<T, BoxError> {
     let relative = Path::new(name);
     let plain = !name.trim().is_empty()
@@ -54,7 +54,7 @@ pub(crate) fn read<T: DeserializeOwned>(
 }
 
 /// Replaces every placeholder string in `value`.
-pub(crate) fn resolve(value: &mut Value, now: DateTime<Utc>) -> Result<(), BoxError> {
+pub(crate) fn resolve(value: &mut Value, now: Timestamp) -> Result<(), BoxError> {
     match value {
         Value::String(text) => {
             if let Some(replacement) = placeholder(text, now)? {
@@ -78,7 +78,7 @@ pub(crate) fn resolve(value: &mut Value, now: DateTime<Utc>) -> Result<(), BoxEr
 
 /// The replacement of `text` when it is a `now` or `today` placeholder;
 /// `None` for any other string; an error for a malformed one.
-fn placeholder(text: &str, now: DateTime<Utc>) -> Result<Option<String>, BoxError> {
+fn placeholder(text: &str, now: Timestamp) -> Result<Option<String>, BoxError> {
     let Some(inner) = text
         .trim()
         .strip_prefix("{{")
@@ -101,7 +101,7 @@ fn placeholder(text: &str, now: DateTime<Utc>) -> Result<Option<String>, BoxErro
         .into()
     };
     let shift = if offset.is_empty() {
-        Duration::zero()
+        Span::ZERO
     } else {
         let (sign, amount) = if let Some(amount) = offset.strip_prefix('+') {
             (1, amount)
@@ -116,31 +116,31 @@ fn placeholder(text: &str, now: DateTime<Utc>) -> Result<Option<String>, BoxErro
             .parse()
             .map_err(|_| malformed())?;
         let shift = match (base, unit) {
-            ("now", 'm') => Duration::try_minutes(number),
-            ("now", 'h') => Duration::try_hours(number),
-            (_, 'd') => Duration::try_days(number),
-            (_, 'w') => Duration::try_weeks(number),
+            ("now", 'm') => Span::try_minutes(number),
+            ("now", 'h') => Span::try_hours(number),
+            (_, 'd') => Span::try_days(number),
+            (_, 'w') => Span::try_weeks(number),
             _ => None,
         };
         shift.ok_or_else(malformed)? * sign
     };
-    let at = now.checked_add_signed(shift).ok_or_else(malformed)?;
+    let at = now.checked_add(shift).ok_or_else(malformed)?;
     Ok(Some(match base {
-        "today" => at.date_naive().format("%Y-%m-%d").to_string(),
-        _ => at.to_rfc3339_opts(SecondsFormat::Secs, true),
+        "today" => at.date_time_utc().date().format("%Y-%m-%d").to_string(),
+        _ => at.to_rfc3339_with(Precision::Secs, true),
     }))
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use navree_datetime::Timestamp;
     use serde::Deserialize;
     use serde_json::json;
 
     use super::*;
 
-    fn now() -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 10, 27, 9, 30, 0).unwrap()
+    fn now() -> Timestamp {
+        Timestamp::utc(2026, 10, 27, 9, 30, 0).unwrap()
     }
 
     fn resolved(value: Value) -> Value {
@@ -210,8 +210,8 @@ mod tests {
     #[derive(Debug, Deserialize, PartialEq)]
     struct Task {
         title: String,
-        due: chrono::NaiveDate,
-        created_at: DateTime<Utc>,
+        due: navree_datetime::Date,
+        created_at: Timestamp,
     }
 
     #[test]
@@ -229,8 +229,8 @@ mod tests {
             tasks,
             [Task {
                 title: "Call Anu".into(),
-                due: chrono::NaiveDate::from_ymd_opt(2026, 10, 28).unwrap(),
-                created_at: Utc.with_ymd_and_hms(2026, 10, 25, 9, 30, 0).unwrap(),
+                due: navree_datetime::Date::new(2026, 10, 28).unwrap(),
+                created_at: Timestamp::utc(2026, 10, 25, 9, 30, 0).unwrap(),
             }]
         );
         let missing = read::<Value>(&dir, "missing", now())

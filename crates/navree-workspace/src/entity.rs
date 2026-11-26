@@ -107,7 +107,7 @@ impl fmt::Display for WorkspaceKind {
 
 /// `workspaces`: the tenants.
 pub mod workspace {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -141,9 +141,9 @@ pub mod workspace {
         /// [`DemoWorkspaces`](crate::DemoWorkspaces)).
         pub kind: String,
         /// When the workspace was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the workspace last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 
     impl Model {
@@ -161,7 +161,7 @@ pub mod workspace {
 
 /// `workspace_members`: who belongs to a workspace, with which role.
 pub mod member {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -189,9 +189,9 @@ pub mod member {
         /// listed in `partition_grants`.
         pub partition_scope: String,
         /// When the user joined.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the membership last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 
     impl Model {
@@ -209,7 +209,7 @@ pub mod member {
 
 /// `workspace_invitations`: pending and accepted invitations.
 pub mod invitation {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -239,13 +239,13 @@ pub mod invitation {
         /// Who sent it, if a user did.
         pub invited_by: Option<Uuid>,
         /// When it stops being accepted.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// When it was accepted, if it was.
-        pub accepted_at: Option<DateTime<Utc>>,
+        pub accepted_at: Option<Timestamp>,
         /// The user who accepted it.
         pub accepted_by: Option<Uuid>,
         /// When it was sent.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 
     impl Model {
@@ -255,7 +255,7 @@ pub mod invitation {
         }
 
         /// Whether it is still open: not accepted and not expired at `now`.
-        pub fn is_pending(&self, now: DateTime<Utc>) -> bool {
+        pub fn is_pending(&self, now: Timestamp) -> bool {
             self.accepted_at.is_none() && self.expires_at > now
         }
     }
@@ -263,7 +263,7 @@ pub mod invitation {
 
 /// `organizations`: the level above workspaces.
 pub mod organization {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -290,16 +290,16 @@ pub mod organization {
         /// An IANA time zone name (`Europe/London`), if set.
         pub timezone: Option<String>,
         /// When the organization was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the organization last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
 /// `organization_members`: who belongs to an organization, with which role
 /// and in which of its workspaces.
 pub mod organization_member {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -327,9 +327,9 @@ pub mod organization_member {
         /// or `only` the ones listed in `organization_grants`.
         pub scope: String,
         /// When the user joined.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the membership last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 
     impl Model {
@@ -348,7 +348,7 @@ pub mod organization_member {
 /// `organization_grants`: the workspaces an organization member limited to
 /// `only` some of them reaches.
 pub mod organization_grant {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -365,13 +365,13 @@ pub mod organization_grant {
         /// The workspace the member reaches.
         pub workspace_id: Uuid,
         /// When the grant was made.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
 /// `access_requests`: users asking to join an organization.
 pub mod access_request {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -403,13 +403,13 @@ pub mod access_request {
         /// Who approved or declined it.
         pub decided_by: Option<Uuid>,
         /// When it was approved or declined.
-        pub decided_at: Option<DateTime<Utc>>,
+        pub decided_at: Option<Timestamp>,
         /// Why it was declined, if a reason was given.
         pub reason: Option<String>,
         /// When it was made.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 
     impl Model {
@@ -427,7 +427,7 @@ pub mod access_request {
 
 /// `workspace_partitions`: named slices of a workspace's data.
 pub mod partition {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -449,16 +449,16 @@ pub mod partition {
         /// The handle, unique in the workspace (`agra-co-uk`).
         pub slug: String,
         /// When the partition was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the partition last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
 /// `partition_grants`: the partitions a workspace member limited to `only`
 /// some of them sees.
 pub mod partition_grant {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -475,7 +475,7 @@ pub mod partition_grant {
         /// The partition the member sees.
         pub partition_id: Uuid,
         /// When the grant was made.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 

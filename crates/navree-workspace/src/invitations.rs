@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_crypto::{random_token, sha256_hex};
 use navree_db::Uow;
 use navree_mail::{Mailable, Message, TemplateMail};
@@ -334,10 +334,10 @@ fn normalize_email(email: &str) -> Result<String, WorkspaceError> {
 }
 
 /// `at` plus `secs` seconds (saturating).
-fn after(at: DateTime<Utc>, secs: u64) -> DateTime<Utc> {
+fn after(at: Timestamp, secs: u64) -> Timestamp {
     let secs = i64::try_from(secs).unwrap_or(i64::MAX);
-    at.checked_add_signed(TimeDelta::try_seconds(secs).unwrap_or(TimeDelta::MAX))
-        .unwrap_or(DateTime::<Utc>::MAX_UTC)
+    at.checked_add(Span::try_seconds(secs).unwrap_or(Span::MAX))
+        .unwrap_or(Timestamp::MAX)
 }
 
 /// The invitation mail: from the configured template, or built-in text.
@@ -470,7 +470,7 @@ mod tests {
 
     #[test]
     fn sent_invitations_hide_the_token_in_debug_output() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let sent = SentInvitation {
             invitation: Invitation {
                 id: Uuid::now_v7(),

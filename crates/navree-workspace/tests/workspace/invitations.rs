@@ -36,7 +36,7 @@ async fn an_invitation_is_mailed_with_a_token_stored_hashed() {
     assert_eq!(sent.token.len(), 48);
     assert_eq!(
         sent.invitation.expires_at,
-        crate::support::start() + chrono::TimeDelta::days(7)
+        crate::support::start() + navree_datetime::Span::days(7)
     );
     let stored = Invitation::find(&*world.db().await, sent.invitation.id)
         .await

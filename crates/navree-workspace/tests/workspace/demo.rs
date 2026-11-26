@@ -4,7 +4,6 @@
 
 use std::sync::Arc;
 
-use chrono::TimeZone;
 use http::Method;
 use navree_db::MigrationSet;
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
@@ -662,9 +661,8 @@ async fn the_nightly_reset_runs_at_reset_at() {
     assert_eq!(world.deal_titles(demo.id).await.len(), 4);
 
     let scheduler = world.app.get::<Scheduler>().await;
-    let tick = |hour: u32, minute: u32| {
-        chrono::Utc
-            .with_ymd_and_hms(2026, 10, 27, hour, minute, 0)
+    let tick = |hour: u8, minute: u8| {
+        navree_datetime::Timestamp::utc(2026, 10, 27, hour, minute, 0)
             .unwrap()
     };
     world.clock.set(tick(3, 29));
@@ -694,8 +692,7 @@ async fn read_only_demos_are_not_reset_on_the_schedule() {
         .send()
         .await
         .assert_status(200);
-    let at = chrono::Utc
-        .with_ymd_and_hms(2026, 10, 27, 3, 30, 0)
+    let at = navree_datetime::Timestamp::utc(2026, 10, 27, 3, 30, 0)
         .unwrap();
     world.clock.set(at);
     world.app.get::<Scheduler>().await.tick(at).await.unwrap();
@@ -841,7 +838,7 @@ impl Injectable for NotesDemo {
 #[derive(Deserialize)]
 struct NoteFixture {
     body: String,
-    due: chrono::NaiveDate,
+    due: navree_datetime::Date,
 }
 
 impl DemoSeeder for NotesDemo {
@@ -934,7 +931,7 @@ async fn database_isolation_seeds_and_resets_the_demo_database() {
 
     world
         .clock
-        .set(chrono::Utc.with_ymd_and_hms(2026, 11, 2, 3, 0, 0).unwrap());
+        .set(navree_datetime::Timestamp::utc(2026, 11, 2, 3, 0, 0).unwrap());
     world.demos().await.reset(demo.id).await.unwrap();
     assert_eq!(notes(tenant).await, ["Call back by 2026-11-04"]);
 }

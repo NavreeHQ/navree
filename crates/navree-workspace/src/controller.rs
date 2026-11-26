@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::{Method, Uri};
 use navree_db::Uow;
 use navree_http::{
@@ -60,9 +60,9 @@ pub struct WorkspaceResource {
     /// The ISO 3166-1 alpha-2 country (`IN`), if set.
     pub country: Option<String>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl WorkspaceResource {
@@ -104,9 +104,9 @@ pub struct MemberResource {
     /// The user's name and email, when the user directory knows them.
     pub user: Option<UserSummary>,
     /// When the user joined.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the membership last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl MemberResource {
@@ -150,9 +150,9 @@ pub struct InvitationResource {
     /// Who sent it.
     pub invited_by: Option<Uuid>,
     /// When it expires.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     /// When it was sent.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl From<&Invitation> for InvitationResource {
@@ -192,9 +192,9 @@ pub struct PartitionResource {
     /// The slug, unique in the workspace.
     pub slug: String,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl From<&Partition> for PartitionResource {

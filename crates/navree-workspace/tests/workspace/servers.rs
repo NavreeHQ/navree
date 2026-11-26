@@ -81,8 +81,8 @@ mod real {
             workspace_id: workspace,
             slug: "raw".into(),
             name: "Raw".into(),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            created_at: navree_datetime::Timestamp::now(),
+            updated_at: navree_datetime::Timestamp::now(),
             ..Template::default()
         }
     }

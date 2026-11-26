@@ -2,7 +2,7 @@
 //! `EventBus` once the unit of work that made the change commits (never
 //! for a rolled-back change), when `EventsModule` is in the app.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_events::Event;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -116,7 +116,7 @@ pub struct InvitationSent {
     /// Who sent it.
     pub invited_by: Option<Uuid>,
     /// When it expires.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 impl Event for InvitationSent {

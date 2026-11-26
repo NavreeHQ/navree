@@ -558,7 +558,7 @@ impl fmt::Debug for Organizations {
 async fn detach_row(
     uow: &Uow,
     workspace: Workspace,
-    now: chrono::DateTime<chrono::Utc>,
+    now: navree_datetime::Timestamp,
 ) -> Result<Workspace, WorkspaceError> {
     store::update(uow, workspace, |row| {
         row.organization_id = None;
@@ -572,7 +572,7 @@ pub(crate) async fn set_org_role(
     uow: &Uow,
     member: OrgMember,
     role: OrgRole,
-    now: chrono::DateTime<chrono::Utc>,
+    now: navree_datetime::Timestamp,
 ) -> Result<OrgMember, WorkspaceError> {
     if member.role == role.as_str() {
         return Ok(member);

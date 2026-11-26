@@ -7,7 +7,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{DbError, Executor, Statement, Uow, Value};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_orm::Model as _;
@@ -123,7 +123,7 @@ pub struct DemoSeed {
     isolation: Isolation,
     schema: Option<String>,
     fixtures: PathBuf,
-    now: DateTime<Utc>,
+    now: Timestamp,
     reset: bool,
 }
 
@@ -156,7 +156,7 @@ impl DemoSeed {
 
     /// The time of seeding, from the app's `dyn Clock`: write dates
     /// relative to it so a demo seeded tonight looks current tomorrow.
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         self.now
     }
 

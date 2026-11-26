@@ -2,7 +2,7 @@
 //! a workspace member sees, and the workspace role an organization grant
 //! gives.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_orm::{Executor, Model as _};
 use uuid::Uuid;
@@ -43,7 +43,7 @@ pub(crate) async fn set_org_selector(
     uow: &Uow,
     member: OrgMember,
     selector: &WorkspaceSelector,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<OrgMember, WorkspaceError> {
     type Grant = organization_grant::Model;
     let existing = Grant::query()
@@ -205,7 +205,7 @@ pub(crate) async fn set_partition_selector(
     uow: &Uow,
     member: Member,
     selector: &PartitionSelector,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<Member, WorkspaceError> {
     type Grant = partition_grant::Model;
     let existing = Grant::query()
