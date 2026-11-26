@@ -376,7 +376,7 @@ async fn down(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
         .transpose()
         .map_err(|_| "--retry must be a number of seconds")?;
     let info = MaintenanceInfo {
-        time: Some(chrono::Utc::now().timestamp()),
+        time: Some(navree_datetime::Timestamp::now().as_secs()),
         retry,
         message: flag(&args, "--message")?,
     };
