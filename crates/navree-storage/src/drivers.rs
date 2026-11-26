@@ -113,7 +113,7 @@ mod cloud {
     #[cfg(feature = "gcs")]
     use crate::options::GcsConfig;
     use crate::provider::{Provider, ProviderKind};
-    #[cfg(any(feature = "gcs", feature = "azure"))]
+    #[cfg(feature = "azure")]
     use crate::store::cloud::Cloud;
 
     /// The process environment, for the cloud drivers' fallbacks.
@@ -125,13 +125,13 @@ mod cloud {
     /// The cloud drivers use reqwest with rustls but no default crypto
     /// provider: install ring. An error only means a process-wide provider
     /// is already installed.
-    #[cfg(any(feature = "gcs", feature = "azure"))]
+    #[cfg(feature = "azure")]
     fn install_crypto_provider() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
 
     /// A backend error while building the store of disk `name`.
-    #[cfg(any(feature = "gcs", feature = "azure"))]
+    #[cfg(feature = "azure")]
     fn build_error(name: &str, source: object_store::Error) -> StorageError {
         StorageError::Backend {
             disk: name.to_owned(),
@@ -140,7 +140,7 @@ mod cloud {
     }
 
     /// Client options allowing plain HTTP for an `http://` endpoint.
-    #[cfg(any(feature = "gcs", feature = "azure"))]
+    #[cfg(feature = "azure")]
     fn client_options(endpoint: Option<&str>) -> object_store::ClientOptions {
         object_store::ClientOptions::new()
             .with_allow_http(endpoint.is_some_and(|url| url.starts_with("http://")))
@@ -232,39 +232,15 @@ mod cloud {
         config: &GcsConfig,
         env: &BTreeMap<String, String>,
     ) -> Result<Backend, StorageError> {
-        use object_store::gcp::GoogleCloudStorageBuilder;
-
-        install_crypto_provider();
-        let mut builder = GoogleCloudStorageBuilder::new()
-            .with_bucket_name(&config.bucket)
-            .with_client_options(client_options(config.endpoint.as_deref()));
-        if let Some(endpoint) = &config.endpoint {
-            builder = builder.with_base_url(endpoint.trim_end_matches('/'));
-        }
-        let env_value = |keys: &[&str]| keys.iter().find_map(|key| env.get(*key)).cloned();
-        match (&config.service_account_path, &config.service_account_key) {
-            (Some(path), _) => {
-                builder = builder.with_service_account_path(path.to_string_lossy());
-            }
-            (None, Some(key)) => builder = builder.with_service_account_key(key.expose()),
-            (None, None) => {
-                if let Some(key) = env_value(&["GOOGLE_SERVICE_ACCOUNT_KEY"]) {
-                    builder = builder.with_service_account_key(key);
-                } else if let Some(path) = env_value(&[
-                    "GOOGLE_SERVICE_ACCOUNT",
-                    "GOOGLE_SERVICE_ACCOUNT_PATH",
-                    "SERVICE_ACCOUNT",
-                ]) {
-                    builder = builder.with_service_account_path(path);
-                } else if let Some(path) = env_value(&["GOOGLE_APPLICATION_CREDENTIALS"]) {
-                    builder = builder.with_application_credentials(path);
-                }
-            }
-        }
-        let store = Arc::new(builder.build().map_err(|error| build_error(name, error))?);
+        let store = Arc::new(crate::cloud::gcs::GcsStore::from_env(config, env).map_err(
+            |error| StorageError::Backend {
+                disk: name.to_owned(),
+                source: Box::new(error),
+            },
+        )?);
         Ok(Backend {
-            store: Arc::new(Cloud::new(store.clone())),
-            provider: Some(Provider::new(ProviderKind::Gcs, store)),
+            store: store.clone(),
+            provider: Some(Provider::from_store(ProviderKind::Gcs, store)),
         })
     }
 

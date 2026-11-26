@@ -1,6 +1,8 @@
 //! [`Cloud`]: a bucket of S3, Google Cloud Storage or Azure, through the
 //! provider's `object_store` client.
 
+#![allow(dead_code)]
+
 use std::fmt;
 use std::ops::Range;
 use std::sync::Arc;
