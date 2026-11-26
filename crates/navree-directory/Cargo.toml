@@ -30,7 +30,6 @@ test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 bytes = { workspace = true }
-chrono = { workspace = true }
 http = { workspace = true }
 # LDAP and Active Directory, TLS through rustls with ring.
 ldap3 = { workspace = true }
@@ -39,6 +38,7 @@ navree-contracts = { workspace = true }
 # The LDAP bind password is sealed with the application key; SCIM tokens are
 # random and kept as SHA-256 hashes.
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }

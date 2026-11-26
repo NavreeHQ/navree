@@ -228,7 +228,7 @@ async fn prune(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
 
     use super::*;
     use crate::types::{RunStatus, RunSummary};
@@ -254,7 +254,7 @@ mod tests {
             error: Some("too many".into()),
             operation_id: None,
             created_by: None,
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
             started_at: None,
             finished_at: None,
         };
