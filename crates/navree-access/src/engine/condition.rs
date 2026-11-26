@@ -383,7 +383,7 @@ where
 /// A Rust value usable as a condition operand.
 ///
 /// Implemented for booleans, integers, floats, strings, [`uuid::Uuid`]
-/// (hyphenated lower case), [`chrono::DateTime<Utc>`](chrono::DateTime)
+/// (hyphenated lower case), [`navree_datetime::Timestamp`]
 /// (RFC 3339 UTC with fixed microsecond precision, so text order is time
 /// order), JSON values and `Option<T>` (`None` is `null`).
 pub trait IntoCondValue {
@@ -438,10 +438,10 @@ impl IntoCondValue for uuid::Uuid {
     }
 }
 
-impl IntoCondValue for chrono::DateTime<chrono::Utc> {
+impl IntoCondValue for navree_datetime::Timestamp {
     fn into_cond_value(self) -> Option<Value> {
         Some(Value::String(
-            self.to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
+            self.to_rfc3339_with(navree_datetime::Precision::Micros, true),
         ))
     }
 }

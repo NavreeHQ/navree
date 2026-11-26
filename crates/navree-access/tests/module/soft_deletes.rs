@@ -4,13 +4,13 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use http::Method;
 use navree_access::{
     AbilityCtx, AbilityFactory, AccessModule, Authorized, READ, Read, Rules, Subject,
     SubjectRecords, field, row_json,
 };
 use navree_contracts::{BoxError, BoxFuture};
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::record;
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Record, Uow};
@@ -30,7 +30,7 @@ navree_db::record! {
         pub id: Uuid,
         pub author_id: Uuid,
         pub title: String,
-        pub deleted_at: Option<DateTime<Utc>>,
+        pub deleted_at: Option<Timestamp>,
     }
 }
 

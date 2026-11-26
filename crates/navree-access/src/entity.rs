@@ -16,7 +16,7 @@
 
 use std::sync::OnceLock;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::record::Filter;
 use navree_db::{Kind, Record as _, Uow, Value};
 use navree_kernel::{BoxError, BoxFuture};
@@ -40,7 +40,7 @@ navree_db::record! {
         /// What the role is for.
         pub description: Option<String>,
         /// When the role was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 

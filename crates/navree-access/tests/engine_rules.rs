@@ -673,7 +673,7 @@ fn build_panics_on_an_invalid_rule() {
 
 #[test]
 fn cond_values_from_uuids_and_timestamps() {
-    use chrono::{TimeZone, Utc};
+    use navree_datetime::Timestamp;
     use navree_access::engine::Cond;
 
     let user = uuid::Uuid::from_u128(0x0190_aaaa_bbbb_7ccc_8ddd_eeee_ffff_0001);
@@ -688,7 +688,7 @@ fn cond_values_from_uuids_and_timestamps() {
 
     // Timestamps: RFC 3339 UTC, fixed microsecond precision, so text order
     // is time order.
-    let at = Utc.with_ymd_and_hms(2026, 10, 25, 10, 0, 0).unwrap();
+    let at = Timestamp::utc(2026, 10, 25, 10, 0, 0).unwrap();
     let since = field("created_at").gte(at);
     assert_eq!(
         since.get("created_at"),
