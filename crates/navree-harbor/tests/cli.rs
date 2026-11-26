@@ -6,7 +6,6 @@ mod common;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
 use clap::Parser;
@@ -90,8 +89,9 @@ impl App {
         }
     }
 
-    fn run(&self, exec: &FakeExecutor, args: &[&str]) -> anyhow::Result<ExitCode> {
-        run(&parse(args), &self.context(exec))
+    fn run(&self, exec: &FakeExecutor, args: &[&str]) -> anyhow::Result<()> {
+        let _ = run(&parse(args), &self.context(exec))?;
+        Ok(())
     }
 
     fn harbor(&self, text: &str) {

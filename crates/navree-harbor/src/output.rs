@@ -4,7 +4,7 @@
 use std::io::Write as _;
 use std::sync::{Arc, Mutex};
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 
 /// Where progress lines go.
 pub trait Progress: Send + Sync {
@@ -66,7 +66,7 @@ impl Progress for Recorder {
 /// The current time.
 pub trait Clock: Send + Sync {
     /// Now, in UTC.
-    fn now(&self) -> DateTime<Utc>;
+    fn now(&self) -> Timestamp;
 }
 
 /// The system clock.
@@ -74,28 +74,24 @@ pub trait Clock: Send + Sync {
 pub struct SystemClock;
 
 impl Clock for SystemClock {
-    fn now(&self) -> DateTime<Utc> {
-        Utc::now()
+    fn now(&self) -> Timestamp {
+        Timestamp::now()
     }
 }
 
 /// A clock stopped at one instant (tests).
 #[derive(Debug, Clone, Copy)]
-pub struct FixedClock(pub DateTime<Utc>);
+pub struct FixedClock(pub Timestamp);
 
 impl FixedClock {
     /// 2026-10-26 09:15:12 UTC.
     pub fn example() -> Self {
-        Self(
-            DateTime::parse_from_rfc3339("2026-10-26T09:15:12Z")
-                .expect("a valid instant")
-                .with_timezone(&Utc),
-        )
+        Self(Timestamp::utc(2026, 10, 26, 9, 15, 12).expect("a valid instant"))
     }
 }
 
 impl Clock for FixedClock {
-    fn now(&self) -> DateTime<Utc> {
+    fn now(&self) -> Timestamp {
         self.0
     }
 }
@@ -111,8 +107,8 @@ pub fn duration(seconds: i64) -> String {
 }
 
 /// Seconds between two instants.
-pub fn elapsed(clock: &dyn Clock, since: DateTime<Utc>) -> String {
-    duration((clock.now() - since).num_seconds())
+pub fn elapsed(clock: &dyn Clock, since: Timestamp) -> String {
+    duration((clock.now() - since).as_seconds())
 }
 
 /// `14.2 MB`, `830 KB`, `512 B`.
