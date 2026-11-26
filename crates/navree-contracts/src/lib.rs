@@ -38,7 +38,7 @@ mod zone;
 
 pub use audit::{AuditEntry, AuditKind, AuditSink};
 pub use broadcast::Broadcaster;
-pub use clock::{Clock, FixedClock, SystemClock};
+pub use clock::{Clock, ClockStep, FixedClock, SystemClock};
 pub use conformity::{
     CONFORMITY_COMMAND, CheckContext, CheckOutcome, CheckReport, CheckStatus, ConformityCheck,
     ConformityModule, ConformityOptions, ConformityReport, Finding, ModuleBuilderConformityExt,

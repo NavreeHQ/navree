@@ -4489,7 +4489,7 @@ dependencies = [
 name = "navree-contracts"
 version = "1.6.0"
 dependencies = [
- "chrono",
+ "navree-datetime",
  "navree-kernel",
  "serde",
  "serde_json",

@@ -3,12 +3,12 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
 use navree_contracts::{
     AuditEntry, AuditKind, AuthVia, Backoff, BoxError, BoxFuture, Clock, Dispatcher, FixedClock,
     Job, JobContext, JobEnvelope, JobOptions, JobRegistration, ModuleBuilderJobsExt, Principal,
     RequestId, Secret, SessionRecord,
 };
+use navree_datetime::{Span, Timestamp};
 use navree_kernel::{AppContext, Module, ModuleBuilder, Navree};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -183,15 +183,20 @@ fn audit_entry_builder_sets_fields_and_kind_is_snake_case() {
 
 #[test]
 fn fixed_clock_can_be_set_and_advanced() {
-    let start = Utc.with_ymd_and_hms(2026, 10, 25, 9, 0, 0).unwrap();
+    let start = Timestamp::utc(2026, 10, 25, 9, 0, 0).unwrap();
     let clock = FixedClock::new(start);
     assert_eq!(clock.now(), start);
     clock.advance(Duration::from_secs(90));
     assert_eq!(
         clock.now(),
-        Utc.with_ymd_and_hms(2026, 10, 25, 9, 1, 30).unwrap()
+        Timestamp::utc(2026, 10, 25, 9, 1, 30).unwrap()
     );
-    let later = Utc.with_ymd_and_hms(2027, 1, 1, 0, 0, 0).unwrap();
+    clock.advance(Span::seconds(30));
+    assert_eq!(
+        clock.now(),
+        Timestamp::utc(2026, 10, 25, 9, 2, 0).unwrap()
+    );
+    let later = Timestamp::utc(2027, 1, 1, 0, 0, 0).unwrap();
     clock.set(later);
     assert_eq!(clock.now(), later);
 }

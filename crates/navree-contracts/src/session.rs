@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -26,7 +26,7 @@ pub struct SessionRecord {
     /// Session values by key.
     pub data: Map<String, Value>,
     /// When the session expires.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
 }
 
 /// Session values can hold tokens (CSRF, remember-me), so `Debug` lists keys only.
