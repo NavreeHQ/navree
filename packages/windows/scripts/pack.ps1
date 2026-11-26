@@ -39,9 +39,15 @@ $packages = Join-Path $Out 'packages'
 if (Test-Path -LiteralPath $packages) { Remove-Item -LiteralPath $packages -Recurse -Force }
 New-Item -ItemType Directory -Path $packages | Out-Null
 
-foreach ($project in $projects) {
-    & dotnet pack $project.FullName --nologo -c Release --no-build "-p:Version=$Version" -o $packages
-    if ($LASTEXITCODE -ne 0) { throw "dotnet pack did not pack $($project.BaseName)" }
+Push-Location -LiteralPath $here
+try {
+    foreach ($project in $projects) {
+        & dotnet pack $project.FullName --nologo -c Release --no-build "-p:Version=$Version" -o $packages
+        if ($LASTEXITCODE -ne 0) { throw "dotnet pack did not pack $($project.BaseName)" }
+    }
+}
+finally {
+    Pop-Location
 }
 
 # The names of a package's files, with forward slashes, and its nuspec.

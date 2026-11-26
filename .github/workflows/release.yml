@@ -381,14 +381,15 @@ jobs:
 
       - name: Make the NuGet packages and attach them
         shell: pwsh
+        working-directory: packages/windows
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           VERSION: ${{ needs.verify.outputs.version }}
         run: |
-          pwsh -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/pack.ps1 -Version $env:VERSION -Out dist
+          pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/pack.ps1 -Version $env:VERSION -Out ../../dist
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          gh release upload $env:TAG "dist/navree-windows-${env:VERSION}.zip" "dist/navree-windows-${env:VERSION}.zip.sha256" --clobber
+          gh release upload $env:TAG "../../dist/navree-windows-${env:VERSION}.zip" "../../dist/navree-windows-${env:VERSION}.zip.sha256" --clobber
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # The nuget job takes them from here: it reads nothing from the draft
