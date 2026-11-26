@@ -4,7 +4,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::record::{self, Filter};
 use navree_db::{Page, PageQuery, Record as _, Uow};
 use navree_openapi::ToSchema;
@@ -81,9 +81,9 @@ pub struct HeldMail {
     /// Who released or discarded it.
     pub decided_by: Option<Uuid>,
     /// When.
-    pub decided_at: Option<DateTime<Utc>>,
+    pub decided_at: Option<Timestamp>,
     /// When it was held.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl From<&OutboxRow> for HeldMail {
@@ -138,7 +138,7 @@ async fn claim(
     id: Uuid,
     to: OutboxStatus,
     by: Option<Uuid>,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<bool, MailError> {
     let claimed = OutboxRow::update_where(
         Filter::all()

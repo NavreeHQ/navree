@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::{HeaderMap, Method, StatusCode, Uri, header};
 use navree_contracts::{Clock, Secret, SystemClock};
 use navree_crypto::sns::SnsMessage;
@@ -260,7 +260,7 @@ impl MailController {
         Ok(NoContent)
     }
 
-    fn now(&self) -> DateTime<Utc> {
+    fn now(&self) -> Timestamp {
         self.clock.now()
     }
 
@@ -438,7 +438,7 @@ impl MailController {
         let Ok(seconds) = timestamp.parse::<i64>() else {
             return false;
         };
-        if id.is_empty() || (self.now().timestamp() - seconds).abs() > SIGNATURE_TOLERANCE_SECS {
+        if id.is_empty() || (self.now().as_secs() - seconds).abs() > SIGNATURE_TOLERANCE_SECS {
             return false;
         }
         let secret = secret.expose();
@@ -829,12 +829,12 @@ pub(crate) fn mailgun_signature_valid(
     timestamp: &str,
     token: &str,
     signature: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> bool {
     let Ok(seconds) = timestamp.parse::<i64>() else {
         return false;
     };
-    if (now.timestamp() - seconds).abs() > SIGNATURE_TOLERANCE_SECS {
+    if (now.as_secs() - seconds).abs() > SIGNATURE_TOLERANCE_SECS {
         return false;
     }
     let expected = hex::encode(navree_crypto::hmac_sha256(

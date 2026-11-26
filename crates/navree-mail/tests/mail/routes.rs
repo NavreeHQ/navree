@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::Method;
 use navree_config::__private::register_in;
 use navree_config::DriverName;
@@ -256,13 +256,13 @@ async fn mailgun_events_are_verified_and_recorded() {
 
     client
         .post("/api/mail/webhooks/mailgun")
-        .json(&mailgun_body("wrong-key", Utc::now().timestamp()))
+        .json(&mailgun_body("wrong-key", Timestamp::now().as_secs()))
         .send()
         .await
         .assert_error_code(401, "invalid_signature");
     client
         .post("/api/mail/webhooks/mailgun")
-        .json(&mailgun_body("key-test", Utc::now().timestamp() - 3600))
+        .json(&mailgun_body("key-test", Timestamp::now().as_secs() - 3600))
         .send()
         .await
         .assert_status(401);
@@ -270,7 +270,7 @@ async fn mailgun_events_are_verified_and_recorded() {
 
     client
         .post("/api/mail/webhooks/mailgun")
-        .json(&mailgun_body("key-test", Utc::now().timestamp()))
+        .json(&mailgun_body("key-test", Timestamp::now().as_secs()))
         .send()
         .await
         .assert_status(204);
@@ -297,7 +297,7 @@ async fn resend_events_are_verified_with_their_svix_signature() {
         "data": { "email_id": "fake-1", "to": ["anu@example.com"] },
     })
     .to_string();
-    let timestamp = Utc::now().timestamp().to_string();
+    let timestamp = Timestamp::now().as_secs().to_string();
     let signature = STANDARD.encode(navree_crypto::hmac_sha256(
         key,
         format!("msg_1.{timestamp}.{body}").as_bytes(),
@@ -387,10 +387,9 @@ fn sns_message(name: &str) -> Value {
 }
 
 /// 2026-10-27 at `time`, UTC (the bounce was published at 10:00:02).
-fn on_the_27th(time: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(&format!("2026-10-27T{time}Z"))
+fn on_the_27th(time: &str) -> Timestamp {
+    Timestamp::parse_rfc3339(&format!("2026-10-27T{time}Z"))
         .unwrap()
-        .with_timezone(&Utc)
 }
 
 /// The SES events route on topic `SES_TOPIC`, a fake client that serves

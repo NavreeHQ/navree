@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::record::{self, Filter, Update};
 use navree_db::{Page, PageQuery, Record as _};
 use navree_openapi::ToSchema;
@@ -46,13 +46,13 @@ pub struct Delivery {
     /// Why the transport refused it.
     pub error: Option<String>,
     /// When it was first opened.
-    pub opened_at: Option<DateTime<Utc>>,
+    pub opened_at: Option<Timestamp>,
     /// When a link was first clicked.
-    pub clicked_at: Option<DateTime<Utc>>,
+    pub clicked_at: Option<Timestamp>,
     /// When it was handed to the transport.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl From<&DeliveryRow> for Delivery {
@@ -99,7 +99,7 @@ pub struct DeliveryEvent {
     /// The provider's diagnostic.
     pub detail: Option<String>,
     /// When it happened.
-    pub occurred_at: DateTime<Utc>,
+    pub occurred_at: Timestamp,
 }
 
 impl From<&EventRow> for DeliveryEvent {
@@ -332,8 +332,8 @@ impl Deliveries {
 fn changes(
     row: &DeliveryRow,
     event: &ProviderEvent,
-    occurred_at: DateTime<Utc>,
-    now: DateTime<Utc>,
+    occurred_at: Timestamp,
+    now: Timestamp,
 ) -> Option<Update<DeliveryRow>> {
     let status: DeliveryStatus = row.status.parse().unwrap_or(DeliveryStatus::Sent);
     let mut update = DeliveryRow::update_where(Filter::all().eq("id", row.id));
@@ -373,7 +373,7 @@ async fn emit(
     uow: &navree_db::Uow,
     event: &ProviderEvent,
     delivery: Option<&DeliveryRow>,
-    occurred_at: DateTime<Utc>,
+    occurred_at: Timestamp,
 ) {
     let delivery_id = delivery.map(|d| d.id);
     let workspace_id = delivery.and_then(|d| d.workspace_id);

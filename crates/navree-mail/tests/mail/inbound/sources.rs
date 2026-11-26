@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::Method;
 use navree_contracts::{Clock, FixedClock};
 use navree_http_client::{FakeResponse, FakeServer, HttpClient};
@@ -198,17 +198,16 @@ fn sns_senders() -> (HttpClient, FakeServer) {
 
 /// A minute after the receipt notifications were published
 /// (2026-10-27 09:14:03 UTC).
-fn after_receipt() -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339("2026-10-27T09:15:00Z")
+fn after_receipt() -> Timestamp {
+    Timestamp::parse_rfc3339("2026-10-27T09:15:00Z")
         .unwrap()
-        .with_timezone(&Utc)
 }
 
 /// The SES route, with `client` fetching the signing certificate and the
 /// clock at `now`.
 fn ses_config(
     client: HttpClient,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> impl FnOnce(navree_testing::TestAppBuilder) -> navree_testing::TestAppBuilder {
     move |b| {
         let clock: Arc<dyn Clock> = Arc::new(FixedClock::new(now));
@@ -388,9 +387,8 @@ async fn ses_mail_is_received_only_from_messages_sns_signed() {
 #[tokio::test]
 async fn ses_mail_published_more_than_an_hour_ago_is_refused() {
     // Published at 09:14:03.7; an hour and a minute later.
-    let late = DateTime::parse_from_rfc3339("2026-10-27T10:15:04Z")
-        .unwrap()
-        .with_timezone(&Utc);
+    let late = Timestamp::parse_rfc3339("2026-10-27T10:15:04Z")
+        .unwrap();
     let mail = inbound_app(MAILBOXES, ses_config(sns_senders().0, late)).await;
 
     mail.app
@@ -429,9 +427,8 @@ async fn ses_mail_signed_by_another_key_is_refused() {
 #[tokio::test]
 async fn ses_subscription_confirmations_receive_nothing() {
     let (client, server) = sns_senders();
-    let confirmation_time = DateTime::parse_from_rfc3339("2026-10-27T09:14:30Z")
-        .unwrap()
-        .with_timezone(&Utc);
+    let confirmation_time = Timestamp::parse_rfc3339("2026-10-27T09:14:30Z")
+        .unwrap();
     let mail = inbound_app(MAILBOXES, ses_config(client, confirmation_time)).await;
     let messages: Value = serde_json::from_str(&sns_fixture("sns-messages.json")).unwrap();
     let confirmation = &messages["inbound_subscription_confirmation_v2"];
@@ -548,7 +545,7 @@ async fn a_mailgun_mime_route_delivers_the_whole_message() {
         b.config("mail.inbound.mailgun.signing_key", MAILGUN_KEY)
     })
     .await;
-    let mut form = signed_fields(chrono::Utc::now().timestamp());
+    let mut form = signed_fields(navree_datetime::Timestamp::now().as_secs());
     form.extend([
         ("recipient".into(), "reply+abc@in.acme.test".into()),
         ("sender".into(), "anu@example.com".into()),
@@ -617,7 +614,7 @@ async fn a_mailgun_mime_route_takes_a_message_longer_than_a_form_field() {
         message.push_str("\r\n");
     }
     assert!(message.len() > 2 * 1024 * 1024);
-    let mut fields = signed_fields(chrono::Utc::now().timestamp());
+    let mut fields = signed_fields(navree_datetime::Timestamp::now().as_secs());
     fields.extend([
         ("recipient".to_owned(), "reply+abc@in.acme.test".to_owned()),
         ("sender".to_owned(), "anu@example.com".to_owned()),
@@ -646,7 +643,7 @@ async fn a_mailgun_route_with_parsed_fields_is_rebuilt() {
         b.config("mail.webhooks.mailgun.signing_key", MAILGUN_KEY)
     })
     .await;
-    let mut fields = signed_fields(chrono::Utc::now().timestamp());
+    let mut fields = signed_fields(navree_datetime::Timestamp::now().as_secs());
     fields.extend([
         ("recipient".to_owned(), "support@acme.test".to_owned()),
         ("sender".to_owned(), "gauri@example.com".to_owned()),
@@ -735,10 +732,10 @@ async fn mailgun_signatures_are_checked() {
         String::from_utf8(fixture("reply.eml")).unwrap(),
     );
 
-    let mut forged = signed_fields(chrono::Utc::now().timestamp());
+    let mut forged = signed_fields(navree_datetime::Timestamp::now().as_secs());
     forged[0].1 = "0".repeat(64);
     forged.push(body_mime.clone());
-    let mut stale = signed_fields(chrono::Utc::now().timestamp() - 3600);
+    let mut stale = signed_fields(navree_datetime::Timestamp::now().as_secs() - 3600);
     stale.push(body_mime.clone());
     let unsigned = vec![body_mime];
 
@@ -756,7 +753,7 @@ async fn mailgun_signatures_are_checked() {
 
 /// The fields Mailgun documents for a parsed route, signed.
 fn documented_fields(headers: Value) -> Vec<(String, String)> {
-    let mut form = signed_fields(chrono::Utc::now().timestamp());
+    let mut form = signed_fields(navree_datetime::Timestamp::now().as_secs());
     form.extend([
         ("recipient".to_owned(), "reply+abc@in.acme.test".to_owned()),
         ("sender".to_owned(), "a@evil.test".to_owned()),
@@ -815,7 +812,7 @@ async fn mailgun_reports_no_verdict_the_sender_could_have_written() {
     let raw = "From: a@evil.test\r\nTo: reply+abc@in.acme.test\r\n\
                X-Mailgun-Sflag: No\r\nX-Mailgun-Spf: Pass\r\n\
                X-Mailgun-Dkim-Check-Result: Pass\r\n\r\nb\r\n";
-    let mut mime = signed_fields(chrono::Utc::now().timestamp());
+    let mut mime = signed_fields(navree_datetime::Timestamp::now().as_secs());
     mime.extend([
         ("recipient".to_owned(), "reply+abc@in.acme.test".to_owned()),
         ("body-mime".to_owned(), raw.to_owned()),

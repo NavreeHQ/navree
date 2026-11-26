@@ -4,7 +4,7 @@
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Zoned;
 use serde_json::Value;
 
 use super::compose::Compose;
@@ -386,9 +386,9 @@ impl Incoming {
         }
         if let Some(date) = payload["Date"]
             .as_str()
-            .and_then(|date| DateTime::parse_from_rfc2822(date.trim()).ok())
+            .and_then(|date| Zoned::parse_rfc2822(date.trim()).ok())
         {
-            compose = compose.date(date.with_timezone(&Utc));
+            compose = compose.date(date.timestamp());
         }
         if let Some(text) = payload["TextBody"].as_str().filter(|t| !t.is_empty()) {
             compose = compose.text(text);

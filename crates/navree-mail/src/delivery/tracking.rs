@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use chrono::Duration;
+use navree_datetime::Span;
 use navree_contracts::Clock;
 use navree_http::UrlSigner;
 use uuid::Uuid;
@@ -18,7 +18,7 @@ pub(crate) struct Tracking {
     signer: Arc<UrlSigner>,
     clock: Arc<dyn Clock>,
     base: String,
-    ttl: Duration,
+    ttl: Span,
     opens: bool,
     clicks: bool,
 }
@@ -36,7 +36,7 @@ impl Tracking {
             signer,
             clock,
             base: base.trim_end_matches('/').to_owned(),
-            ttl: Duration::days(i64::from(ttl_days.max(1))),
+            ttl: Span::days(i64::from(ttl_days.max(1))),
             opens,
             clicks,
         }
@@ -76,7 +76,7 @@ impl Tracking {
         format!("{}{}", self.base, self.signer.sign(&path, self.expires()))
     }
 
-    fn expires(&self) -> chrono::DateTime<chrono::Utc> {
+    fn expires(&self) -> navree_datetime::Timestamp {
         self.clock.now() + self.ttl
     }
 }

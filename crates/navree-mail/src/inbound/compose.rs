@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use uuid::Uuid;
 
 use super::mail::{Envelope, Incoming, StoredMail, Verdicts};
@@ -69,7 +69,7 @@ pub struct Compose {
     message_id: Option<String>,
     in_reply_to: Option<String>,
     references: Vec<String>,
-    date: Option<DateTime<Utc>>,
+    date: Option<Timestamp>,
     headers: Vec<(String, String)>,
     raw_headers: Vec<(String, String)>,
     parts: Vec<Part>,
@@ -181,7 +181,7 @@ impl Compose {
 
     /// `Date` (default: now).
     #[must_use]
-    pub fn date(mut self, date: DateTime<Utc>) -> Self {
+    pub fn date(mut self, date: Timestamp) -> Self {
         self.date = Some(date);
         self
     }
@@ -297,8 +297,8 @@ impl Compose {
                 header(out, name, &value);
             }
         };
-        let date = self.date.unwrap_or_else(Utc::now);
-        field(&mut out, "Date", Some(date.to_rfc2822()));
+        let date = self.date.unwrap_or_else(Timestamp::now);
+        field(&mut out, "Date", date.to_rfc2822().ok());
         let message_id = self
             .message_id
             .clone()

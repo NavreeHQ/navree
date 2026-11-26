@@ -83,7 +83,7 @@ fn mailgun_events() {
     assert_eq!(clicked[0].kind, MailEventKind::Clicked);
     assert_eq!(clicked[0].url.as_deref(), Some("https://acme.test"));
     assert_eq!(
-        clicked[0].occurred_at.unwrap().timestamp_millis(),
+        clicked[0].occurred_at.unwrap().as_millis(),
         1_793_088_000_250
     );
 

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::record::{self, Filter};
 use navree_db::{Record as _, Uow};
 use navree_http_client::{HttpClient, HttpClientError, HttpClientOptions};
@@ -147,11 +147,11 @@ pub struct StoredTransport {
     /// Whether it is used.
     pub enabled: bool,
     /// When its `usable` check last passed.
-    pub checked_at: Option<DateTime<Utc>>,
+    pub checked_at: Option<Timestamp>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl From<&TransportRow> for StoredTransport {
@@ -194,7 +194,7 @@ impl fmt::Debug for ResolvedTransport {
 
 /// Built transports by stored transport id, with the `updated_at` they were
 /// built from.
-type Cache = HashMap<Uuid, (DateTime<Utc>, Arc<dyn MailTransport>)>;
+type Cache = HashMap<Uuid, (Timestamp, Arc<dyn MailTransport>)>;
 
 /// Transports stored per sending domain, workspace, organization or for the
 /// platform, and which one a message goes through: the sender's **domain**

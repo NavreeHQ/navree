@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::{Duration, TimeZone, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_contracts::Clock;
 use navree_mail::{InboundError, ReplyTokens};
 use navree_testing::TestApp;
@@ -11,10 +11,10 @@ use uuid::Uuid;
 use super::inbound_app;
 
 /// A clock the test moves.
-struct At(std::sync::Mutex<chrono::DateTime<Utc>>);
+struct At(std::sync::Mutex<navree_datetime::Timestamp>);
 
 impl Clock for At {
-    fn now(&self) -> chrono::DateTime<Utc> {
+    fn now(&self) -> navree_datetime::Timestamp {
         *self.0.lock().unwrap()
     }
 }
@@ -85,17 +85,17 @@ fn scoped_tokens_only_verify_in_their_scope() {
 
 #[test]
 fn tokens_expire_after_the_ttl() {
-    let start = Utc.with_ymd_and_hms(2026, 10, 1, 12, 0, 0).unwrap();
+    let start = Timestamp::utc(2026, 10, 1, 12, 0, 0).unwrap();
     let clock = Arc::new(At(std::sync::Mutex::new(start)));
     let tokens = ReplyTokens::new(b"app key")
         .with_ttl_days(30)
         .with_clock(clock.clone());
     let token = tokens.sign("ticket:42").unwrap();
 
-    *clock.0.lock().unwrap() = start + Duration::days(30);
+    *clock.0.lock().unwrap() = start + Span::days(30);
     assert_eq!(tokens.verify(&token).unwrap(), "ticket:42");
 
-    *clock.0.lock().unwrap() = start + Duration::days(31);
+    *clock.0.lock().unwrap() = start + Span::days(31);
     assert!(matches!(
         tokens.verify(&token),
         Err(InboundError::ExpiredToken)

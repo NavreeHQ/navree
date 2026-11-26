@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_contracts::Secret;
 use navree_crypto::sigv4::{Credentials, Signer};
 use navree_http_client::HttpClient;
@@ -171,7 +171,7 @@ impl SesTransport {
             url,
             &[("content-type", "application/json")],
             body,
-            Utc::now(),
+            Timestamp::now(),
         )
     }
 }

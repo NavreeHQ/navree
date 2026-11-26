@@ -16,7 +16,7 @@ pub(crate) mod tracking;
 use std::future::Future;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{Clock, SystemClock};
 use navree_crypto::Encrypter;
 use navree_db::record::{self, Filter};
@@ -103,10 +103,10 @@ impl Store {
     }
 
     /// The current time (the app's `dyn Clock` when it has one).
-    pub(crate) async fn now(&self) -> DateTime<Utc> {
+    pub(crate) async fn now(&self) -> Timestamp {
         match self.deps().await {
             Ok(deps) => deps.clock.now(),
-            Err(_) => Utc::now(),
+            Err(_) => Timestamp::now(),
         }
     }
 
