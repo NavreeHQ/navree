@@ -3,8 +3,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
 use navree_contracts::{AuditEntry, AuditKind, Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_orm::Model as _;
 use navree_testing::TestApp;
@@ -17,7 +17,7 @@ const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 /// and one from today.
 async fn aged(config: &[(&str, serde_json::Value)]) -> (TestApp, Arc<FixedClock>) {
     let clock = Arc::new(FixedClock::new(
-        Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
+        Timestamp::utc(2025, 1, 1, 0, 0, 0).unwrap(),
     ));
     let mut builder = support::builder()
         .0

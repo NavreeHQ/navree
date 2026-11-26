@@ -57,7 +57,7 @@ pub(crate) fn audit_page_schema() -> (String, Value) {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     use super::*;
@@ -94,7 +94,7 @@ mod tests {
             ip: None,
             user_agent: None,
             metadata: json!({}),
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
         };
         let serialized = serde_json::to_value(record).unwrap();
         let mut fields: Vec<&String> = serialized.as_object().unwrap().keys().collect();

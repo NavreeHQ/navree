@@ -4281,10 +4281,10 @@ dependencies = [
 name = "navree-audit"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",
