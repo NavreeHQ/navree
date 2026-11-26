@@ -4,7 +4,7 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_auth::{AuthError, AuthService, ClientMeta, User};
 use navree_contracts::{AuditSink, Clock, FixedClock};
 use navree_crypto::sha256_hex;
@@ -31,12 +31,12 @@ impl HookedClock {
 }
 
 impl Clock for HookedClock {
-    fn now(&self) -> DateTime<Utc> {
+    fn now(&self) -> Timestamp {
         let hook = self.0.lock().unwrap_or_else(PoisonError::into_inner).take();
         if let Some(hook) = hook {
             hook();
         }
-        Utc::now()
+        Timestamp::now()
     }
 }
 
@@ -174,7 +174,7 @@ async fn verify_email_signed_link() {
 
 #[tokio::test]
 async fn verification_link_expires() {
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = support::mail_builder()
         .config("auth.verification.base_url", BASE_URL)
         .override_value::<dyn Clock>(clock.clone())

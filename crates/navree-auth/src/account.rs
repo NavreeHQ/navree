@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_crypto::{CryptoError, constant_time_eq, random_token, sha256_hex};
@@ -639,15 +639,15 @@ fn join_path(parts: &[&str]) -> String {
 }
 
 /// `at` plus `secs` seconds (saturating).
-pub(crate) fn after(at: DateTime<Utc>, secs: u64) -> DateTime<Utc> {
+pub(crate) fn after(at: Timestamp, secs: u64) -> Timestamp {
     let secs = i64::try_from(secs).unwrap_or(i64::MAX);
-    at.checked_add_signed(TimeDelta::try_seconds(secs).unwrap_or(TimeDelta::MAX))
-        .unwrap_or(DateTime::<Utc>::MAX_UTC)
+    at.checked_add(Span::try_seconds(secs).unwrap_or(Span::MAX))
+        .unwrap_or(Timestamp::MAX)
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use navree_datetime::Timestamp;
 
     use super::*;
 
@@ -663,11 +663,11 @@ mod tests {
 
     #[test]
     fn after_adds_seconds_and_saturates() {
-        let at = Utc.with_ymd_and_hms(2026, 10, 25, 12, 0, 0).unwrap();
+        let at = Timestamp::utc(2026, 10, 25, 12, 0, 0).unwrap();
         assert_eq!(
             after(at, 90),
-            Utc.with_ymd_and_hms(2026, 10, 25, 12, 1, 30).unwrap()
+            Timestamp::utc(2026, 10, 25, 12, 1, 30).unwrap()
         );
-        assert_eq!(after(at, u64::MAX), DateTime::<Utc>::MAX_UTC);
+        assert_eq!(after(at, u64::MAX), Timestamp::MAX);
     }
 }

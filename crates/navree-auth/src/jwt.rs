@@ -257,7 +257,7 @@ impl JwtService {
         session: SessionClaims,
         sign_in: Option<SignInMethod>,
     ) -> Result<String, AuthError> {
-        let iat = self.clock.now().timestamp();
+        let iat = self.clock.now().as_secs();
         let ttl = i64::try_from(ttl.as_secs()).unwrap_or(i64::MAX);
         let claims = Claims {
             sub: user_id,
@@ -279,7 +279,7 @@ impl JwtService {
 
     /// The current time of the service's clock, in Unix seconds.
     pub fn now(&self) -> i64 {
-        self.clock.now().timestamp()
+        self.clock.now().as_secs()
     }
 
     /// An access token for `user_id`, valid for [`access_ttl`](JwtService::access_ttl).
@@ -313,7 +313,7 @@ impl JwtService {
 
         // The signature is good: the payload is ours.
         let payload: serde_json::Value = jws.claims().map_err(|_| AuthError::InvalidToken)?;
-        let now = self.clock.now().timestamp();
+        let now = self.clock.now().as_secs();
         if let Some(not_before) = payload.get("nbf") {
             match not_before.as_i64() {
                 Some(nbf) if nbf <= now.saturating_add(LEEWAY_SECS) => {}
@@ -351,7 +351,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use chrono::{TimeZone, Utc};
+    use navree_datetime::Timestamp;
     use navree_contracts::FixedClock;
     use uuid::Uuid;
 
@@ -366,7 +366,7 @@ mod tests {
 
     fn clocked() -> (JwtService, Arc<FixedClock>) {
         let clock = Arc::new(FixedClock::new(
-            Utc.with_ymd_and_hms(2026, 10, 25, 12, 0, 0).unwrap(),
+            Timestamp::utc(2026, 10, 25, 12, 0, 0).unwrap(),
         ));
         (service().with_clock(clock.clone()), clock)
     }
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(claims.typ, TokenType::Access);
         assert_eq!(claims.iss, "navree");
         assert_eq!(claims.aud, None);
-        assert_eq!(claims.iat, clock.now().timestamp());
+        assert_eq!(claims.iat, clock.now().as_secs());
         assert_eq!(claims.exp, claims.iat + 900);
         assert!(!claims.jti.is_empty());
         let other = jwt
@@ -431,7 +431,7 @@ mod tests {
     fn session_claims_round_trip() {
         let (jwt, clock) = clocked();
         let (user, admin, session) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-        let auth_time = clock.now().timestamp() - 60;
+        let auth_time = clock.now().as_secs() - 60;
         let token = jwt
             .sign_session(
                 user,
@@ -448,7 +448,7 @@ mod tests {
         assert_eq!(claims.sid, Some(session));
         assert_eq!(claims.auth_time, Some(auth_time));
         assert_eq!(claims.act, Some(ActorClaim { sub: admin }));
-        assert_eq!(jwt.now(), clock.now().timestamp());
+        assert_eq!(jwt.now(), clock.now().as_secs());
 
         // A token without them (older tokens, challenges) still verifies.
         let plain = jwt.sign_access(user).unwrap();
@@ -521,7 +521,7 @@ mod tests {
         let token = jwt
             .sign(Uuid::now_v7(), TokenType::Access, Duration::from_secs(900))
             .unwrap();
-        clock.set(clock.now() - chrono::TimeDelta::seconds(120));
+        clock.set(clock.now() - navree_datetime::Span::seconds(120));
         assert!(matches!(
             jwt.verify(&token, TokenType::Access),
             Err(AuthError::InvalidToken)

@@ -83,7 +83,7 @@ impl Issuer {
 
 /// Valid claims for `email` at `clock`'s time.
 fn claims(clock: &FixedClock, email: &str) -> Value {
-    let now = clock.now().timestamp();
+    let now = clock.now().as_secs();
     json!({
         "iss": ISSUER,
         "aud": "navree-app",
@@ -170,7 +170,7 @@ async fn a_signed_token_signs_its_user_in_once() {
 #[tokio::test]
 async fn tokens_that_fail_a_check_are_refused_with_the_reason_audited() {
     let s = with_public_key().await;
-    let now = s.clock.now().timestamp();
+    let now = s.clock.now().as_secs();
     let base = claims(&s.clock, "anu@example.com");
     let with = |key: &str, value: Value| {
         let mut claims = base.clone();

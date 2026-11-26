@@ -85,7 +85,7 @@ impl LoginThrottle {
         if self.limit == 0 {
             return Ok(Attempt::Allowed);
         }
-        let now = self.clock.now().timestamp();
+        let now = self.clock.now().as_secs();
         let available_at = self.window(key, now).await?;
         let counter = counter_key(key, available_at);
         self.cache.add(&counter, &0_i64, WINDOW).await?;
@@ -175,7 +175,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use navree_cache::Cache;
     use navree_contracts::FixedClock;
 
@@ -183,7 +183,7 @@ mod tests {
     use crate::AuthError;
 
     fn throttle(limit: u32) -> (LoginThrottle, Arc<FixedClock>, Cache) {
-        let clock = Arc::new(FixedClock::new(Utc::now()));
+        let clock = Arc::new(FixedClock::new(Timestamp::now()));
         let cache = Cache::memory();
         (
             LoginThrottle::new(cache.clone(), limit, clock.clone(), 64),
@@ -305,7 +305,7 @@ mod tests {
         let wide = LoginThrottle::new(
             Cache::memory(),
             1,
-            Arc::new(FixedClock::new(Utc::now())),
+            Arc::new(FixedClock::new(Timestamp::now())),
             48,
         );
         assert_eq!(

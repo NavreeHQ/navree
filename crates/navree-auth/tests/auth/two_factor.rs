@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_auth::{
     AuthError, AuthService, ClientMeta, LoginOutcome, TokenType, TwoFactorProof, User,
     two_factor_enabled,
@@ -23,7 +23,7 @@ fn code_at(secret: &str, clock: &FixedClock) -> String {
     Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
         .build()
         .expect("a valid TOTP")
-        .generate(u64::try_from(clock.now().timestamp()).unwrap())
+        .generate(u64::try_from(clock.now().as_secs()).unwrap())
 }
 
 /// A six-digit code that is not valid at `clock`'s time (nor one step
@@ -32,7 +32,7 @@ fn wrong_code(secret: &str, clock: &FixedClock) -> String {
     let totp = Totp::builder(Secret::from_base32(secret).unwrap())
         .build()
         .unwrap();
-    let now = u64::try_from(clock.now().timestamp()).unwrap();
+    let now = u64::try_from(clock.now().as_secs()).unwrap();
     (0..1_000_000)
         .map(|n| format!("{n:06}"))
         .find(|code| totp.check(code, now).is_none())
@@ -109,7 +109,7 @@ async fn enabled(app: &TestApp, clock: &FixedClock, email: &str) -> Enabled {
 }
 
 async fn clocked_app() -> (TestApp, Arc<FixedClock>, Arc<RecordingSink>) {
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let sink = Arc::new(RecordingSink::default());
     let app = support::builder()
         .override_value::<dyn Clock>(clock.clone())

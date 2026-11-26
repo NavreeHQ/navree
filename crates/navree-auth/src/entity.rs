@@ -29,7 +29,7 @@ pub mod user;
 /// `impersonator_id` and `audience`. Presenting a revoked token revokes the
 /// whole family (reuse detection).
 pub mod refresh_token {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -47,9 +47,9 @@ pub mod refresh_token {
         #[serde(skip_serializing)]
         pub token_hash: String,
         /// When the token expires.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// When the token was used, revoked or its family was revoked.
-        pub revoked_at: Option<DateTime<Utc>>,
+        pub revoked_at: Option<Timestamp>,
         /// The token issued when this one was used.
         pub replaced_by: Option<Uuid>,
         /// The client IP address the token was issued to.
@@ -57,10 +57,10 @@ pub mod refresh_token {
         /// The client user agent the token was issued to (truncated).
         pub user_agent: Option<String>,
         /// When the token was issued.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the user last authenticated in this session (signing in or
         /// `POST /auth/confirm`): the `auth_time` of its access tokens.
-        pub authenticated_at: Option<DateTime<Utc>>,
+        pub authenticated_at: Option<Timestamp>,
         /// For an impersonation session: the impersonating user.
         pub impersonator_id: Option<Uuid>,
         /// `"platform"` for a platform session; `None` for the app.
@@ -71,7 +71,7 @@ pub mod refresh_token {
 /// `password_reset_tokens`: one pending reset per email address, stored as
 /// a SHA-256 digest (used by the password reset flow).
 pub mod password_reset_token {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
 
     /// A pending password reset, keyed by email address. Its digest is
@@ -85,7 +85,7 @@ pub mod password_reset_token {
         #[serde(skip_serializing)]
         pub token_hash: String,
         /// When the reset was requested.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
@@ -94,7 +94,7 @@ pub mod password_reset_token {
 /// sign-in codes (`kind = "otp"`, an HMAC of the code). Each works once,
 /// until `expires_at`; a code is burned after too many wrong guesses.
 pub mod login_token {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -115,18 +115,18 @@ pub mod login_token {
         /// Wrong guesses so far (codes).
         pub attempts: i32,
         /// When the token expires.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// When the token was used (or burned).
-        pub used_at: Option<DateTime<Utc>>,
+        pub used_at: Option<Timestamp>,
         /// When the token was issued.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
 /// `passkeys`: WebAuthn credentials (passkeys) registered by users, with
 /// the public key that verifies their sign-ins.
 pub mod passkey {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -157,9 +157,9 @@ pub mod passkey {
         /// A name the user gave it.
         pub name: String,
         /// When it was registered.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last signed the user in.
-        pub last_used_at: Option<DateTime<Utc>>,
+        pub last_used_at: Option<Timestamp>,
     }
 }
 

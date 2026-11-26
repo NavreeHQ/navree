@@ -316,7 +316,7 @@ async fn the_sign_in_page_gives_an_app_that_can_the_passkey_call() {
     assert_eq!(then.href.as_str(), "/sign-in/passkey/native?next=%2Fdeals");
     assert!(!then.ticket.as_str().is_empty());
     // The ticket is good for five minutes, and says so.
-    let now = clock.now().timestamp();
+    let now = clock.now().as_secs();
     assert!(then.exp > now && then.exp <= now + 300, "{}", then.exp);
     // A build that can't start the call goes to the passkey page, as a browser does.
     assert_eq!(

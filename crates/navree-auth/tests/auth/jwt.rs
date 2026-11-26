@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_auth::{
     AuthError, JwtOptions, JwtService, LEEWAY_SECS, MAX_TOKEN_LEN, SessionClaims, SignInMethod,
     TokenType,
@@ -25,8 +25,8 @@ fn b64(bytes: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn now() -> chrono::DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, 25, 12, 0, 0).unwrap()
+fn now() -> navree_datetime::Timestamp {
+    Timestamp::utc(2026, 10, 25, 12, 0, 0).unwrap()
 }
 
 fn service_with(options: &JwtOptions) -> (JwtService, Arc<FixedClock>) {
@@ -55,7 +55,7 @@ fn hs256() -> SigningKey {
 
 /// The claims of a valid access token for the default service.
 fn claims() -> Map<String, Value> {
-    let iat = now().timestamp();
+    let iat = now().as_secs();
     let Value::Object(map) = json!({
         "sub": Uuid::from_u128(0x0192_0000_0000_7000_8000_0000_0000_0042),
         "iat": iat,
@@ -133,7 +133,7 @@ fn legacy() -> Value {
 
 fn legacy_service(fixture: &Value, which: &str) -> (JwtService, Arc<FixedClock>) {
     let clock = Arc::new(FixedClock::new(
-        Utc.timestamp_opt(fixture["issued_at"].as_i64().unwrap(), 0)
+        Timestamp::from_secs(fixture["issued_at"].as_i64().unwrap())
             .unwrap(),
     ));
     let secret = fixture["secret"].as_str().unwrap().as_bytes();
@@ -247,10 +247,10 @@ fn tokens_minted_by_the_previous_implementation_still_verify() {
         assert!(stranger.verify_any(token, &[expected_type]).is_err());
 
         // The expiry is the same: valid through exp + leeway, then expired.
-        clock.set(Utc.timestamp_opt(issued_at + 900 + LEEWAY_SECS, 0).unwrap());
+        clock.set(Timestamp::from_secs(issued_at + 900 + LEEWAY_SECS).unwrap());
         assert!(jwt.verify(token, expected_type).is_ok(), "{name}");
         clock.set(
-            Utc.timestamp_opt(issued_at + 900 + LEEWAY_SECS + 1, 0)
+            Timestamp::from_secs(issued_at + 900 + LEEWAY_SECS + 1)
                 .unwrap(),
         );
         assert!(matches!(
@@ -659,7 +659,7 @@ fn expired_tokens_are_refused_after_the_leeway() {
     // `exp` in the past in a forged-with-the-right-key token.
     let (jwt, _) = service();
     let mut payload = claims();
-    for exp in [now().timestamp() - LEEWAY_SECS - 1, 0, -1, i64::MIN] {
+    for exp in [now().as_secs() - LEEWAY_SECS - 1, 0, -1, i64::MIN] {
         payload.insert("exp".into(), json!(exp));
         let result = jwt.verify(
             &forge(&header(), &Value::Object(payload.clone())),
@@ -673,7 +673,7 @@ fn expired_tokens_are_refused_after_the_leeway() {
             "{exp}: {result:?}"
         );
     }
-    payload.insert("exp".into(), json!(now().timestamp() - LEEWAY_SECS));
+    payload.insert("exp".into(), json!(now().as_secs() - LEEWAY_SECS));
     assert_valid(&jwt, &forge(&header(), &Value::Object(payload)));
 
     // An expired token that is also wrong in another way is invalid, not
@@ -687,7 +687,7 @@ fn expired_tokens_are_refused_after_the_leeway() {
 #[test]
 fn tokens_that_are_not_yet_valid_are_refused() {
     let (jwt, clock) = service();
-    let now_ts = now().timestamp();
+    let now_ts = now().as_secs();
 
     // Issued in the future: through the leeway is fine, beyond it is not.
     let mut payload = claims();

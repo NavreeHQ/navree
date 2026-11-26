@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_auth::password_reset_token;
 use navree_contracts::{AuditSink, Clock, FixedClock};
 use navree_crypto::sha256_hex;
@@ -137,7 +137,7 @@ async fn forgot_password_works_without_a_mailer() {
 
 #[tokio::test]
 async fn forgot_password_is_not_resent_within_the_throttle_window() {
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = support::mail_builder()
         .override_value::<dyn Clock>(clock.clone())
         .build()
@@ -204,7 +204,7 @@ async fn reset_password_with_valid_token_revokes_refresh_tokens() {
 
 #[tokio::test]
 async fn reset_token_expires() {
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = support::mail_builder()
         .config("auth.password_reset.url", RESET_URL)
         .override_value::<dyn Clock>(clock.clone())

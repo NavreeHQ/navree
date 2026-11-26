@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_auth::refresh_token;
 use navree_contracts::{AuditKind, AuditSink, Clock, FixedClock};
 use navree_crypto::sha256_hex;
@@ -95,7 +95,7 @@ async fn reused_refresh_token_revokes_family() {
 
 #[tokio::test]
 async fn invalid_or_expired_refresh_tokens_are_401() {
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = support::builder()
         .override_value::<dyn Clock>(clock.clone())
         .build()

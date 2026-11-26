@@ -277,7 +277,7 @@ impl Module for ProbeModule {
 
 /// A fixed clock at the current time.
 pub fn clock() -> Arc<FixedClock> {
-    Arc::new(FixedClock::new(chrono::Utc::now()))
+    Arc::new(FixedClock::new(navree_datetime::Timestamp::now()))
 }
 
 /// [`builder`] with `clock` as the app's clock.
@@ -312,7 +312,7 @@ pub fn totp_code(secret: &str, clock: &FixedClock) -> String {
     Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
         .build()
         .expect("a valid TOTP")
-        .generate(u64::try_from(clock.now().timestamp()).unwrap())
+        .generate(u64::try_from(clock.now().as_secs()).unwrap())
 }
 
 /// Turns two-factor authentication on for `user` through the service; the

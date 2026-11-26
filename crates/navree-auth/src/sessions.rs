@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::AuditKind;
 use navree_openapi::ToSchema;
 use navree_orm::Model as _;
@@ -32,11 +32,11 @@ pub struct SessionResource {
     /// (`"Firefox on Windows"`).
     pub device: Option<String>,
     /// When it was last used (its last sign-in or refresh).
-    pub last_used_at: DateTime<Utc>,
+    pub last_used_at: Timestamp,
     /// When the user last authenticated in it (signing in or confirming).
-    pub authenticated_at: Option<DateTime<Utc>>,
+    pub authenticated_at: Option<Timestamp>,
     /// When it ends unless refreshed.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     /// Whether the request was made with it.
     pub current: bool,
     /// For an impersonation session: the impersonating user.
@@ -399,7 +399,7 @@ impl AuthService {
                 .metadata(metadata),
         )
         .await;
-        Ok(now.timestamp())
+        Ok(now.as_secs())
     }
 }
 

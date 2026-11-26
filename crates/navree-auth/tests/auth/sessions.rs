@@ -22,7 +22,7 @@ async fn access_tokens_carry_the_session_and_the_sign_in_time() {
     let jwt = app.get::<JwtService>().await;
     let claims = claims_of(&jwt, &access);
     let session = claims.sid.expect("a session id");
-    let signed_in_at = clock.now().timestamp();
+    let signed_in_at = clock.now().as_secs();
     assert_eq!(claims.auth_time, Some(signed_in_at));
     assert_eq!(claims.act, None);
 
@@ -208,7 +208,7 @@ async fn recent_auth_routes_need_a_recent_sign_in_or_a_confirmation() {
         .assert_status(200)
         .assert_json_path("token_type", json!("Bearer"))
         .assert_json_path("expires_in", json!(900))
-        .assert_json_path("auth_time", json!(clock.now().timestamp()))
+        .assert_json_path("auth_time", json!(clock.now().as_secs()))
         .json_value();
     let confirmed_access = confirmed["access_token"].as_str().unwrap().to_owned();
     sensitive(confirmed_access.clone()).await.assert_status(200);
@@ -223,7 +223,7 @@ async fn recent_auth_routes_need_a_recent_sign_in_or_a_confirmation() {
     let (next, _) = tokens(&refresh(&client, &refresh_token).await.assert_status(200));
     assert_eq!(
         claims_of(&jwt, &next).auth_time,
-        Some(clock.now().timestamp())
+        Some(clock.now().as_secs())
     );
     let audited = sink.with_action("auth.confirmed");
     assert_eq!(audited.len(), 1);
@@ -246,7 +246,7 @@ async fn confirmation_survives_refreshes() {
         .send()
         .await
         .assert_status(200);
-    let confirmed_at = clock.now().timestamp();
+    let confirmed_at = clock.now().as_secs();
     clock.advance(Duration::from_secs(60));
     let (refreshed, _) = tokens(&refresh(&client, &refresh_token).await.assert_status(200));
     let jwt = app.get::<JwtService>().await;

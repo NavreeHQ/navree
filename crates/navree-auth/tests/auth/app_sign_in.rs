@@ -562,9 +562,9 @@ async fn current_session(client: &TestClient) -> serde_json::Value {
 
 /// A time of a session resource, in Unix seconds.
 fn unix(session: &serde_json::Value, key: &str) -> i64 {
-    chrono::DateTime::parse_from_rfc3339(session[key].as_str().expect(key))
+    navree_datetime::Timestamp::parse_rfc3339(session[key].as_str().expect(key))
         .expect(key)
-        .timestamp()
+        .as_secs()
 }
 
 #[tokio::test]
@@ -573,7 +573,7 @@ async fn an_apps_session_keeps_the_sign_in_time_of_the_browser_session() {
     let app = app(&clock, &sink).await;
     create_user(&app, "simran@example.com").await;
     let (verifier, challenge) = pkce("time");
-    let signed_in_at = clock.now().timestamp();
+    let signed_in_at = clock.now().as_secs();
     let (_, code) = sheet_sign_in(&app, "simran@example.com", &challenge).await;
     clock.advance(Duration::from_secs(50));
     let phone = phone(&app).await;

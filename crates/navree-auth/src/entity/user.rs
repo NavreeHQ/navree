@@ -18,7 +18,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{ChangeEvent, ChangeOp, DbError, Uow};
 use navree_orm::{Assignment, Model as _, OrmError};
 use serde::Serialize;
@@ -44,7 +44,7 @@ pub struct Model {
     #[serde(skip_serializing)]
     pub password_hash: String,
     /// When the email address was verified, if it was.
-    pub email_verified_at: Option<DateTime<Utc>>,
+    pub email_verified_at: Option<Timestamp>,
     /// The encrypted TOTP secret. Never serialized.
     #[serde(skip_serializing)]
     pub two_factor_secret: Option<String>,
@@ -53,11 +53,11 @@ pub struct Model {
     pub two_factor_recovery_codes: Option<String>,
     /// When two-factor authentication was confirmed. Never serialized.
     #[serde(skip_serializing)]
-    pub two_factor_confirmed_at: Option<DateTime<Utc>>,
+    pub two_factor_confirmed_at: Option<Timestamp>,
     /// When the account was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the account last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// The password hash and two-factor data are redacted.
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn secrets_are_not_serialized() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let user = Model {
             id: Uuid::now_v7(),
             name: "Anu".into(),
