@@ -271,6 +271,17 @@ impl Date {
     }
 }
 
+/// [`Timestamp::UNIX_EPOCH`] in [`Zone::UTC`].
+impl Default for Zoned {
+    fn default() -> Zoned {
+        Zoned {
+            timestamp: Timestamp::UNIX_EPOCH,
+            zone: Zone::UTC,
+            offset: Offset::UTC,
+        }
+    }
+}
+
 /// The same instant, whatever zone each is seen in.
 impl PartialEq for Zoned {
     fn eq(&self, other: &Zoned) -> bool {
