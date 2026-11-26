@@ -1,7 +1,7 @@
 //! Connections: who owns them, how they talk to the identity provider and
 //! how signed-in people become users and members.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -319,9 +319,9 @@ pub struct SsoConnection {
     /// redirect URI (OpenID Connect).
     pub service_provider: ServiceProviderInfo,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// The URLs to give an identity provider for a connection.
@@ -469,13 +469,13 @@ pub struct SsoDomain {
     /// Whether the TXT record was found (or an operator verified it).
     pub verified: bool,
     /// When it was verified.
-    pub verified_at: Option<DateTime<Utc>>,
+    pub verified_at: Option<Timestamp>,
     /// The TXT record to create: its name (the domain itself)...
     pub txt_name: String,
     /// ...and its value.
     pub txt_value: String,
     /// When it was added.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// What `POST /sso/discover` answers for an email.

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_sso::saml::{
     IdpMetadata, ResponseCheck, SamlAssertion, SamlError, ServiceProvider, validate_response,
 };
@@ -26,10 +26,8 @@ pub(crate) const ENTRA_ISSUER: &str =
     "https://sts.windows.net/9e3c5a0f-1b2d-4c6e-8f0a-2b4c6d8e0f1a/";
 pub(crate) const GOOGLE_ISSUER: &str = "https://accounts.google.com/o/saml2?idpid=C03acme01";
 
-pub(crate) fn at(instant: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(instant)
-        .unwrap()
-        .with_timezone(&Utc)
+pub(crate) fn at(instant: &str) -> Timestamp {
+    Timestamp::parse_rfc3339(instant).unwrap()
 }
 
 pub(crate) fn sp() -> ServiceProvider {
@@ -51,7 +49,7 @@ pub(crate) fn check(xml: &str, issuer: &str) -> Result<SamlAssertion, SamlError>
 pub(crate) fn check_at(
     xml: &str,
     issuer: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<SamlAssertion, SamlError> {
     let (sp, idp) = (sp(), idp(issuer));
     validate_response(

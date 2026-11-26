@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use serde::Serialize;
 
 use super::{
@@ -26,7 +26,7 @@ pub struct ResponseCheck<'a> {
     /// request was sent (an IdP-initiated sign-in).
     pub request_id: Option<&'a str>,
     /// The current time.
-    pub now: DateTime<Utc>,
+    pub now: Timestamp,
     /// How far the identity provider's clock may be off.
     pub clock_skew: Duration,
     /// Whether a response that answers no request is accepted.
@@ -51,12 +51,12 @@ pub struct SamlAssertion {
     /// The identity provider's session index.
     pub session_index: Option<String>,
     /// When the user authenticated at the identity provider.
-    pub authn_instant: Option<DateTime<Utc>>,
+    pub authn_instant: Option<Timestamp>,
     /// The request the response answers (`None` for IdP-initiated
     /// sign-in).
     pub in_response_to: Option<String>,
     /// When the assertion stops being acceptable.
-    pub not_on_or_after: DateTime<Utc>,
+    pub not_on_or_after: Timestamp,
     /// The attributes, by `Name`, each with its values in order.
     pub attributes: BTreeMap<String, Vec<String>>,
 }
@@ -267,11 +267,7 @@ fn check_issuer(
     Ok(())
 }
 
-fn instant_attr(
-    doc: &Document,
-    id: NodeId,
-    name: &str,
-) -> Result<Option<DateTime<Utc>>, SamlError> {
+fn instant_attr(doc: &Document, id: NodeId, name: &str) -> Result<Option<Timestamp>, SamlError> {
     doc.attr(id, name).map(parse_instant).transpose()
 }
 
@@ -281,7 +277,7 @@ fn read_assertion(
     response_in_response_to: Option<&str>,
     check: &ResponseCheck<'_>,
 ) -> Result<SamlAssertion, SamlError> {
-    let skew = TimeDelta::from_std(check.clock_skew).unwrap_or(TimeDelta::zero());
+    let skew = Span::try_from(check.clock_skew).unwrap_or(Span::ZERO);
     let (earliest, latest) = (check.now - skew, check.now + skew);
 
     if doc.attr(assertion, "Version") != Some("2.0") {
@@ -309,7 +305,7 @@ fn read_assertion(
         .trimmed_text(name_id_node)
         .ok_or_else(|| invalid("the NameID is empty"))?;
 
-    let mut confirmed: Option<(DateTime<Utc>, Option<String>)> = None;
+    let mut confirmed: Option<(Timestamp, Option<String>)> = None;
     let mut refusal = invalid("the subject has no bearer confirmation");
     for confirmation in doc.children_named(subject, ASSERTION_NS, "SubjectConfirmation") {
         if doc.attr(confirmation, "Method") != Some(CM_BEARER) {
@@ -404,9 +400,9 @@ fn check_confirmation(
     data: NodeId,
     response_in_response_to: Option<&str>,
     check: &ResponseCheck<'_>,
-    earliest: DateTime<Utc>,
-    latest: DateTime<Utc>,
-) -> Result<(DateTime<Utc>, Option<String>), SamlError> {
+    earliest: Timestamp,
+    latest: Timestamp,
+) -> Result<(Timestamp, Option<String>), SamlError> {
     let recipient = doc
         .attr(data, "Recipient")
         .ok_or_else(|| invalid("the bearer confirmation has no Recipient"))?;
@@ -447,7 +443,7 @@ mod tests {
     const AUDIENCE: &str = "https://api.acme.test/api/sso/saml/acme/metadata";
     const IDP: &str = "https://idp.acme.test";
 
-    fn now() -> DateTime<Utc> {
+    fn now() -> Timestamp {
         parse_instant("2026-10-27T12:00:30Z").unwrap()
     }
 

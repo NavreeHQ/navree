@@ -81,7 +81,7 @@ fn refusals(world: &World) -> Vec<AuditEntry> {
 /// Links `user` to `connection` as the identity provider's `subject`, as an
 /// earlier sign-in would have.
 async fn link(world: &World, connection: &SsoConnection, user: &User, subject: &str) {
-    let now = chrono::Utc::now();
+    let now = navree_datetime::Timestamp::now();
     let row = sso_identity::Model {
         id: Uuid::now_v7(),
         connection_id: connection.id,

@@ -125,7 +125,7 @@ fn join_name(first: Option<String>, last: Option<String>) -> Option<String> {
 mod tests {
     use std::collections::BTreeMap;
 
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use serde_json::json;
 
     use super::*;
@@ -139,7 +139,7 @@ mod tests {
             session_index: None,
             authn_instant: None,
             in_response_to: None,
-            not_on_or_after: Utc::now(),
+            not_on_or_after: Timestamp::now(),
             attributes: attributes
                 .iter()
                 .map(|(k, v)| ((*k).to_owned(), v.iter().map(|s| (*s).to_owned()).collect()))

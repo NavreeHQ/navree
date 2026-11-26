@@ -34,7 +34,6 @@ test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 base64 = { workspace = true }
-chrono = { workspace = true }
 # SAML's HTTP-Redirect binding deflates the request (miniz_oxide, pure Rust).
 flate2 = { workspace = true }
 form_urlencoded = { workspace = true }
@@ -46,6 +45,7 @@ navree-contracts = { workspace = true }
 # `jose`: XML signatures (RSA-SHA256/384/512, ECDSA) and ID tokens are
 # verified on `ring`; X.509 certificates are read for their public keys.
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }

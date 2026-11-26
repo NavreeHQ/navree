@@ -16,7 +16,7 @@ mod metadata;
 mod request;
 mod response;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use navree_datetime::{DateTime, Timestamp};
 
 pub(crate) use metadata::certificate_der;
 pub use metadata::{IdpMetadata, ServiceProvider};
@@ -97,18 +97,18 @@ pub enum SamlError {
 }
 
 /// Parses an `xs:dateTime` (UTC; a missing zone is read as UTC).
-pub(crate) fn parse_instant(value: &str) -> Result<DateTime<Utc>, SamlError> {
+pub(crate) fn parse_instant(value: &str) -> Result<Timestamp, SamlError> {
     let value = value.trim();
-    if let Ok(instant) = DateTime::parse_from_rfc3339(value) {
-        return Ok(instant.with_timezone(&Utc));
+    if let Ok(instant) = Timestamp::parse_rfc3339(value) {
+        return Ok(instant);
     }
-    NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f")
-        .map(|naive| naive.and_utc())
+    DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", value)
+        .map(DateTime::in_utc)
         .map_err(|_| SamlError::Invalid(format!("invalid time `{value}`")))
 }
 
 /// Formats an instant as SAML writes it (`2026-10-27T12:00:00Z`).
-pub(crate) fn format_instant(instant: DateTime<Utc>) -> String {
+pub(crate) fn format_instant(instant: Timestamp) -> String {
     instant.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
@@ -124,9 +124,7 @@ mod tests {
 
     #[test]
     fn instants_parse_with_or_without_fractions_and_zone() {
-        let expected = DateTime::parse_from_rfc3339("2026-10-27T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let expected = Timestamp::parse_rfc3339("2026-10-27T12:00:00Z").unwrap();
         assert_eq!(parse_instant("2026-10-27T12:00:00Z").unwrap(), expected);
         assert_eq!(parse_instant("2026-10-27T12:00:00.000Z").unwrap(), expected);
         assert_eq!(parse_instant("2026-10-27T12:00:00").unwrap(), expected);

@@ -5,8 +5,8 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use navree_auth::{ClientMeta, TokenPair, User};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_events::Event;
 use navree_sso::saml::{
@@ -325,7 +325,7 @@ fn the_documented_saml_building_blocks_and_fake() {
         acs_url: "https://api.acme.test/api/sso/saml/acme/acs".to_owned(),
     };
     assert!(sp.metadata_xml().contains("SPSSODescriptor"));
-    let now: DateTime<Utc> = Utc::now();
+    let now: Timestamp = Timestamp::now();
     let request = AuthnRequest::new(&sp, &metadata, "rs", now, &RequestOptions::default()).unwrap();
     let response: FakeResponse = idp
         .respond_to(&request.url)

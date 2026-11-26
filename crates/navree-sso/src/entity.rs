@@ -47,7 +47,7 @@ fn serialized<T: serde::Serialize>(row: &T) -> Result<Value, SsoError> {
 
 /// `sso_connections`.
 pub mod sso_connection {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -82,9 +82,9 @@ pub mod sso_connection {
         /// The provisioning rules (JSON).
         pub provisioning: String,
         /// When it was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
@@ -159,7 +159,7 @@ pub(crate) fn settings_summary(stored: &str) -> Value {
 
 /// `sso_domains`.
 pub mod sso_domain {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -177,11 +177,11 @@ pub mod sso_domain {
         /// prefix).
         pub token: String,
         /// When the TXT record was found.
-        pub verified_at: Option<DateTime<Utc>>,
+        pub verified_at: Option<Timestamp>,
         /// When it was added.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
@@ -199,7 +199,7 @@ impl Recorded for sso_domain::Model {
 
 /// `sso_identities`.
 pub mod sso_identity {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -220,11 +220,11 @@ pub mod sso_identity {
         /// The attributes or claims of the last sign-in (JSON).
         pub attributes: String,
         /// The last sign-in.
-        pub last_login_at: DateTime<Utc>,
+        pub last_login_at: Timestamp,
         /// When it was linked.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
@@ -242,13 +242,13 @@ impl Recorded for sso_identity::Model {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     use super::*;
 
     fn connection(settings: Value) -> sso_connection::Model {
-        let now = Utc::now();
+        let now = Timestamp::now();
         sso_connection::Model {
             id: Uuid::now_v7(),
             owner_type: "app".into(),

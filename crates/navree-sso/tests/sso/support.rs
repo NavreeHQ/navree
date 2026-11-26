@@ -185,7 +185,10 @@ impl World {
         let db = self.app.get::<Db>().await;
         User::query()
             .where_key(user.id)
-            .update(&db, [User::EMAIL_VERIFIED_AT.set(chrono::Utc::now())])
+            .update(
+                &db,
+                [User::EMAIL_VERIFIED_AT.set(navree_datetime::Timestamp::now())],
+            )
             .await
             .expect("the email is verified");
         User::find(&db, user.id)

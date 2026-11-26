@@ -66,7 +66,7 @@ impl Provider {
     /// An ID token with `claims` over the standard ones (`null` removes
     /// one).
     fn id_token(&self, nonce: &str, claims: Value) -> String {
-        let now = chrono::Utc::now().timestamp();
+        let now = navree_datetime::Timestamp::now().as_secs();
         let mut all = json!({
             "iss": self.issuer(),
             "aud": CLIENT_ID,
@@ -296,7 +296,7 @@ async fn id_tokens_must_match_the_nonce_client_and_keys() {
     let stranger = SigningKey::from_pem(include_str!("../../src/fake/idp-key.pem"))
         .unwrap()
         .with_kid("k1");
-    let now = chrono::Utc::now().timestamp();
+    let now = navree_datetime::Timestamp::now().as_secs();
     let forged = stranger
         .sign_jwt(&json!({
             "iss": provider.issuer(), "aud": CLIENT_ID, "sub": "x", "nonce": query["nonce"],

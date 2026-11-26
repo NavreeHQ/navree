@@ -5,10 +5,10 @@ use std::io::{Read as _, Write as _};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, Utc};
 use flate2::Compression;
 use flate2::read::DeflateDecoder;
 use flate2::write::DeflateEncoder;
+use navree_datetime::Timestamp;
 
 use super::{
     ASSERTION_NS, BINDING_POST, IdpMetadata, PROTOCOL_NS, SamlError, ServiceProvider,
@@ -52,7 +52,7 @@ impl AuthnRequest {
         sp: &ServiceProvider,
         idp: &IdpMetadata,
         relay_state: &str,
-        now: DateTime<Utc>,
+        now: Timestamp,
         options: &RequestOptions,
     ) -> Result<AuthnRequest, SamlError> {
         let destination = idp.sso_redirect_url.as_deref().ok_or_else(|| {
@@ -111,7 +111,7 @@ fn request_xml(
     id: &str,
     sp: &ServiceProvider,
     destination: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
     options: &RequestOptions,
 ) -> String {
     let force = if options.force_authn {
@@ -161,9 +161,7 @@ mod tests {
 
     #[test]
     fn the_redirect_url_carries_the_deflated_request_and_relay_state() {
-        let now = DateTime::parse_from_rfc3339("2026-10-27T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = Timestamp::parse_rfc3339("2026-10-27T12:00:00Z").unwrap();
         let options = RequestOptions {
             force_authn: true,
             name_id_format: Some(
@@ -206,7 +204,13 @@ mod tests {
         let mut idp = idp();
         idp.sso_redirect_url = None;
         assert!(matches!(
-            AuthnRequest::new(&sp(), &idp, "s", Utc::now(), &RequestOptions::default()),
+            AuthnRequest::new(
+                &sp(),
+                &idp,
+                "s",
+                Timestamp::now(),
+                &RequestOptions::default()
+            ),
             Err(SamlError::Metadata(_))
         ));
     }

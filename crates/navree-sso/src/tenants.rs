@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, Lifecycle, ProviderKey, Resolver,
 };
@@ -46,7 +46,7 @@ pub(crate) const MAX_TRACKED_CONNECTIONS: usize = 10_000;
 pub(crate) struct RefusalLog {
     /// Per connection: when its last line was written, and the refusals
     /// since then.
-    seen: Mutex<HashMap<Uuid, (DateTime<Utc>, u64)>>,
+    seen: Mutex<HashMap<Uuid, (Timestamp, u64)>>,
 }
 
 impl RefusalLog {
@@ -61,7 +61,7 @@ impl RefusalLog {
     /// since the last line, this one included; `None` otherwise. A log that
     /// already tracks [`MAX_TRACKED_CONNECTIONS`] connections forgets them
     /// all before it notes a new one.
-    pub(crate) fn note(&self, connection: Uuid, now: DateTime<Utc>) -> Option<u64> {
+    pub(crate) fn note(&self, connection: Uuid, now: Timestamp) -> Option<u64> {
         let mut seen = self.seen.lock().unwrap_or_else(PoisonError::into_inner);
         if seen.len() >= MAX_TRACKED_CONNECTIONS && !seen.contains_key(&connection) {
             seen.clear();
@@ -74,7 +74,7 @@ impl RefusalLog {
             Entry::Occupied(mut entry) => {
                 let (last, since) = entry.get_mut();
                 *since += 1;
-                if now - *last >= TimeDelta::seconds(REFUSAL_LINE_EVERY_SECS) {
+                if now - *last >= Span::seconds(REFUSAL_LINE_EVERY_SECS) {
                     let refusals = *since;
                     *last = now;
                     *since = 0;
@@ -320,20 +320,20 @@ mod tests {
     fn refusal_log_writes_one_line_an_hour_per_connection() {
         let log = RefusalLog::new();
         let (ludhiana, amritsar) = (Uuid::now_v7(), Uuid::now_v7());
-        let t0 = Utc::now();
+        let t0 = Timestamp::now();
         assert_eq!(log.note(ludhiana, t0), Some(1));
-        assert_eq!(log.note(ludhiana, t0 + TimeDelta::seconds(10)), None);
-        assert_eq!(log.note(ludhiana, t0 + TimeDelta::seconds(20)), None);
-        assert_eq!(log.note(amritsar, t0 + TimeDelta::seconds(30)), Some(1));
-        assert_eq!(log.note(ludhiana, t0 + TimeDelta::seconds(3_599)), None);
-        assert_eq!(log.note(ludhiana, t0 + TimeDelta::seconds(3_600)), Some(4));
-        assert_eq!(log.note(ludhiana, t0 + TimeDelta::seconds(3_601)), None);
+        assert_eq!(log.note(ludhiana, t0 + Span::seconds(10)), None);
+        assert_eq!(log.note(ludhiana, t0 + Span::seconds(20)), None);
+        assert_eq!(log.note(amritsar, t0 + Span::seconds(30)), Some(1));
+        assert_eq!(log.note(ludhiana, t0 + Span::seconds(3_599)), None);
+        assert_eq!(log.note(ludhiana, t0 + Span::seconds(3_600)), Some(4));
+        assert_eq!(log.note(ludhiana, t0 + Span::seconds(3_601)), None);
     }
 
     #[test]
     fn refusal_log_stays_bounded() {
         let log = RefusalLog::new();
-        let now = Utc::now();
+        let now = Timestamp::now();
         for _ in 0..MAX_TRACKED_CONNECTIONS + 5 {
             assert_eq!(log.note(Uuid::now_v7(), now), Some(1));
         }
