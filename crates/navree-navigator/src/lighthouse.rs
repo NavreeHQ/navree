@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use chrono::{DateTime, DurationRound, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -316,13 +316,13 @@ impl Period {
 
     /// The first bucket of the period ending at `now`, as Lighthouse counts
     /// it: the current bucket and the ones before it.
-    pub fn start(self, now: DateTime<Utc>) -> DateTime<Utc> {
+    pub fn start(self, now: Timestamp) -> Timestamp {
         let resolution = self.resolution();
         let buckets = self.minutes() * 60 / resolution;
-        let current = now
-            .duration_trunc(TimeDelta::seconds(resolution))
-            .unwrap_or(now);
-        current - TimeDelta::seconds(resolution * (buckets - 1))
+        let current =
+            Timestamp::from_secs(now.as_secs() - now.as_secs().rem_euclid(resolution))
+                .unwrap_or(now);
+        current - Span::seconds(resolution * (buckets - 1))
     }
 }
 
@@ -439,7 +439,7 @@ fn literal(driver: Driver, text: &str) -> String {
 
 /// A time literal in the form Lighthouse stores (RFC 3339, UTC offset):
 /// digits, `-`, `:`, `T` and `+` only.
-fn time_literal(at: DateTime<Utc>) -> String {
+fn time_literal(at: Timestamp) -> String {
     format!("'{}'", at.format("%Y-%m-%dT%H:%M:%S+00:00"))
 }
 
@@ -566,7 +566,7 @@ fn aggregates_sql(
     driver: Driver,
     kind: &str,
     period: Period,
-    now: DateTime<Utc>,
+    now: Timestamp,
     order: &str,
 ) -> String {
     let concat = match driver {
@@ -732,7 +732,7 @@ pub(crate) async fn get_issue(db: &impl Reader, args: IssueArgs) -> Result<Value
 pub(crate) async fn slow_routes(
     db: &impl Reader,
     args: PeriodArgs,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<Value, ToolError> {
     let period = args.period.unwrap_or_default();
     let sql = aggregates_sql(db.driver(), "request", period, now, "max(max_ms) DESC");
@@ -766,7 +766,7 @@ pub(crate) async fn slow_routes(
 pub(crate) async fn slow_queries(
     db: &impl Reader,
     args: PeriodArgs,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<Value, ToolError> {
     let period = args.period.unwrap_or_default();
     let sql = aggregates_sql(db.driver(), "query", period, now, "sum(total_ms) DESC");
@@ -792,7 +792,7 @@ pub(crate) async fn slow_queries(
 pub(crate) async fn failed_jobs(
     db: &impl Reader,
     args: PeriodArgs,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<Value, ToolError> {
     let period = args.period.unwrap_or_default();
     let limit = args.limit.unwrap_or(10).clamp(1, 50);
@@ -848,9 +848,7 @@ mod tests {
 
     #[test]
     fn periods_start_at_their_first_bucket() {
-        let now = DateTime::parse_from_rfc3339("2026-10-27T10:37:12Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = Timestamp::utc(2026, 10, 27, 10, 37, 12).unwrap();
         let at = |p: Period| p.start(now).to_rfc3339();
         assert_eq!(at(Period::Hour), "2026-10-27T09:38:00+00:00");
         assert_eq!(at(Period::Day), "2026-10-26T11:00:00+00:00");
@@ -939,7 +937,7 @@ mod tests {
 
     #[test]
     fn every_statement_passes_the_read_only_guard() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         for driver in [Driver::Sqlite, Driver::Postgres] {
             let hex = "0192f3a4b5c67d8e9f00112233445566";
             let args = IssuesArgs {

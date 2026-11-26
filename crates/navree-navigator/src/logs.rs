@@ -11,8 +11,8 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Duration as TimeDelta, Utc};
 use navree_config::Config;
+use navree_datetime::{Span, Timestamp};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -175,7 +175,7 @@ fn json_line(object: &Value) -> LogLine {
 fn pretty_line(line: &str) -> LogLine {
     let mut words = line.splitn(2, char::is_whitespace);
     let first = words.next().unwrap_or_default();
-    let timestamp = DateTime::parse_from_rfc3339(first)
+    let timestamp = Timestamp::parse_rfc3339(first)
         .ok()
         .map(|_| first.to_owned());
     let rest = if timestamp.is_some() {
@@ -310,12 +310,12 @@ fn severity(level: &str) -> u8 {
 
 impl LogFilter {
     /// Checks the arguments; the `since` cut-off as a time.
-    fn since_time(&self, now: DateTime<Utc>) -> Result<Option<DateTime<Utc>>, String> {
+    fn since_time(&self, now: Timestamp) -> Result<Option<Timestamp>, String> {
         let Some(since) = self.since.as_deref().map(str::trim) else {
             return Ok(None);
         };
-        if let Ok(time) = DateTime::parse_from_rfc3339(since) {
-            return Ok(Some(time.with_timezone(&Utc)));
+        if let Ok(time) = Timestamp::parse_rfc3339(since) {
+            return Ok(Some(time));
         }
         let invalid =
             || format!("`since` must be an RFC 3339 time or a duration such as 15m, got `{since}`");
@@ -323,19 +323,19 @@ impl LogFilter {
         let (number, unit) = since.split_at(unit_at);
         let amount: i64 = number.parse().map_err(|_| invalid())?;
         let delta = match unit {
-            "s" => TimeDelta::try_seconds(amount),
-            "m" => TimeDelta::try_minutes(amount),
-            "h" => TimeDelta::try_hours(amount),
-            "d" => TimeDelta::try_days(amount),
+            "s" => Span::try_seconds(amount),
+            "m" => Span::try_minutes(amount),
+            "h" => Span::try_hours(amount),
+            "d" => Span::try_days(amount),
             _ => return Err(format!("`since` must end in s, m, h or d, got `{since}`")),
         };
         delta
-            .and_then(|delta| now.checked_sub_signed(delta))
+            .and_then(|delta| now.checked_sub(delta))
             .map(Some)
             .ok_or_else(invalid)
     }
 
-    fn matches(&self, line: &LogLine, since: Option<DateTime<Utc>>) -> bool {
+    fn matches(&self, line: &LogLine, since: Option<Timestamp>) -> bool {
         if let Some(level) = &self.level
             && line
                 .level
@@ -361,8 +361,8 @@ impl LogFilter {
             let at = line
                 .timestamp
                 .as_deref()
-                .and_then(|t| DateTime::parse_from_rfc3339(t).ok());
-            if at.is_none_or(|at| at.with_timezone(&Utc) < since) {
+                .and_then(|t| Timestamp::parse_rfc3339(t).ok());
+            if at.is_none_or(|at| at < since) {
                 return false;
             }
         }
@@ -407,7 +407,7 @@ pub fn read_logs(files: &[PathBuf], filter: &LogFilter) -> Result<Vec<LogLine>, 
             "`level` must be error, warn, info, debug or trace, got `{level}`"
         ));
     }
-    let since = filter.since_time(Utc::now())?;
+    let since = filter.since_time(Timestamp::now())?;
     let limit = filter.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let mut matched: Vec<LogLine> = recent_lines(files)
         .into_iter()

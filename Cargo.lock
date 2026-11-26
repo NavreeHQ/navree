@@ -5492,10 +5492,10 @@ dependencies = [
 name = "navree-navigator"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "html5ever",
  "navree-config",
+ "navree-datetime",
  "navree-dock",
  "reqwest",
  "rusqlite",
