@@ -31,12 +31,12 @@ targets = ["x86_64-unknown-linux-gnu"]
 workspace = true
 
 [dependencies]
-chrono = { workspace = true }
 futures-util = { workspace = true }
 # Reads the HTML of a page the app drew, for `render_page`'s outline.
 html5ever = { workspace = true }
 # Reads the app's configuration exactly as the app does.
 navree-config = { workspace = true }
+navree-datetime = { workspace = true }
 # The settings `navree dev` passes to the app when it has a `dock.toml`.
 navree-dock = { workspace = true }
 # Downloads the docs bundle of the app's Navree version (rustls with ring).

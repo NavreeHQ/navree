@@ -684,7 +684,7 @@ impl Navigator {
         if !self.lighthouse {
             return Err(ToolError::new(lighthouse::NOT_INCLUDED));
         }
-        let now = chrono::Utc::now();
+        let now = navree_datetime::Timestamp::now();
         let answer = match name {
             "lighthouse_list_issues" => {
                 let args = parse(args)?;

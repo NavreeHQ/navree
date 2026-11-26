@@ -2,7 +2,7 @@
 //! database, written the way Lighthouse writes them (UUIDs as blobs,
 //! RFC 3339 timestamps).
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_navigator::lighthouse::{Histogram, LIGHTHOUSE_TOOLS};
 use serde_json::json;
 
@@ -44,18 +44,17 @@ const SLOW_QUERY: &str = "0192f3a4b5c67d8e9f00112233445577";
 const FAILED_JOB: &str = "0192f3a4b5c67d8e9f00112233445588";
 
 /// A time as Lighthouse stores it (sqlx's RFC 3339 form).
-fn ts(at: DateTime<Utc>) -> String {
-    at.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, false)
+fn ts(at: Timestamp) -> String {
+    at.to_rfc3339()
 }
 
-fn hours_ago(hours: i64) -> DateTime<Utc> {
-    Utc::now() - TimeDelta::hours(hours)
+fn hours_ago(hours: i64) -> Timestamp {
+    Timestamp::now() - Span::hours(hours)
 }
 
 /// The hour (or minute) `at` falls in, as Lighthouse buckets it.
-fn bucket(at: DateTime<Utc>, seconds: i64) -> String {
-    use chrono::DurationRound;
-    ts(at.duration_trunc(TimeDelta::seconds(seconds)).unwrap())
+fn bucket(at: Timestamp, seconds: i64) -> String {
+    ts(Timestamp::from_secs(at.as_secs() - at.as_secs().rem_euclid(seconds)).unwrap())
 }
 
 fn issue(
@@ -82,7 +81,7 @@ fn issue(
 /// `(errors, extra)`.
 fn aggregate(
     resolution: i64,
-    at: DateTime<Utc>,
+    at: Timestamp,
     kind: &str,
     key: &str,
     process: &str,
@@ -166,7 +165,7 @@ async fn lighthouse_db(fixture: &Fixture, file: &str) {
     ));
     // Requests: two endpoints, two processes, per-hour rows in the last day,
     // one row too old for 24h and per-minute rows for 1h.
-    let now = Utc::now();
+    let now = Timestamp::now();
     let deals: Vec<f64> = (1..=100).map(f64::from).collect();
     statements.push(aggregate(
         3600,
@@ -542,7 +541,7 @@ async fn large_histograms_and_backtraces_are_read_whole() {
     let fixture = Fixture::new(APP_TOML);
     lighthouse_db(&fixture, "storage/app.db").await;
     const BIG: &str = "0192f3a4b5c67d8e9f00112233445599";
-    let now = Utc::now();
+    let now = Timestamp::now();
     let mut statements: Vec<String> = Vec::new();
     // 1,500 fast rows, then 1,500 slow ones: cut after 4 KB, the merged
     // histogram would hold only fast ones.
