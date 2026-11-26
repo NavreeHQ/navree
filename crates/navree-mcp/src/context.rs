@@ -3,12 +3,12 @@
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use navree_access::{
     Ability, Accessible, ActionMarker, Authorized, PrincipalAccess, Subject, SubjectRecords,
 };
 use navree_auth::{AuthService, User};
 use navree_contracts::{Clock, Principal};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::AppContext;
@@ -180,10 +180,10 @@ impl McpContext {
     }
 
     /// The current time, from the app's `dyn Clock` when it has one.
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         match &self.inner.clock {
             Some(clock) => clock.now(),
-            None => Utc::now(),
+            None => Timestamp::now(),
         }
     }
 
