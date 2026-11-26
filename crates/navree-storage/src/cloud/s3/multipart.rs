@@ -180,7 +180,7 @@ impl S3Upload {
                 let body = answer.bytes_up_to(MULTIPART_XML_LIMIT).await?;
                 let root = xml::parse(&body)?;
                 if root.name() == "Error" {
-                    let code = root.value("Code").unwrap_or("");
+                    let code = root.value("Code").map(str::trim).unwrap_or("");
                     if matches!(
                         code,
                         "InternalError" | "SlowDown" | "RequestTimeout" | "ServiceUnavailable"

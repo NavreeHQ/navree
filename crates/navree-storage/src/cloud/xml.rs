@@ -141,7 +141,7 @@ pub fn parse_within(body: &[u8], limits: Limits) -> Result<Element> {
     loop {
         let event = events
             .read_event()
-            .map_err(|error| unreadable("it is not well-formed").with_source(error))?;
+            .map_err(|_| unreadable("it is not well-formed"))?;
         match event {
             Event::Start(start) => tree.start(start.local_name().into_inner())?,
             Event::Empty(start) => {
@@ -162,8 +162,8 @@ pub fn parse_within(body: &[u8], limits: Limits) -> Result<Element> {
                         "quot" => '"',
                         _ => return Err(unreadable("it uses an entity XML does not define")),
                     },
-                    Err(error) => {
-                        return Err(unreadable("it is not well-formed").with_source(error));
+                    Err(_) => {
+                        return Err(unreadable("it is not well-formed"));
                     }
                 };
                 tree.text(resolved.encode_utf8(&mut [0; 4]));
@@ -349,10 +349,17 @@ mod tests {
 
     #[test]
     fn a_failure_repeats_nothing_of_the_answer() {
-        let body = "<Credentials><SecretAccessKey>s3cret</SecretAccessKey></Wrong>";
-        let error = parse(body.as_bytes()).unwrap_err();
-        let shown = format!("{error} {error:?}");
-        assert!(!shown.contains("s3cret"), "{shown}");
+        for body in [
+            "<Credentials><SecretAccessKey>s3cret</SecretAccessKey></Wrong>",
+            "<Credentials><s3cret>val</other></Credentials>",
+            "<Credentials>&#xs3cret;</Credentials>",
+            "<Credentials>&#s3cret;</Credentials>",
+        ] {
+            let error = parse(body.as_bytes()).unwrap_err();
+            assert!(std::error::Error::source(&error).is_none(), "{error:?}");
+            let shown = format!("{error} {error:?}");
+            assert!(!shown.contains("s3cret"), "{shown}");
+        }
     }
 
     #[test]

@@ -21,8 +21,10 @@
 //!    endpoint answers `403`, `404` or `405`.
 
 use std::collections::BTreeMap;
+use std::io::Read as _;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use ::http::{Method, StatusCode};
@@ -58,25 +60,119 @@ const CREDENTIAL_RESPONSE_LIMIT: usize = 64 * 1024;
 /// Maximum size accepted for an IMDSv2 token or role name.
 const METADATA_SMALL_LIMIT: usize = 4 * 1024;
 
-/// Builds the credential [`Provider`] for `config` in `region` using `env`
-/// and `clock`.
-pub(super) fn build_provider(
+/// Resolved credential strategy that can build a [`Provider`] for a given
+/// [`RetryPolicy`] and clock.
+#[derive(Clone)]
+pub(super) enum CredentialPlan {
+    Fixed(Credentials),
+    WebIdentity {
+        client: Client,
+        url: Url,
+        token_file: PathBuf,
+        role_arn: String,
+        session_name: String,
+    },
+    Container {
+        client: Client,
+        url: Url,
+        token_file: Option<PathBuf>,
+        inline_token: Option<String>,
+    },
+    Imds {
+        client: Client,
+        base_url: Url,
+        imdsv1_fallback: bool,
+    },
+}
+
+impl CredentialPlan {
+    pub(super) fn into_provider(
+        self,
+        retry: RetryPolicy,
+        clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
+    ) -> Provider<Credentials> {
+        match self {
+            Self::Fixed(creds) => Provider::fixed(creds),
+            Self::WebIdentity {
+                client,
+                url,
+                token_file,
+                role_arn,
+                session_name,
+            } => Provider::with_clock(
+                WebIdentitySource {
+                    client,
+                    url,
+                    token_file,
+                    role_arn,
+                    session_name,
+                    retry,
+                },
+                move || clock(),
+            ),
+            Self::Container {
+                client,
+                url,
+                token_file,
+                inline_token,
+            } => Provider::with_clock(
+                ContainerSource {
+                    client,
+                    url,
+                    token_file,
+                    inline_token,
+                    retry,
+                },
+                move || clock(),
+            ),
+            Self::Imds {
+                client,
+                base_url,
+                imdsv1_fallback,
+            } => Provider::with_clock(
+                ImdsSource {
+                    client,
+                    base_url,
+                    imdsv1_fallback,
+                    retry,
+                },
+                move || clock(),
+            ),
+        }
+    }
+}
+
+/// Resolves the credential strategy for `config` in `region` using `env`.
+pub(super) fn resolve_plan(
     config: &S3Config,
     region: &str,
     env: &BTreeMap<String, String>,
-    retry: RetryPolicy,
-    clock: impl Fn() -> SystemTime + Send + Sync + 'static,
-) -> Result<Provider<Credentials>> {
-    // 1. Static keys on the disk itself. When present, environment
-    //    credentials (including AWS_SESSION_TOKEN) are untouched.
-    if config.access_key.is_some() || config.secret_key.is_some() {
-        let access_key = config.access_key.as_deref().filter(|s| !s.is_empty());
+) -> Result<CredentialPlan> {
+    // 1. Static keys on the disk itself. When any static credential field is
+    //    set, environment credentials (including AWS_SESSION_TOKEN) are
+    //    untouched and partial settings fail closed.
+    if config.access_key.is_some() || config.secret_key.is_some() || config.session_token.is_some()
+    {
+        let access_key = config
+            .access_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
         let secret_key = config
             .secret_key
             .as_ref()
             .map(|s| s.expose().as_str())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.trim().is_empty());
         let (Some(access_key), Some(secret_key)) = (access_key, secret_key) else {
+            if config.session_token.is_some()
+                && config.access_key.is_none()
+                && config.secret_key.is_none()
+            {
+                return Err(Error::new(
+                    ErrorKind::Credential,
+                    "session_token requires access_key and secret_key",
+                ));
+            }
             return Err(Error::new(
                 ErrorKind::Credential,
                 "set both access_key and secret_key, or neither",
@@ -86,23 +182,27 @@ pub(super) fn build_provider(
             .session_token
             .as_ref()
             .map(|token| token.expose().clone())
-            .filter(|token| !token.is_empty());
-        return Ok(Provider::fixed(
+            .filter(|token| !token.trim().is_empty());
+        return Ok(CredentialPlan::Fixed(
             Credentials::new(access_key, secret_key).with_session_token(session_token),
         ));
     }
 
     // 2. Static keys in the environment.
-    let env_access = env.get("AWS_ACCESS_KEY_ID").filter(|s| !s.is_empty());
-    let env_secret = env.get("AWS_SECRET_ACCESS_KEY").filter(|s| !s.is_empty());
+    let env_access = env
+        .get("AWS_ACCESS_KEY_ID")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let env_secret = env
+        .get("AWS_SECRET_ACCESS_KEY")
+        .filter(|s| !s.trim().is_empty());
+    let env_session = env
+        .get("AWS_SESSION_TOKEN")
+        .filter(|token| !token.trim().is_empty());
     match (env_access, env_secret) {
         (Some(access_key), Some(secret_key)) => {
-            let session_token = env
-                .get("AWS_SESSION_TOKEN")
-                .cloned()
-                .filter(|token| !token.is_empty());
-            return Ok(Provider::fixed(
-                Credentials::new(access_key, secret_key).with_session_token(session_token),
+            return Ok(CredentialPlan::Fixed(
+                Credentials::new(access_key, secret_key).with_session_token(env_session.cloned()),
             ));
         }
         (Some(_), None) | (None, Some(_)) => {
@@ -111,45 +211,56 @@ pub(super) fn build_provider(
                 "set both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or neither",
             ));
         }
+        (None, None) if env_session.is_some() => {
+            return Err(Error::new(
+                ErrorKind::Credential,
+                "AWS_SESSION_TOKEN requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY",
+            ));
+        }
         (None, None) => {}
     }
 
     // 3. Web identity token exchanged with STS AssumeRoleWithWebIdentity.
     let web_token_file = trimmed_env(env, "AWS_WEB_IDENTITY_TOKEN_FILE");
     let role_arn = trimmed_env(env, "AWS_ROLE_ARN");
-    if let (Some(token_file), Some(role_arn)) = (web_token_file, role_arn) {
-        let session_name = trimmed_env(env, "AWS_ROLE_SESSION_NAME")
-            .unwrap_or("WebIdentitySession")
-            .to_owned();
-        let sts_endpoint = trimmed_env(env, "AWS_ENDPOINT_URL_STS")
-            .map(str::to_owned)
-            .unwrap_or_else(|| format!("https://sts.{region}.amazonaws.com"));
-        let url = parse_endpoint_url(
-            &sts_endpoint,
-            "the STS endpoint must be an http or https URL",
-        )?;
-        let client = Client::for_endpoint(Some(&sts_endpoint))?;
-        let source = WebIdentitySource {
-            client,
-            url,
-            token_file: PathBuf::from(token_file),
-            role_arn: role_arn.to_owned(),
-            session_name,
-            retry,
-        };
-        return Ok(Provider::with_clock(source, clock));
+    match (web_token_file, role_arn) {
+        (Some(token_file), Some(role_arn)) => {
+            let session_name = trimmed_env(env, "AWS_ROLE_SESSION_NAME")
+                .unwrap_or("WebIdentitySession")
+                .to_owned();
+            let sts_endpoint = trimmed_env(env, "AWS_ENDPOINT_URL_STS")
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("https://sts.{region}.amazonaws.com"));
+            let url = parse_endpoint_url(
+                &sts_endpoint,
+                "the STS endpoint must be an http or https URL",
+            )?;
+            let client = Client::for_endpoint(Some(&sts_endpoint))?;
+            return Ok(CredentialPlan::WebIdentity {
+                client,
+                url,
+                token_file: PathBuf::from(token_file),
+                role_arn: role_arn.to_owned(),
+                session_name,
+            });
+        }
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(Error::new(
+                ErrorKind::Credential,
+                "set both AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN, or neither",
+            ));
+        }
+        (None, None) => {}
     }
 
     // 4. ECS or EKS container credentials.
     if let Some(relative) = trimmed_env(env, "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") {
         let url = parse_ecs_relative_uri(relative)?;
-        let source = container_source(url, env, retry)?;
-        return Ok(Provider::with_clock(source, clock));
+        return container_plan(url, env);
     }
     if let Some(full_uri) = trimmed_env(env, "AWS_CONTAINER_CREDENTIALS_FULL_URI") {
         let url = parse_container_full_uri(full_uri)?;
-        let source = container_source(url, env, retry)?;
-        return Ok(Provider::with_clock(source, clock));
+        return container_plan(url, env);
     }
 
     // 5. EC2 instance metadata (IMDSv2 first; IMDSv1 only when opted in).
@@ -165,13 +276,11 @@ pub(super) fn build_provider(
     } else {
         Client::for_metadata()?
     };
-    let source = ImdsSource {
+    Ok(CredentialPlan::Imds {
         client,
         base_url,
         imdsv1_fallback,
-        retry,
-    };
-    Ok(Provider::with_clock(source, clock))
+    })
 }
 
 fn trimmed_env<'a>(env: &'a BTreeMap<String, String>, key: &str) -> Option<&'a str> {
@@ -271,11 +380,7 @@ fn parse_container_full_uri(full_uri: &str) -> Result<Url> {
     Ok(url)
 }
 
-fn container_source(
-    url: Url,
-    env: &BTreeMap<String, String>,
-    retry: RetryPolicy,
-) -> Result<ContainerSource> {
+fn container_plan(url: Url, env: &BTreeMap<String, String>) -> Result<CredentialPlan> {
     let client = if url.scheme() == "https" {
         Client::for_endpoint(None)?
     } else {
@@ -286,38 +391,57 @@ fn container_source(
         .get("AWS_CONTAINER_AUTHORIZATION_TOKEN")
         .cloned()
         .filter(|t| !t.is_empty());
-    Ok(ContainerSource {
+    Ok(CredentialPlan::Container {
         client,
         url,
         token_file,
         inline_token,
-        retry,
     })
 }
 
-/// Reads a token file on Tokio's blocking pool so rotated service-account
-/// tokens are picked up on every refresh without stalling async tasks.
+/// Reads a token file on Tokio's blocking pool within
+/// [`CREDENTIAL_RESPONSE_LIMIT`] bytes so rotated service-account tokens are
+/// picked up on every refresh without stalling async tasks or exhausting
+/// memory.
 async fn read_token_file(path: PathBuf, label: &'static str) -> Result<String> {
-    let content = tokio::task::spawn_blocking(move || std::fs::read_to_string(path))
-        .await
-        .map_err(|_| {
-            Error::new(
-                ErrorKind::Credential,
-                format!("the {label} could not be read"),
-            )
-        })?
-        .map_err(|io_err| {
-            Error::new(
-                ErrorKind::Credential,
-                format!("the {label} could not be read"),
-            )
-            .with_source(io_err)
-        })?;
-    let trimmed = content.trim_end_matches(['\r', '\n']).trim();
-    if trimmed.is_empty() {
+    let raw = tokio::task::spawn_blocking(move || -> std::io::Result<Vec<u8>> {
+        let file = std::fs::File::open(path)?;
+        let mut buf = Vec::new();
+        file.take((CREDENTIAL_RESPONSE_LIMIT + 1) as u64)
+            .read_to_end(&mut buf)?;
+        Ok(buf)
+    })
+    .await
+    .map_err(|_| {
+        Error::new(
+            ErrorKind::Credential,
+            format!("the {label} could not be read"),
+        )
+    })?
+    .map_err(|io_err| {
+        Error::new(
+            ErrorKind::Credential,
+            format!("the {label} could not be read"),
+        )
+        .with_source(io_err)
+    })?;
+    if raw.len() > CREDENTIAL_RESPONSE_LIMIT {
         return Err(Error::new(
             ErrorKind::Credential,
-            format!("the {label} is empty"),
+            format!("the {label} is larger than {CREDENTIAL_RESPONSE_LIMIT} bytes"),
+        ));
+    }
+    let content = std::str::from_utf8(&raw).map_err(|_| {
+        Error::new(
+            ErrorKind::Credential,
+            format!("the {label} is not valid UTF-8"),
+        )
+    })?;
+    let trimmed = content.trim_end_matches(['\r', '\n']).trim();
+    if trimmed.is_empty() || trimmed.chars().any(char::is_control) {
+        return Err(Error::new(
+            ErrorKind::Credential,
+            format!("the {label} is empty or contains a control character"),
         ));
     }
     Ok(trimmed.to_owned())

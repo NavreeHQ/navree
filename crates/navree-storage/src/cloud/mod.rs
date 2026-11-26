@@ -73,6 +73,14 @@ use crate::store::StoreError;
 /// What a part of the cloud core gives.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Maximum number of pages a single `Store::list` call follows before refusing
+/// an unbounded pagination stream.
+pub(crate) const MAX_LIST_PAGES: usize = 100_000;
+
+/// Maximum number of object entries a single `Store::list` call collects in
+/// memory.
+pub(crate) const MAX_LIST_ENTRIES: usize = 10_000_000;
+
 /// What went wrong, as far as trying again and reporting care.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]

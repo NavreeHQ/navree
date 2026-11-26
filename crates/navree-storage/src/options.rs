@@ -343,6 +343,10 @@ impl From<AzureConfig> for DiskConfig {
 /// `AWS_ROLE_ARN`), the container credentials of ECS and EKS, or the
 /// instance metadata service. Keys set here win; with `access_key` and
 /// `secret_key` set, no credential is read from the environment.
+///
+/// The IAM principal needs `s3:GetObject`, `s3:PutObject` and `s3:DeleteObject`
+/// on `<bucket>/*` (deletes check `HEAD` first so `Store::delete` reports
+/// missing objects accurately) and `s3:ListBucket` on `<bucket>`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct S3Config {
@@ -569,8 +573,22 @@ fn validate_disk(disk: &DiskConfig) -> Result<(), String> {
             compiled_in("s3", cfg!(feature = "s3"), "storage-s3")?;
             required("bucket", &config.bucket, "s3")?;
             endpoint(config.endpoint.as_deref())?;
-            if config.access_key.is_some() != config.secret_key.is_some() {
+            let has_access = config
+                .access_key
+                .as_deref()
+                .is_some_and(|key| !key.trim().is_empty());
+            let has_secret = config
+                .secret_key
+                .as_ref()
+                .is_some_and(|key| !key.expose().trim().is_empty());
+            if config.access_key.is_some() != config.secret_key.is_some()
+                || has_access != has_secret
+                || (config.access_key.is_some() && !has_access)
+            {
                 return Err("set both access_key and secret_key, or neither".to_owned());
+            }
+            if config.session_token.is_some() && !has_access {
+                return Err("session_token requires access_key and secret_key".to_owned());
             }
         }
         DiskConfig::Gcs(config) => {
@@ -591,6 +609,13 @@ fn validate_disk(disk: &DiskConfig) -> Result<(), String> {
                 .is_some_and(|account| account.trim().is_empty())
             {
                 return Err("account must not be empty".to_owned());
+            }
+            if config
+                .access_key
+                .as_ref()
+                .is_some_and(|key| key.expose().trim_ascii().is_empty())
+            {
+                return Err("access_key must not be empty".to_owned());
             }
         }
     }

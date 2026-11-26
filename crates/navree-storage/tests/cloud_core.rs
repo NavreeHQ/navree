@@ -886,3 +886,192 @@ async fn a_file_that_keeps_arriving_is_read_however_often_its_body_stops() {
     assert_eq!(asked.load(Ordering::SeqCst), 2);
     assert_eq!(ranges_asked(&rest).await, ["bytes=700-"]);
 }
+
+#[test]
+fn xml_parse_errors_have_no_source_and_hide_malformed_tags_and_entities() {
+    for body in [
+        "<Credentials><SecretAccessKey>harpreet-secret-99</SecretAccessKey></Wrong>",
+        "<Credentials><harpreet-secret-99>1</other></Credentials>",
+        "<Credentials>&#xharpreet-secret-99;</Credentials>",
+        "<Credentials>&#harpreet-secret-99;</Credentials>",
+    ] {
+        let err = xml::parse(body.as_bytes()).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Answer);
+        assert!(std::error::Error::source(&err).is_none(), "{err:?}");
+        let rendered = format!("{err} {err:?}");
+        assert!(!rendered.contains("harpreet-secret-99"), "{rendered}");
+    }
+}
+
+#[tokio::test]
+async fn credential_for_refreshes_early_when_link_lifetime_exceeds_remaining_ttl() {
+    let hands = Hands::new();
+    let (provider, fetches) = sessions(&hands, 60, Duration::ZERO);
+
+    // Initial fetch: 60 minutes left, covers a 30-minute signed link.
+    assert_eq!(
+        provider
+            .credential_for(Duration::from_secs(30 * 60))
+            .await
+            .unwrap()
+            .secret,
+        "session-1"
+    );
+    assert_eq!(fetches.load(Ordering::SeqCst), 1);
+
+    // 45 minutes later: 15 minutes left (> 5m REFRESH_BEFORE), so normal
+    // requests keep `session-1`, whereas a 30-minute signed link refreshes
+    // early to `session-2`.
+    hands.set_minutes(45);
+    assert_eq!(provider.credential().await.unwrap().secret, "session-1");
+    assert_eq!(fetches.load(Ordering::SeqCst), 1);
+
+    assert_eq!(
+        provider
+            .credential_for(Duration::from_secs(30 * 60))
+            .await
+            .unwrap()
+            .secret,
+        "session-2"
+    );
+    assert_eq!(fetches.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn ranged_bytes_validates_content_range_and_bounds_200_ok_bodies() {
+    let server = MockServer::start().await;
+    Mock::given(wiremock::matchers::path("/ok-206"))
+        .respond_with(
+            ResponseTemplate::new(206)
+                .insert_header("content-range", "bytes 2-5/10")
+                .set_body_bytes(b"cdEF".to_vec()),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(wiremock::matchers::path("/bad-206"))
+        .respond_with(
+            ResponseTemplate::new(206)
+                .insert_header("content-range", "bytes 0-3/10")
+                .set_body_bytes(b"abcd".to_vec()),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(wiremock::matchers::path("/small-200"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"0123456789".to_vec()))
+        .mount(&server)
+        .await;
+    Mock::given(wiremock::matchers::path("/huge-200"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![b'Z'; 100_000]))
+        .mount(&server)
+        .await;
+
+    let client = Client::for_endpoint(Some(&server.uri())).unwrap();
+    let fetch = |path: &str| {
+        let url = Url::parse(&format!("{}{path}", server.uri())).unwrap();
+        client.send(Request::new(Method::GET, url))
+    };
+
+    assert_eq!(
+        fetch("/ok-206")
+            .await
+            .unwrap()
+            .ranged_bytes(2..6)
+            .await
+            .unwrap(),
+        "cdEF"
+    );
+    assert_eq!(
+        fetch("/bad-206")
+            .await
+            .unwrap()
+            .ranged_bytes(2..6)
+            .await
+            .unwrap_err()
+            .kind(),
+        ErrorKind::Answer
+    );
+    assert_eq!(
+        fetch("/small-200")
+            .await
+            .unwrap()
+            .ranged_bytes(2..6)
+            .await
+            .unwrap(),
+        "2345"
+    );
+    // An 8-byte sniff against a 100 KiB 200-OK body (> end + 64 KiB) fails
+    // before reading the whole payload into memory.
+    assert_eq!(
+        fetch("/huge-200")
+            .await
+            .unwrap()
+            .ranged_bytes(0..8)
+            .await
+            .unwrap_err()
+            .kind(),
+        ErrorKind::Answer
+    );
+}
+
+#[tokio::test]
+async fn prefixed_store_list_skips_exact_directory_marker_keys() {
+    use chrono::Utc;
+    use navree_storage::store::{Meta, PrefixedStore, Store, StoreResult, Upload};
+
+    struct MarkerStore;
+
+    impl std::fmt::Display for MarkerStore {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("MarkerStore")
+        }
+    }
+
+    impl Store for MarkerStore {
+        fn put<'a>(&'a self, _: &'a str, _: Bytes) -> BoxFuture<'a, StoreResult<()>> {
+            unimplemented!()
+        }
+        fn begin_upload<'a>(&'a self, _: &'a str) -> BoxFuture<'a, StoreResult<Box<dyn Upload>>> {
+            unimplemented!()
+        }
+        fn read<'a>(
+            &'a self,
+            _: &'a str,
+            _: Option<std::ops::Range<u64>>,
+        ) -> BoxFuture<'a, StoreResult<Bytes>> {
+            unimplemented!()
+        }
+        fn open<'a>(
+            &'a self,
+            _: &'a str,
+        ) -> BoxFuture<'a, StoreResult<navree_storage::store::Object>> {
+            unimplemented!()
+        }
+        fn head<'a>(&'a self, _: &'a str) -> BoxFuture<'a, StoreResult<Meta>> {
+            unimplemented!()
+        }
+        fn delete<'a>(&'a self, _: &'a str) -> BoxFuture<'a, StoreResult<()>> {
+            unimplemented!()
+        }
+        fn list<'a>(&'a self, _: &'a str) -> BoxFuture<'a, StoreResult<Vec<Meta>>> {
+            Box::pin(async {
+                Ok(vec![
+                    Meta {
+                        path: "tenants/agra/".to_owned(),
+                        size: 0,
+                        last_modified: Utc::now(),
+                    },
+                    Meta {
+                        path: "tenants/agra/challan.pdf".to_owned(),
+                        size: 42,
+                        last_modified: Utc::now(),
+                    },
+                ])
+            })
+        }
+    }
+
+    let prefixed = PrefixedStore::new(Arc::new(MarkerStore), "tenants/agra");
+    let listed = prefixed.list("").await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].path, "challan.pdf");
+}

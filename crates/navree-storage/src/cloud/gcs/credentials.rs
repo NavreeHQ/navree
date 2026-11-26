@@ -3,6 +3,7 @@
 //! the Compute Engine / GKE / Cloud Run metadata server, and IAM `signBlob`.
 
 use std::collections::BTreeMap;
+use std::io::Read as _;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -16,8 +17,9 @@ use tokio::sync::RwLock;
 use url::Url;
 
 use super::token::{
-    DEFAULT_SCOPE, DEFAULT_TOKEN_URI, RsaSigningKey, attach_error_code, exchange_jwt,
-    exchange_refresh_token, parse_token_answer, token_client_and_url,
+    DEFAULT_SCOPE, DEFAULT_TOKEN_URI, RsaSigningKey, attach_error_code,
+    credential_token_client_and_url, exchange_jwt, exchange_refresh_token,
+    override_token_client_and_url, parse_token_answer,
 };
 use crate::GcsConfig;
 use crate::cloud::credentials::{Credential, Provider, Source};
@@ -36,6 +38,7 @@ const METADATA_EMAIL_PATH: &str = "/computeMetadata/v1/instance/service-accounts
 const METADATA_TOKEN_LIMIT: usize = 64 * 1024;
 const METADATA_EMAIL_LIMIT: usize = 1024;
 const SIGN_BLOB_ANSWER_LIMIT: usize = 64 * 1024;
+const CREDENTIAL_FILE_LIMIT: usize = 1024 * 1024;
 
 pub(crate) type Clock = Arc<dyn Fn() -> SystemTime + Send + Sync>;
 
@@ -44,6 +47,7 @@ pub(crate) type Clock = Arc<dyn Fn() -> SystemTime + Send + Sync>;
 pub(crate) struct CredentialOverrides {
     pub(crate) metadata_endpoint: Option<String>,
     pub(crate) iam_endpoint: Option<String>,
+    pub(crate) token_endpoint: Option<String>,
     pub(crate) scopes: Vec<String>,
 }
 
@@ -65,10 +69,11 @@ pub(crate) enum UrlSigner {
     SignBlob {
         metadata_client: Client,
         metadata_base: Url,
+        metadata_retry: RetryPolicy,
         email: RwLock<Option<String>>,
         iam_client: Client,
         iam_base: Url,
-        retry: RetryPolicy,
+        iam_retry: RetryPolicy,
     },
     /// Credentials that carry no service account (such as `authorized_user`).
     Unsupported(&'static str),
@@ -82,8 +87,8 @@ impl UrlSigner {
             Self::SignBlob {
                 metadata_client,
                 metadata_base,
+                metadata_retry,
                 email,
-                retry,
                 ..
             } => {
                 if let Some(cached) = email.read().await.as_ref() {
@@ -93,7 +98,8 @@ impl UrlSigner {
                 if let Some(cached) = guard.as_ref() {
                     return Ok(cached.clone());
                 }
-                let fetched = fetch_metadata_email(metadata_client, metadata_base, retry).await?;
+                let fetched =
+                    fetch_metadata_email(metadata_client, metadata_base, metadata_retry).await?;
                 *guard = Some(fetched.clone());
                 Ok(fetched)
             }
@@ -109,11 +115,19 @@ impl UrlSigner {
             Self::SignBlob {
                 iam_client,
                 iam_base,
-                retry,
+                iam_retry,
                 ..
             } => {
                 let account_email = self.signer_email().await?;
-                sign_blob(iam_client, iam_base, retry, tokens, &account_email, message).await
+                sign_blob(
+                    iam_client,
+                    iam_base,
+                    iam_retry,
+                    tokens,
+                    &account_email,
+                    message,
+                )
+                .await
             }
             Self::Unsupported(reason) => Err(Error::new(ErrorKind::Credential, *reason)),
         }
@@ -124,8 +138,7 @@ impl UrlSigner {
 ///
 /// 1. `config.service_account_path` or `config.service_account_key`;
 /// 2. `GOOGLE_SERVICE_ACCOUNT_KEY`;
-/// 3. `GOOGLE_SERVICE_ACCOUNT`, `GOOGLE_SERVICE_ACCOUNT_PATH` or
-///    `SERVICE_ACCOUNT`;
+/// 3. `GOOGLE_SERVICE_ACCOUNT` or `GOOGLE_SERVICE_ACCOUNT_PATH`;
 /// 4. `GOOGLE_APPLICATION_CREDENTIALS` (`service_account` or
 ///    `authorized_user`);
 /// 5. the instance metadata server (`GCE_METADATA_HOST`, else
@@ -134,6 +147,7 @@ pub(crate) fn resolve(
     config: &GcsConfig,
     env: &BTreeMap<String, String>,
     overrides: &CredentialOverrides,
+    allow_loopback_token_http: bool,
     retry: &RetryPolicy,
     clock: Clock,
 ) -> Result<ResolvedCredentials> {
@@ -146,6 +160,7 @@ pub(crate) fn resolve(
         keys.iter()
             .find_map(|key| env.get(*key).filter(|val| !val.trim().is_empty()))
     };
+    let token_override = overrides.token_endpoint.as_deref();
 
     match (&config.service_account_path, &config.service_account_key) {
         (Some(_), Some(_)) => Err(Error::new(
@@ -154,23 +169,56 @@ pub(crate) fn resolve(
         )),
         (Some(path), None) => {
             let contents = read_credential_file(path, "service account key file")?;
-            from_service_account_json(&contents, scopes, retry, clock)
+            from_service_account_json(
+                &contents,
+                scopes,
+                token_override,
+                allow_loopback_token_http,
+                retry,
+                clock,
+            )
         }
-        (None, Some(key)) => from_service_account_json(key.expose(), scopes, retry, clock),
+        (None, Some(key)) => from_service_account_json(
+            key.expose(),
+            scopes,
+            token_override,
+            allow_loopback_token_http,
+            retry,
+            clock,
+        ),
         (None, None) => {
             if let Some(inline) = env_value(&["GOOGLE_SERVICE_ACCOUNT_KEY"]) {
-                from_service_account_json(inline, scopes, retry, clock)
-            } else if let Some(path) = env_value(&[
-                "GOOGLE_SERVICE_ACCOUNT",
-                "GOOGLE_SERVICE_ACCOUNT_PATH",
-                "SERVICE_ACCOUNT",
-            ]) {
+                from_service_account_json(
+                    inline,
+                    scopes,
+                    token_override,
+                    allow_loopback_token_http,
+                    retry,
+                    clock,
+                )
+            } else if let Some(path) =
+                env_value(&["GOOGLE_SERVICE_ACCOUNT", "GOOGLE_SERVICE_ACCOUNT_PATH"])
+            {
                 let contents = read_credential_file(Path::new(path), "service account key file")?;
-                from_service_account_json(&contents, scopes, retry, clock)
+                from_service_account_json(
+                    &contents,
+                    scopes,
+                    token_override,
+                    allow_loopback_token_http,
+                    retry,
+                    clock,
+                )
             } else if let Some(path) = env_value(&["GOOGLE_APPLICATION_CREDENTIALS"]) {
                 let contents =
                     read_credential_file(Path::new(path), "application credentials file")?;
-                from_application_credentials_json(&contents, scopes, retry, clock)
+                from_application_credentials_json(
+                    &contents,
+                    scopes,
+                    token_override,
+                    allow_loopback_token_http,
+                    retry,
+                    clock,
+                )
             } else {
                 from_metadata_server(env, overrides, retry, clock)
             }
@@ -179,10 +227,31 @@ pub(crate) fn resolve(
 }
 
 fn read_credential_file(path: &Path, label: &'static str) -> Result<String> {
-    std::fs::read_to_string(path).map_err(|error| {
+    let file = std::fs::File::open(path).map_err(|error| {
         Error::new(
             ErrorKind::Credential,
             format!("could not read the {label}: {}", error.kind()),
+        )
+    })?;
+    let mut raw = Vec::new();
+    file.take((CREDENTIAL_FILE_LIMIT + 1) as u64)
+        .read_to_end(&mut raw)
+        .map_err(|error| {
+            Error::new(
+                ErrorKind::Credential,
+                format!("could not read the {label}: {}", error.kind()),
+            )
+        })?;
+    if raw.len() > CREDENTIAL_FILE_LIMIT {
+        return Err(Error::new(
+            ErrorKind::Credential,
+            format!("the {label} is larger than {CREDENTIAL_FILE_LIMIT} bytes"),
+        ));
+    }
+    String::from_utf8(raw).map_err(|_| {
+        Error::new(
+            ErrorKind::Credential,
+            format!("the {label} is not valid UTF-8"),
         )
     })
 }
@@ -214,9 +283,26 @@ struct CredentialKindProbe {
     kind: Option<String>,
 }
 
+fn resolve_token_endpoint(
+    json_token_uri: Option<String>,
+    token_override: Option<&str>,
+    allow_loopback_http: bool,
+) -> Result<(Client, Url)> {
+    if let Some(override_uri) = token_override {
+        return override_token_client_and_url(override_uri);
+    }
+    let token_uri = json_token_uri
+        .map(|uri| uri.trim().to_owned())
+        .filter(|uri| !uri.is_empty())
+        .unwrap_or_else(|| DEFAULT_TOKEN_URI.to_owned());
+    credential_token_client_and_url(&token_uri, allow_loopback_http)
+}
+
 fn from_service_account_json(
     raw: &str,
     scopes: Vec<String>,
+    token_override: Option<&str>,
+    allow_loopback_http: bool,
     retry: &RetryPolicy,
     clock: Clock,
 ) -> Result<ResolvedCredentials> {
@@ -245,11 +331,8 @@ fn from_service_account_json(
     if let Some(kid) = parsed.private_key_id {
         key = key.with_kid(kid);
     }
-    let token_uri = parsed
-        .token_uri
-        .filter(|uri| !uri.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_TOKEN_URI.to_owned());
-    let (token_client, token_url) = token_client_and_url(&token_uri)?;
+    let (token_client, token_url) =
+        resolve_token_endpoint(parsed.token_uri, token_override, allow_loopback_http)?;
 
     let source = ServiceAccountSource {
         client: token_client,
@@ -274,6 +357,8 @@ fn from_service_account_json(
 fn from_application_credentials_json(
     raw: &str,
     scopes: Vec<String>,
+    token_override: Option<&str>,
+    allow_loopback_http: bool,
     retry: &RetryPolicy,
     clock: Clock,
 ) -> Result<ResolvedCredentials> {
@@ -284,8 +369,17 @@ fn from_application_credentials_json(
         )
     })?;
     match probe.kind.as_deref() {
-        None | Some("service_account") => from_service_account_json(raw, scopes, retry, clock),
-        Some("authorized_user") => from_authorized_user_json(raw, retry, clock),
+        None | Some("service_account") => from_service_account_json(
+            raw,
+            scopes,
+            token_override,
+            allow_loopback_http,
+            retry,
+            clock,
+        ),
+        Some("authorized_user") => {
+            from_authorized_user_json(raw, token_override, allow_loopback_http, retry, clock)
+        }
         Some(_) => Err(Error::new(
             ErrorKind::Credential,
             "unsupported credential type in GOOGLE_APPLICATION_CREDENTIALS",
@@ -295,6 +389,8 @@ fn from_application_credentials_json(
 
 fn from_authorized_user_json(
     raw: &str,
+    token_override: Option<&str>,
+    allow_loopback_http: bool,
     retry: &RetryPolicy,
     clock: Clock,
 ) -> Result<ResolvedCredentials> {
@@ -313,11 +409,8 @@ fn from_authorized_user_json(
             "the authorized_user credentials file is missing required fields",
         ));
     }
-    let token_uri = parsed
-        .token_uri
-        .filter(|uri| !uri.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_TOKEN_URI.to_owned());
-    let (token_client, token_url) = token_client_and_url(&token_uri)?;
+    let (token_client, token_url) =
+        resolve_token_endpoint(parsed.token_uri, token_override, allow_loopback_http)?;
 
     let source = AuthorizedUserSource {
         client: token_client,
@@ -408,10 +501,11 @@ fn from_metadata_server(
         signer: UrlSigner::SignBlob {
             metadata_client,
             metadata_base,
+            metadata_retry,
             email: RwLock::new(None),
             iam_client,
             iam_base,
-            retry: retry.clone(),
+            iam_retry: retry.clone(),
         },
     })
 }
@@ -587,8 +681,8 @@ async fn sign_blob(
             "the IAM signBlob answer is not a valid JSON object",
         )
     })?;
-    let trimmed = parsed.signed_blob.trim();
-    STANDARD
+    let trimmed = parsed.signed_blob.trim_ascii();
+    let decoded = STANDARD
         .decode(trimmed)
         .or_else(|_| STANDARD_NO_PAD.decode(trimmed.trim_end_matches('=')))
         .map_err(|_| {
@@ -596,7 +690,14 @@ async fn sign_blob(
                 ErrorKind::Answer,
                 "the IAM signBlob answer did not carry valid base64 bytes",
             )
-        })
+        })?;
+    if decoded.is_empty() {
+        return Err(Error::new(
+            ErrorKind::Answer,
+            "the IAM signBlob answer carried an empty signature",
+        ));
+    }
+    Ok(decoded)
 }
 
 /// Validates that `email` contains only safe ASCII service-account characters

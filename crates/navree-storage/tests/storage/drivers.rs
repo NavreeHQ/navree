@@ -259,8 +259,15 @@ mod s3 {
             matches!(&error, StorageError::Signing { reason, .. } if reason.contains("7 days")),
             "{error:?}"
         );
-        // An expiry in the past still gives a (short) link.
-        assert!(disk.temporary_url("a.txt", Utc::now()).await.is_ok());
+        // An expiry that has already passed is refused rather than extended.
+        let past_err = disk
+            .temporary_url("a.txt", Utc::now() - chrono::Duration::seconds(1))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(past_err, StorageError::Signing { .. }),
+            "{past_err:?}"
+        );
     }
 
     #[tokio::test]

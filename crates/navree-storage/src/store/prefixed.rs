@@ -121,11 +121,11 @@ impl Store for PrefixedStore {
             }
             let directory = format!("{}/", self.prefix);
             files.retain_mut(|meta| match meta.path.strip_prefix(&directory) {
-                Some(relative) => {
+                Some(relative) if !relative.is_empty() => {
                     meta.path = relative.to_owned();
                     true
                 }
-                None => false,
+                _ => false,
             });
             Ok(files)
         })

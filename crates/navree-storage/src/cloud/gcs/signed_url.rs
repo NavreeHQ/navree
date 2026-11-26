@@ -39,6 +39,12 @@ impl PreparedSignedUrl {
     /// Attaches `signature` (raw RSA-SHA256 signature bytes, hex-encoded in
     /// lowercase) as `X-Goog-Signature` and returns the completed [`Url`].
     pub fn finish(&self, signature: &[u8]) -> Result<Url> {
+        if signature.is_empty() {
+            return Err(Error::new(
+                ErrorKind::Refused,
+                "a Google Cloud Storage signed link signature cannot be empty",
+            ));
+        }
         let signed = format!(
             "{}&X-Goog-Signature={}",
             self.url_without_signature,
@@ -91,10 +97,23 @@ pub fn prepare(
     merged.push(("host".to_owned(), host));
     for (name, value) in headers {
         let lower = name.as_str().to_ascii_lowercase();
-        if lower == "host" {
+        if matches!(
+            lower.as_str(),
+            "host"
+                | "authorization"
+                | "content-length"
+                | "user-agent"
+                | "x-goog-algorithm"
+                | "x-goog-credential"
+                | "x-goog-date"
+                | "x-goog-expires"
+                | "x-goog-signature"
+                | "x-goog-signedheaders"
+                | "x-goog-oauth-source"
+        ) {
             return Err(Error::new(
                 ErrorKind::Refused,
-                "the `host` header is fixed by the bucket's address",
+                format!("Google Cloud Storage cannot bind the `{name}` header on a signed link"),
             ));
         }
         let raw_value = value.to_str().map_err(|_| {

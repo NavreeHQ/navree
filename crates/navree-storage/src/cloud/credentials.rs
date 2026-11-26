@@ -192,12 +192,21 @@ impl<T: Clone + Send + Sync + 'static> Provider<T> {
     /// source's failure under it: whatever it was, it is not worth sending
     /// the request again for, since the source has done its own trying.
     pub async fn credential(&self) -> Result<Credential<T>> {
-        if let Some(credential) = self.usable(self.kept.read().await.as_ref()) {
+        self.credential_for(REFRESH_BEFORE).await
+    }
+
+    /// Like [`credential`](Self::credential), refreshing early when the kept
+    /// temporary credential has at most `min_remaining` left (for instance
+    /// when signing a link whose `expires_in` exceeds the remaining session
+    /// lifetime), subject to a short pause after a fresh fetch.
+    pub async fn credential_for(&self, min_remaining: Duration) -> Result<Credential<T>> {
+        let needed = min_remaining.max(REFRESH_BEFORE);
+        if let Some(credential) = self.usable(self.kept.read().await.as_ref(), needed) {
             return Ok(credential);
         }
         let mut kept = self.kept.write().await;
         // Another caller may have fetched it while this one waited.
-        if let Some(credential) = self.usable(kept.as_ref()) {
+        if let Some(credential) = self.usable(kept.as_ref(), needed) {
             return Ok(credential);
         }
         let Some(source) = &self.source else {
@@ -217,8 +226,9 @@ impl<T: Clone + Send + Sync + 'static> Provider<T> {
         Ok(credential)
     }
 
-    /// The kept credential, if the next request may be signed with it.
-    fn usable(&self, kept: Option<&Kept<T>>) -> Option<Credential<T>> {
+    /// The kept credential, if it has more than `needed` left (or was just
+    /// fetched and has not expired).
+    fn usable(&self, kept: Option<&Kept<T>>, needed: Duration) -> Option<Credential<T>> {
         let kept = kept?;
         let Some(expires_at) = kept.credential.expires_at else {
             return Some(kept.credential.clone());
@@ -230,8 +240,7 @@ impl<T: Clone + Send + Sync + 'static> Provider<T> {
         let just_fetched = now
             .duration_since(kept.fetched_at)
             .is_ok_and(|age| age < REFETCH_PAUSE);
-        (left > REFRESH_BEFORE || (just_fetched && !left.is_zero()))
-            .then(|| kept.credential.clone())
+        (left > needed || (just_fetched && !left.is_zero())).then(|| kept.credential.clone())
     }
 }
 

@@ -183,7 +183,7 @@ bucket = "agra-media"
 service_account_path = "/run/secrets/gcs.json"   # optional
 ```
 
-Credentials come from `service_account_path` (a key file) or `service_account_key` (its JSON contents), else from `GOOGLE_SERVICE_ACCOUNT_KEY`, `GOOGLE_SERVICE_ACCOUNT` / `GOOGLE_SERVICE_ACCOUNT_PATH` / `SERVICE_ACCOUNT`, or `GOOGLE_APPLICATION_CREDENTIALS` (either a `service_account` key or an `authorized_user` refresh-token file), else from the Compute Engine metadata server (`GCE_METADATA_HOST` or `metadata.google.internal`, used by Workload Identity on GKE and Cloud Run). Signed links use V4 `GOOG4-RSA-SHA256` signing with the service account key, or the metadata server's account with the `iam.serviceAccounts.signBlob` permission. `endpoint` points the disk at an emulator; `prefix` and `public_url` work as for S3.
+Credentials come from `service_account_path` (a key file) or `service_account_key` (its JSON contents), else from `GOOGLE_SERVICE_ACCOUNT_KEY`, `GOOGLE_SERVICE_ACCOUNT` / `GOOGLE_SERVICE_ACCOUNT_PATH`, or `GOOGLE_APPLICATION_CREDENTIALS` (either a `service_account` key or an `authorized_user` refresh-token file), else from the Compute Engine metadata server (`GCE_METADATA_HOST` or `metadata.google.internal`, used by Workload Identity on GKE and Cloud Run). Signed links use V4 `GOOG4-RSA-SHA256` signing with the service account key, or the metadata server's account with the `iam.serviceAccounts.signBlob` permission. `endpoint` points the disk at an emulator; `prefix` and `public_url` work as for S3.
 
 ### Azure Blob Storage
 

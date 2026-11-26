@@ -28,6 +28,16 @@ use crate::store::{StoreError, StoreResult, Upload};
 /// 4 MiB.
 pub const DEFAULT_BLOCK_SIZE: usize = 4 * 1024 * 1024;
 
+/// Maximum block size accepted by Azure `Put Block` (`4000 MiB`).
+pub(crate) const MAX_BLOCK_SIZE: usize = {
+    let limit = 4000u64 * 1024 * 1024;
+    if limit > usize::MAX as u64 {
+        usize::MAX
+    } else {
+        limit as usize
+    }
+};
+
 /// Azure allows at most 50,000 blocks in a single block blob.
 const MAX_BLOCKS: usize = 50_000;
 
@@ -47,7 +57,7 @@ impl BlockUpload {
             inner,
             url,
             nonce: random_token(16),
-            block_size: block_size.max(1),
+            block_size: block_size.clamp(1, MAX_BLOCK_SIZE),
             buffer: BytesMut::new(),
             blocks: Vec::new(),
         }

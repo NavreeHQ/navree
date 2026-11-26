@@ -7,7 +7,7 @@ pub mod signed_url;
 pub mod token;
 mod upload;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::ops::Range;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ use crate::cloud::credentials::Provider;
 use crate::cloud::http::{Client, Request, redacted};
 use crate::cloud::keys::{check_key, check_prefix, encode_component};
 use crate::cloud::retry::{Replay, RetryPolicy, with_backoff};
-use crate::cloud::{Error, ErrorKind, Result};
+use crate::cloud::{Error, ErrorKind, MAX_LIST_ENTRIES, MAX_LIST_PAGES, Result};
 use crate::store::{HeaderName, HeaderValue, Meta, Object, Store, StoreError, StoreResult, Upload};
 pub use upload::{DEFAULT_CHUNK_SIZE, UPLOAD_QUANTUM};
 
@@ -95,6 +95,14 @@ impl GcsStoreBuilder {
     #[must_use]
     pub fn iam_endpoint(mut self, endpoint: impl Into<String>) -> Self {
         self.overrides.iam_endpoint = Some(endpoint.into());
+        self
+    }
+
+    /// Overrides the OAuth 2.0 token endpoint URL (for local mock OAuth
+    /// servers in tests).
+    #[must_use]
+    pub fn token_endpoint(mut self, endpoint: impl Into<String>) -> Self {
+        self.overrides.token_endpoint = Some(endpoint.into());
         self
     }
 
@@ -183,10 +191,13 @@ impl GcsStoreBuilder {
             }
             None => std::env::vars().collect(),
         };
+        let allow_loopback_token_http =
+            endpoint.is_some() && base_url.scheme() == "http" && token::is_loopback(&base_url);
         let resolved = credentials::resolve(
             &self.config,
             &env,
             &self.overrides,
+            allow_loopback_token_http,
             &self.retry,
             clock.clone(),
         )?;
@@ -350,6 +361,7 @@ fn to_meta(resource: ObjectResource, fallback_path: Option<&str>) -> Result<Meta
             }
         },
     };
+    check_key(&path)?;
     let last_modified = DateTime::parse_from_rfc3339(&resource.updated)
         .map(|dt| dt.with_timezone(&Utc))
         .map_err(|_| {
@@ -455,18 +467,10 @@ impl Store for GcsStore {
             let Some(answer) = answer else {
                 return Ok(Bytes::new());
             };
-            let status = answer.status();
-            let body = answer.bytes().await?;
-            // If an emulator ignored `Range` and answered `200 OK` with the
-            // whole file, slice it locally so callers never receive extra bytes.
-            if let Some(span) = range
-                && status == StatusCode::OK
-            {
-                let end = usize::try_from(span.end).map_or(body.len(), |end| end.min(body.len()));
-                let start = usize::try_from(span.start).map_or(end, |start| start.min(end));
-                return Ok(body.slice(start..end));
+            match range {
+                Some(span) => Ok(answer.ranged_bytes(span).await?),
+                None => Ok(answer.bytes().await?),
             }
-            Ok(body)
         })
     }
 
@@ -581,8 +585,19 @@ impl Store for GcsStore {
 
             let mut files = Vec::new();
             let mut page_token: Option<String> = None;
+            let mut seen_tokens = HashSet::new();
+            let mut pages = 0usize;
 
             loop {
+                pages += 1;
+                if pages > MAX_LIST_PAGES {
+                    return Err(Error::new(
+                        ErrorKind::Answer,
+                        "the bucket listing exceeded the maximum page limit",
+                    )
+                    .into());
+                }
+
                 let mut query = Vec::new();
                 if let Some(ref dir) = directory {
                     query.push(format!("prefix={}", encode_component(dir)));
@@ -619,21 +634,29 @@ impl Store for GcsStore {
 
                 for item in page.items {
                     let meta = to_meta(item, None)?;
-                    // Keep defensive filtering even if an emulator ignores `prefix`.
-                    if directory
-                        .as_ref()
-                        .is_none_or(|dir| meta.path.starts_with(dir))
+                    // Keep defensive filtering even if an emulator ignores
+                    // `prefix`, and skip exact directory-placeholder markers.
+                    if let Some(ref dir) = directory
+                        && (!meta.path.starts_with(dir.as_str()) || meta.path.len() <= dir.len())
                     {
-                        files.push(meta);
+                        continue;
                     }
+                    if files.len() >= MAX_LIST_ENTRIES {
+                        return Err(Error::new(
+                            ErrorKind::Answer,
+                            "the bucket listing exceeded the maximum object count",
+                        )
+                        .into());
+                    }
+                    files.push(meta);
                 }
 
                 match page.next_page_token.filter(|tok| !tok.is_empty()) {
                     Some(next) => {
-                        if page_token.as_deref() == Some(next.as_str()) {
+                        if !seen_tokens.insert(next.clone()) {
                             return Err(Error::new(
                                 ErrorKind::Answer,
-                                "the bucket listing repeated the same pageToken",
+                                "the bucket listing repeated a pageToken",
                             )
                             .into());
                         }

@@ -19,8 +19,8 @@ use ::http::header::{HeaderName, HeaderValue};
 use chrono::{DateTime, Utc};
 use navree_crypto::sha256_hex;
 use navree_crypto::sigv4::{
-    self, ALGORITHM, UNSIGNED_PAYLOAD, canonical_path, canonical_query, canonical_request, scope,
-    signature, uri_encode,
+    self, ALGORITHM, UNSIGNED_PAYLOAD, canonical_path, canonical_query, canonical_request,
+    decode_query, scope, signature, uri_encode,
 };
 use url::Url;
 
@@ -60,7 +60,9 @@ pub fn sign_request(
     region: &str,
     now: DateTime<Utc>,
 ) -> Result<()> {
+    check_signer_inputs(&credentials.access_key_id, region)?;
     request.headers.remove("authorization");
+    request.headers.remove("host");
     request.headers.remove("x-amz-date");
     request.headers.remove("x-amz-content-sha256");
     request.headers.remove("x-amz-security-token");
@@ -99,10 +101,11 @@ pub fn sign_request(
         signed_pairs.push((key, text));
     }
 
+    let query_pairs = decode_query(request.url.query());
     let canonical = canonical_request(
         request.method.as_str(),
         &canonical_path(request.url.path(), false),
-        &canonical_query(request.url.query_pairs()),
+        &canonical_query(query_pairs.iter().map(|(k, v)| (k.as_str(), v.as_str()))),
         &signed_pairs,
         &payload_hash,
     );
@@ -151,8 +154,15 @@ pub fn presign_url(
             "S3 signed links last at most 7 days",
         ));
     }
-    for (query_key, _) in url.query_pairs() {
-        if query_key.len() >= 6 && query_key[..6].eq_ignore_ascii_case("x-amz-") {
+    check_signer_inputs(&credentials.access_key_id, region)?;
+
+    let existing = decode_query(url.query());
+    for (query_key, _) in &existing {
+        if query_key
+            .as_bytes()
+            .get(..6)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"x-amz-"))
+        {
             return Err(Error::new(
                 ErrorKind::Refused,
                 "a presigned URL cannot start with reserved X-Amz-* query parameters",
@@ -187,10 +197,6 @@ pub fn presign_url(
     let credential = format!("{}/{cred_scope}", credentials.access_key_id);
     let expires_text = expires_in.as_secs().to_string();
 
-    let existing: Vec<(String, String)> = url
-        .query_pairs()
-        .map(|(k, v)| (k.into_owned(), v.into_owned()))
-        .collect();
     let mut query_pairs: Vec<(&str, &str)> = Vec::with_capacity(existing.len() + 6);
     for (k, v) in &existing {
         query_pairs.push((k.as_str(), v.as_str()));
@@ -235,6 +241,35 @@ pub fn presign_url(
     signed.set_query(Some(&raw_query));
     let _ = sigv4::ALGORITHM;
     Ok(signed)
+}
+
+/// Validates `access_key_id` and `region` so neither can inject delimiters
+/// into `Authorization` or presigned query scopes.
+fn check_signer_inputs(access_key_id: &str, region: &str) -> Result<()> {
+    if access_key_id.is_empty()
+        || access_key_id.len() > 128
+        || !access_key_id.bytes().all(|byte| {
+            (0x21..=0x7E).contains(&byte)
+                && !matches!(byte, b'/' | b'\\' | b'?' | b'#' | b'&' | b'=' | b',' | b';')
+        })
+    {
+        return Err(Error::new(
+            ErrorKind::Credential,
+            "the S3 access key id is empty or contains invalid characters",
+        ));
+    }
+    if region.is_empty()
+        || region.len() > 64
+        || !region
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err(Error::new(
+            ErrorKind::Refused,
+            "the S3 region name is invalid",
+        ));
+    }
+    Ok(())
 }
 
 /// The HTTP `Host` header value of `url`, including `:port` when non-default.

@@ -40,6 +40,7 @@ pub struct S3Store {
     region: String,
     bucket_url: Url,
     client: Client,
+    credential_plan: Option<credentials::CredentialPlan>,
     credentials: Arc<Provider<Credentials>>,
     retry: RetryPolicy,
     part_size: usize,
@@ -72,16 +73,16 @@ impl S3Store {
         let client = Client::for_endpoint(resolved.client_endpoint.as_deref())?;
         let retry = RetryPolicy::default();
         let shared_clock: Clock = Arc::new(clock);
-        let provider_clock = shared_clock.clone();
-        let credentials =
-            credentials::build_provider(config, &resolved.region, env, retry.clone(), move || {
-                provider_clock()
-            })?;
+        let plan = credentials::resolve_plan(config, &resolved.region, env)?;
+        let credentials = plan
+            .clone()
+            .into_provider(retry.clone(), shared_clock.clone());
         Ok(Self {
             bucket: config.bucket.clone(),
             region: resolved.region,
             bucket_url: resolved.bucket_url,
             client,
+            credential_plan: Some(plan),
             credentials: Arc::new(credentials),
             retry,
             part_size: DEFAULT_PART_SIZE,
@@ -92,13 +93,21 @@ impl S3Store {
     /// Replaces the credential [`Provider`].
     #[must_use]
     pub fn with_credentials(mut self, credentials: Provider<Credentials>) -> Self {
+        self.credential_plan = None;
         self.credentials = Arc::new(credentials);
         self
     }
 
-    /// Replaces the [`RetryPolicy`] used by requests and multipart uploads.
+    /// Replaces the [`RetryPolicy`] used by storage, credential and multipart
+    /// requests.
     #[must_use]
     pub fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
+        if let Some(plan) = &self.credential_plan {
+            self.credentials = Arc::new(
+                plan.clone()
+                    .into_provider(policy.clone(), self.clock.clone()),
+            );
+        }
         self.retry = policy;
         self
     }
@@ -223,7 +232,10 @@ impl Store for S3Store {
                 self.head(path).await?;
                 return Ok(Bytes::new());
             };
-            answer.bytes().await.map_err(StoreError::from)
+            match range {
+                Some(span) => answer.ranged_bytes(span).await.map_err(StoreError::from),
+                None => answer.bytes().await.map_err(StoreError::from),
+            }
         })
     }
 
@@ -363,7 +375,7 @@ impl Store for S3Store {
     ) -> BoxFuture<'a, StoreResult<Url>> {
         Box::pin(async move {
             let url = object_url(&self.bucket_url, path)?;
-            let credential = self.credentials.credential().await?;
+            let credential = self.credentials.credential_for(expires_in).await?;
             sigv4::presign_url(
                 &method,
                 &url,
@@ -387,8 +399,9 @@ struct ResolvedAddress {
 fn check_bucket_name(bucket: &str) -> Result<()> {
     if bucket.is_empty()
         || bucket.len() > 255
-        || bucket == "."
-        || bucket == ".."
+        || bucket.starts_with(['.', '-'])
+        || bucket.ends_with(['.', '-'])
+        || bucket.contains("..")
         || !bucket
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
@@ -439,7 +452,12 @@ fn resolve_address(config: &S3Config, env: &BTreeMap<String, String>) -> Result<
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .or_else(|| from_env(&["AWS_ENDPOINT_URL_S3", "AWS_ENDPOINT_URL", "AWS_ENDPOINT"]));
-    let path_style = config.path_style.unwrap_or(raw_endpoint.is_some());
+    // Buckets with `.` cannot match AWS's `*.s3.<region>.amazonaws.com`
+    // wildcard TLS certificate, so default them to path-style on AWS unless
+    // `path_style` was set explicitly.
+    let path_style = config
+        .path_style
+        .unwrap_or_else(|| raw_endpoint.is_some() || config.bucket.contains('.'));
 
     let refused = || {
         Error::new(
@@ -467,6 +485,13 @@ fn resolve_address(config: &S3Config, env: &BTreeMap<String, String>) -> Result<
         }
         Some(endpoint) => {
             let trimmed = endpoint.trim_end_matches('/');
+            let has_authority = trimmed
+                .strip_prefix("https://")
+                .or_else(|| trimmed.strip_prefix("http://"))
+                .is_some_and(|rest| !rest.is_empty() && !rest.starts_with(['/', '\\']));
+            if !has_authority {
+                return Err(refused());
+            }
             let parsed = Url::parse(trimmed).map_err(|_| refused())?;
             if !matches!(parsed.scheme(), "http" | "https")
                 || parsed.host_str().is_none()
@@ -492,12 +517,25 @@ fn resolve_address(config: &S3Config, env: &BTreeMap<String, String>) -> Result<
                     client_endpoint,
                 })
             } else {
-                let Some((scheme, rest)) = trimmed.split_once("://") else {
+                let Some(url::Host::Domain(domain)) = parsed.host() else {
                     return Err(refused());
                 };
-                let vhost = format!("{scheme}://{}.{rest}", config.bucket);
-                let bucket_url = Url::parse(&vhost).map_err(|_| refused())?;
-                if bucket_url.host_str().is_none() {
+                if domain
+                    .split('.')
+                    .all(|label| !label.is_empty() && label.bytes().all(|b| b.is_ascii_digit()))
+                {
+                    return Err(refused());
+                }
+                let vhost_domain = format!("{}.{domain}", config.bucket);
+                let mut bucket_url = parsed.clone();
+                bucket_url
+                    .set_host(Some(&vhost_domain))
+                    .map_err(|_| refused())?;
+                if bucket_url.scheme() != parsed.scheme()
+                    || bucket_url.port_or_known_default() != parsed.port_or_known_default()
+                    || bucket_url.path() != parsed.path()
+                    || !matches!(bucket_url.host(), Some(url::Host::Domain(_)))
+                {
                     return Err(refused());
                 }
                 let client_endpoint = Some(bucket_url.origin().ascii_serialization());

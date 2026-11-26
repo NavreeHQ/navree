@@ -46,23 +46,23 @@ pub(crate) struct DelegationKeys {
 }
 
 impl DelegationKeys {
-    /// Returns a delegation key valid across `[start, sas_expiry]`, reusing
-    /// the cached key when it covers the window and fetching a new one under
-    /// a write lock otherwise.
+    /// Returns a delegation key valid across `[effective_start, sas_expiry]`,
+    /// reusing the cached key when it covers the window and fetching a new one
+    /// under a write lock otherwise.
     pub(crate) async fn key_for(
         &self,
         inner: &AzureInner,
         start: DateTime<Utc>,
         sas_expiry: DateTime<Utc>,
         expires_in: Duration,
-    ) -> Result<UserDelegationKey> {
+    ) -> Result<(UserDelegationKey, DateTime<Utc>)> {
         let now = (inner.clock)();
-        if let Some(key) = usable(self.kept.read().await.as_ref(), now, start, sas_expiry) {
-            return Ok(key);
+        if let Some(found) = usable(self.kept.read().await.as_ref(), now, start, sas_expiry) {
+            return Ok(found);
         }
         let mut kept = self.kept.write().await;
-        if let Some(key) = usable(kept.as_ref(), now, start, sas_expiry) {
-            return Ok(key);
+        if let Some(found) = usable(kept.as_ref(), now, start, sas_expiry) {
+            return Ok(found);
         }
 
         let validity = expires_in.max(DEFAULT_KEY_VALIDITY).min(MAX_DELEGATION_TTL);
@@ -92,14 +92,21 @@ impl DelegationKeys {
         })
         .await?;
 
-        let (key, starts_at, expires_at) = parse_delegation_key(&answer, start, requested_expiry)?;
+        let (key, starts_at, expires_at) = parse_delegation_key(&answer)?;
+        let effective_start = start.max(starts_at);
+        if effective_start >= sas_expiry || expires_at < sas_expiry {
+            return Err(Error::new(
+                ErrorKind::Answer,
+                "the user delegation key does not cover the requested SAS window",
+            ));
+        }
         *kept = Some(CachedKey {
             key: key.clone(),
             starts_at,
             expires_at,
             fetched_at: (inner.clock)(),
         });
-        Ok(key)
+        Ok((key, effective_start))
     }
 }
 
@@ -108,24 +115,21 @@ fn usable(
     now: SystemTime,
     start: DateTime<Utc>,
     sas_expiry: DateTime<Utc>,
-) -> Option<UserDelegationKey> {
+) -> Option<(UserDelegationKey, DateTime<Utc>)> {
     let cached = cached?;
-    if start < cached.starts_at || cached.expires_at < sas_expiry {
+    let effective_start = start.max(cached.starts_at);
+    if effective_start >= sas_expiry || cached.expires_at < sas_expiry {
         return None;
     }
     let margin = chrono::Duration::from_std(REUSE_MARGIN).unwrap_or_default();
-    let plenty_left = cached.expires_at >= sas_expiry + margin;
+    let plenty_left = cached.expires_at.signed_duration_since(sas_expiry) >= margin;
     let just_fetched = now
         .duration_since(cached.fetched_at)
         .is_ok_and(|age| age < REFETCH_PAUSE);
-    (plenty_left || just_fetched).then(|| cached.key.clone())
+    (plenty_left || just_fetched).then(|| (cached.key.clone(), effective_start))
 }
 
-fn parse_delegation_key(
-    body: &[u8],
-    fallback_start: DateTime<Utc>,
-    fallback_expiry: DateTime<Utc>,
-) -> Result<(UserDelegationKey, DateTime<Utc>, DateTime<Utc>)> {
+fn parse_delegation_key(body: &[u8]) -> Result<(UserDelegationKey, DateTime<Utc>, DateTime<Utc>)> {
     let root = xml::parse(body)?;
     if root.name() != "UserDelegationKey" {
         return Err(Error::new(
@@ -134,15 +138,26 @@ fn parse_delegation_key(
         ));
     }
     let field = |name: &'static str| -> Result<&str> {
-        root.value(name)
-            .map(str::trim)
+        let value = root
+            .value(name)
+            .map(str::trim_ascii)
             .filter(|v| !v.is_empty())
             .ok_or_else(|| {
                 Error::new(
                     ErrorKind::Answer,
                     format!("the user delegation key answer is missing `{name}`"),
                 )
-            })
+            })?;
+        if value
+            .chars()
+            .any(|ch| ch.is_control() || ch.is_whitespace())
+        {
+            return Err(Error::new(
+                ErrorKind::Answer,
+                format!("the user delegation key field `{name}` contains invalid characters"),
+            ));
+        }
+        Ok(value)
     };
 
     let signed_oid = field("SignedOid")?;
@@ -151,7 +166,39 @@ fn parse_delegation_key(
     let signed_expiry = field("SignedExpiry")?;
     let signed_service = field("SignedService")?;
     let signed_version = field("SignedVersion")?;
-    let value = field("Value")?;
+    let value = root
+        .value("Value")
+        .map(str::trim_ascii)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            Error::new(
+                ErrorKind::Answer,
+                "the user delegation key answer is missing `Value`",
+            )
+        })?;
+
+    let starts_at = DateTime::parse_from_rfc3339(signed_start)
+        .map(|dt| dt.with_timezone(&Utc))
+        .map_err(|_| {
+            Error::new(
+                ErrorKind::Answer,
+                "the user delegation key has an invalid SignedStart timestamp",
+            )
+        })?;
+    let expires_at = DateTime::parse_from_rfc3339(signed_expiry)
+        .map(|dt| dt.with_timezone(&Utc))
+        .map_err(|_| {
+            Error::new(
+                ErrorKind::Answer,
+                "the user delegation key has an invalid SignedExpiry timestamp",
+            )
+        })?;
+    if starts_at >= expires_at {
+        return Err(Error::new(
+            ErrorKind::Answer,
+            "the user delegation key expires before it starts",
+        ));
+    }
 
     let key = UserDelegationKey::new(
         signed_oid,
@@ -168,13 +215,6 @@ fn parse_delegation_key(
             "the user delegation key value is not valid base64",
         )
     })?;
-
-    let starts_at = DateTime::parse_from_rfc3339(signed_start)
-        .map(|dt| dt.with_timezone(&Utc))
-        .unwrap_or(fallback_start);
-    let expires_at = DateTime::parse_from_rfc3339(signed_expiry)
-        .map(|dt| dt.with_timezone(&Utc))
-        .unwrap_or(fallback_expiry);
 
     Ok((key, starts_at, expires_at))
 }
