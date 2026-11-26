@@ -14,7 +14,7 @@ statements alone. A **record** is that row: a struct whose table and
 columns are declared once, and every statement is built from that list.
 
 ```rust
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::record::{self, Filter};
 use navree_db::{Record, Uow};
 use serde::Serialize;
@@ -29,7 +29,7 @@ navree_db::record! {
         pub email: String,
         #[serde(skip_serializing)]          // kept out of change events
         pub note: String,
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
