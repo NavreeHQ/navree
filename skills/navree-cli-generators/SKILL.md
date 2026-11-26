@@ -244,7 +244,7 @@ navree native:init --name Dukaan --origin http://127.0.0.1:8080 --dry-run
 - Running `navree help` to list app commands (use `navree list`).
 - Leaving `AppShell` in a generated page of a Navree UI app that has a `Desk`:
   the page then shows no workspace and the generic user menu.
-- `navree new` writes `navree = "1.5.0"` (the CLI's own version) when it
+- `navree new` writes `navree = "1.6.0"` (the CLI's own version) when it
   can't find a checkout: pass `--navree-path`.
 - Putting `native.toml` in `config/`: every file there is read as a section of
   the app's own settings. It belongs at the app's root.
