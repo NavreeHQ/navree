@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use http::{HeaderMap, Method};
 use navree_contracts::Secret;
 use navree_http_client::HttpClient;
@@ -369,7 +369,7 @@ pub(crate) fn payment_form(request: &PaymentRequest) -> Result<Form, ProviderErr
         push(&mut form, "cancel_url", url.clone());
     }
     if let Some(expires) = request.expires_at {
-        push(&mut form, "expires_at", expires.timestamp().to_string());
+        push(&mut form, "expires_at", expires.as_secs().to_string());
     }
     // Since 2026-09-30 a Checkout Session takes the methods as a filter on
     // the ones Stripe finds eligible (payment links still take
@@ -644,7 +644,7 @@ impl BillingProvider for StripeProvider {
                 ("identifier".to_owned(), report.idempotency_key.clone()),
                 (
                     "timestamp".to_owned(),
-                    report.timestamp.timestamp().to_string(),
+                    report.timestamp.as_secs().to_string(),
                 ),
             ];
             self.post("/v1/billing/meter_events", &form, &report.idempotency_key)
@@ -798,7 +798,7 @@ impl BillingProvider for StripeProvider {
         &self,
         headers: &HeaderMap,
         body: &[u8],
-        now: DateTime<Utc>,
+        now: Timestamp,
         tolerance: Duration,
     ) -> Result<(), WebhookError> {
         let secret = self.webhook_secret.as_ref().ok_or(WebhookError::NoSecret)?;
@@ -827,10 +827,10 @@ fn id_of(value: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-fn timestamp(value: &Value) -> Option<DateTime<Utc>> {
+fn timestamp(value: &Value) -> Option<Timestamp> {
     value
         .as_i64()
-        .and_then(|secs| Utc.timestamp_opt(secs, 0).single())
+        .and_then(|secs| Timestamp::from_secs(secs).ok())
 }
 
 fn data(list: &Value) -> Result<&Vec<Value>, ProviderError> {
@@ -936,7 +936,7 @@ pub(crate) fn parse_invoice(value: &Value) -> Result<Invoice, ProviderError> {
         currency: value["currency"].as_str().unwrap_or_default().to_owned(),
         pdf_url: value["invoice_pdf"].as_str().map(str::to_owned),
         hosted_url: value["hosted_invoice_url"].as_str().map(str::to_owned),
-        created_at: timestamp(&value["created"]).unwrap_or(DateTime::<Utc>::UNIX_EPOCH),
+        created_at: timestamp(&value["created"]).unwrap_or(Timestamp::UNIX_EPOCH),
     })
 }
 
@@ -1159,7 +1159,7 @@ mod tests {
             methods: Vec::new(),
             success_url: Some("https://app.test/paid".into()),
             cancel_url: None,
-            expires_at: Some(DateTime::from_timestamp(1_800_000_000, 0).unwrap()),
+            expires_at: Some(Timestamp::from_secs(1_800_000_000).unwrap()),
             metadata: BTreeMap::from([("order".to_owned(), "42".to_owned())]),
             idempotency_key: "payment-INV-2026-0042".into(),
         }
@@ -1469,9 +1469,9 @@ mod tests {
         assert_eq!(sub.status, SubscriptionStatus::Trialing);
         assert_eq!(sub.items[0].quantity, Some(2));
         assert_eq!(sub.items[1].quantity, None);
-        assert_eq!(sub.current_period_end.unwrap().timestamp(), 1_701_000_000);
+        assert_eq!(sub.current_period_end.unwrap().as_secs(), 1_701_000_000);
         assert_eq!(sub.ends_at, sub.current_period_end, "cancel at period end");
-        assert_eq!(sub.trial_ends_at.unwrap().timestamp(), 1_700_000_000);
+        assert_eq!(sub.trial_ends_at.unwrap().as_secs(), 1_700_000_000);
         assert_eq!(sub.billable(), Some(("workspace".to_owned(), Uuid::nil())));
         assert!(!sub.metadata.contains_key("n"), "only string metadata");
 
@@ -1489,8 +1489,8 @@ mod tests {
             "current_period_end": 1_701_000_000, "items": { "data": [] }
         }))
         .unwrap();
-        assert_eq!(ended.ends_at.unwrap().timestamp(), 1_700_000_500);
-        assert_eq!(ended.current_period_end.unwrap().timestamp(), 1_701_000_000);
+        assert_eq!(ended.ends_at.unwrap().as_secs(), 1_700_000_500);
+        assert_eq!(ended.current_period_end.unwrap().as_secs(), 1_701_000_000);
 
         assert!(
             parse_subscription(&json!({ "id": "sub_1", "customer": "cus_1", "status": "weird" }))
@@ -1510,7 +1510,7 @@ mod tests {
         });
         let event = parse_event(body.to_string().as_bytes()).unwrap();
         assert_eq!(event.id, "evt_1");
-        assert_eq!(event.occurred_at.timestamp(), 1_700_000_000);
+        assert_eq!(event.occurred_at.as_secs(), 1_700_000_000);
         assert_eq!(
             event.actions,
             [WebhookAction::PaymentFailed(ProviderInvoice {

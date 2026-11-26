@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::request::Parts;
 use http::{HeaderMap, Method};
 use navree_auth::AuthService;
@@ -46,11 +46,11 @@ pub struct SubscriptionResource {
     /// Seats.
     pub quantity: u32,
     /// When the trial ends.
-    pub trial_ends_at: Option<DateTime<Utc>>,
+    pub trial_ends_at: Option<Timestamp>,
     /// When a canceled subscription ends.
-    pub ends_at: Option<DateTime<Utc>>,
+    pub ends_at: Option<Timestamp>,
     /// The end of the current period.
-    pub current_period_end: Option<DateTime<Utc>>,
+    pub current_period_end: Option<Timestamp>,
     /// `Subscription::valid`.
     pub valid: bool,
     /// `Subscription::on_trial`.
@@ -138,7 +138,7 @@ pub struct TrialResource {
     /// Whether the billable is on a trial (with or without a subscription).
     pub on_trial: bool,
     /// When it ends.
-    pub ends_at: Option<DateTime<Utc>>,
+    pub ends_at: Option<Timestamp>,
 }
 
 /// `GET /billing`: everything a billing settings page shows.

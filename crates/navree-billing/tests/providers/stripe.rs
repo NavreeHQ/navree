@@ -1,6 +1,6 @@
 //! `StripeProvider` against a local mock server.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::{HeaderMap, HeaderValue};
 use navree_billing::{
     BillingError, BillingProvider, InvoiceStatus, ProviderError, STRIPE_API_VERSION, STRIPE_EVENTS,
@@ -32,8 +32,8 @@ fn ok(body: serde_json::Value) -> ResponseTemplate {
     ResponseTemplate::new(200).set_body_json(body)
 }
 
-fn at(secs: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp(secs, 0).unwrap()
+fn at(secs: i64) -> Timestamp {
+    Timestamp::from_secs(secs).unwrap()
 }
 
 #[tokio::test]

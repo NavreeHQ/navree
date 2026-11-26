@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use chrono::DateTime;
+use navree_datetime::Timestamp;
 use navree_billing::{
     BillableRef, Billing, BillingModule, PADDLE_SIGNATURE_HEADER, STRIPE_SIGNATURE_HEADER,
     SubscriptionStatus, sign_paddle_webhook, sign_stripe_webhook,
@@ -48,7 +48,7 @@ fn app(server: &MockServer) -> TestAppBuilder {
         .module(HttpClientModule::from_config())
         .module(BillingModule::from_config())
         .override_value::<dyn Clock>(Arc::new(FixedClock::new(
-            DateTime::from_timestamp(NOW, 0).unwrap(),
+            Timestamp::from_secs(NOW).unwrap(),
         )))
 }
 

@@ -108,7 +108,7 @@ impl BillingModule {
     ///         &self,
     ///         _headers: &http::HeaderMap,
     ///         _body: &[u8],
-    ///         _now: chrono::DateTime<chrono::Utc>,
+    ///         _now: navree_datetime::Timestamp,
     ///         _tolerance: std::time::Duration,
     ///     ) -> Result<(), WebhookError> {
     ///         Err(WebhookError::NoSecret)

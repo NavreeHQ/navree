@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -230,7 +230,7 @@ pub struct PaymentBuilder<'a> {
     common: Common,
     success_url: Option<String>,
     cancel_url: Option<String>,
-    expires_at: Option<DateTime<Utc>>,
+    expires_at: Option<Timestamp>,
 }
 
 impl<'a> PaymentBuilder<'a> {
@@ -263,7 +263,7 @@ impl<'a> PaymentBuilder<'a> {
 
     /// When the payment page stops accepting the payment, where the
     /// provider supports it.
-    pub fn expires_at(mut self, at: DateTime<Utc>) -> Self {
+    pub fn expires_at(mut self, at: Timestamp) -> Self {
         self.expires_at = Some(at);
         self
     }
@@ -310,7 +310,7 @@ impl<'a> PaymentBuilder<'a> {
 pub struct PaymentLinkBuilder<'a> {
     billing: &'a Billing,
     common: Common,
-    expires_at: Option<DateTime<Utc>>,
+    expires_at: Option<Timestamp>,
     notify_by_email: bool,
     notify_by_sms: bool,
     return_url: Option<String>,
@@ -332,7 +332,7 @@ impl<'a> PaymentLinkBuilder<'a> {
 
     /// When the link stops working, where the provider supports expiry
     /// (Stripe's links do not expire).
-    pub fn expires_at(mut self, at: DateTime<Utc>) -> Self {
+    pub fn expires_at(mut self, at: Timestamp) -> Self {
         self.expires_at = Some(at);
         self
     }

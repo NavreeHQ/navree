@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
@@ -308,7 +308,7 @@ pub struct PaymentRequest {
     /// Where the customer returns when they leave the payment page.
     pub cancel_url: Option<String>,
     /// When the payment page stops accepting the payment.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
     /// Stored with the payment; the billable, the reference and
     /// [`KIND_KEY`] are added.
     pub metadata: BTreeMap<String, String>,
@@ -434,7 +434,7 @@ pub struct PaymentLinkRequest {
     pub methods: Vec<PaymentMethod>,
     /// When the link stops working, where the provider supports expiry
     /// (Stripe's links do not expire).
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
     /// Asks the provider to send the link by email itself, where it can.
     pub notify_by_email: bool,
     /// Asks the provider to send the link by SMS itself, where it can.
@@ -478,7 +478,7 @@ pub struct ProviderPaymentLink {
     /// Your reference.
     pub reference: Option<String>,
     /// When it stops working, if it expires.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
 }
 
 /// Why a payment is refunded.
@@ -634,7 +634,7 @@ pub struct ProviderMandate {
     /// The most one debit may take.
     pub max_amount: Option<Money>,
     /// When it ends.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
     /// The metadata.
     pub metadata: BTreeMap<String, String>,
 }

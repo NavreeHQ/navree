@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_events::Event;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -73,7 +73,7 @@ pub struct SubscriptionCanceled {
     /// The plan key.
     pub plan: String,
     /// When it ends (or ended).
-    pub ends_at: Option<DateTime<Utc>>,
+    pub ends_at: Option<Timestamp>,
 }
 
 impl Event for SubscriptionCanceled {
@@ -92,7 +92,7 @@ pub struct TrialEnding {
     /// The plan key.
     pub plan: String,
     /// When the trial ends.
-    pub trial_ends_at: Option<DateTime<Utc>>,
+    pub trial_ends_at: Option<Timestamp>,
 }
 
 impl Event for TrialEnding {

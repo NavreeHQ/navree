@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_billing::{
     BillingProvider, Money, NewCustomer, PaymentCustomer, PaymentLinkRequest, PaymentRequest,
     RefundReason, RefundRequest, StripeProvider, UsageReport,
@@ -150,7 +150,7 @@ async fn every_stripe_write_carries_an_idempotency_key() {
             price_id: "price_ai".into(),
             quantity: 12,
             idempotency_key: "navree-usage-0123456789abcdef".into(),
-            timestamp: DateTime::<Utc>::from_timestamp(NOW, 0).unwrap(),
+            timestamp: Timestamp::from_secs(NOW).unwrap(),
         })
         .await
         .unwrap();

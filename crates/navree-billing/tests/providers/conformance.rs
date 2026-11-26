@@ -5,7 +5,7 @@ use std::any::Any;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use navree_billing::{
     BillableRef, Billing, BillingModule, BillingProvider, PADDLE_SIGNATURE_HEADER, PaddleProvider,
@@ -40,8 +40,8 @@ struct Case {
     _keep: Box<dyn Any>,
 }
 
-fn at(secs: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp(secs, 0).unwrap()
+fn at(secs: i64) -> Timestamp {
+    Timestamp::from_secs(secs).unwrap()
 }
 
 async fn fake_case() -> Case {

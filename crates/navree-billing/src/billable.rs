@@ -252,13 +252,13 @@ impl std::fmt::Debug for BillableRegistration {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
 
     use super::*;
 
     #[test]
     fn workspaces_and_users_are_billable() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let workspace = Workspace {
             id: Uuid::now_v7(),
             name: "Agra".into(),

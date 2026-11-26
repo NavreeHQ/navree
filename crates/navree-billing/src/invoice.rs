@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 
@@ -60,5 +60,5 @@ pub struct Invoice {
     /// The provider's hosted invoice page.
     pub hosted_url: Option<String>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }

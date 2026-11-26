@@ -24,7 +24,7 @@
 /// `billing_customers`: the provider's customer of each billable, and the
 /// trial without a subscription.
 pub mod customer {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -45,11 +45,11 @@ pub mod customer {
         /// The billing email the customer was created with.
         pub email: Option<String>,
         /// The end of a trial without a subscription.
-        pub trial_ends_at: Option<DateTime<Utc>>,
+        pub trial_ends_at: Option<Timestamp>,
         /// When the row was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the row last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
@@ -63,7 +63,7 @@ pub const SUBSCRIPTION_SUBJECT: &str = "Subscription";
 /// permission prefix `subscriptions`, so an app can list subscriptions in
 /// Helm or check `#[can(Read, Subscription)]`.
 pub mod subscription {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -97,29 +97,29 @@ pub mod subscription {
         /// Seats.
         pub quantity: i64,
         /// When the trial ends.
-        pub trial_ends_at: Option<DateTime<Utc>>,
+        pub trial_ends_at: Option<Timestamp>,
         /// When a canceled subscription ends (or ended).
-        pub ends_at: Option<DateTime<Utc>>,
+        pub ends_at: Option<Timestamp>,
         /// The start of the current period.
-        pub current_period_start: Option<DateTime<Utc>>,
+        pub current_period_start: Option<Timestamp>,
         /// The end of the current period.
-        pub current_period_end: Option<DateTime<Utc>>,
+        pub current_period_end: Option<Timestamp>,
         /// Since when the subscription is past due.
-        pub past_due_since: Option<DateTime<Utc>>,
+        pub past_due_since: Option<Timestamp>,
         /// The time of the provider state this row reflects (older webhook
         /// events are ignored).
-        pub provider_updated_at: Option<DateTime<Utc>>,
+        pub provider_updated_at: Option<Timestamp>,
         /// When the row was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the row last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
 /// `subscription_items`: each price of a subscription, metered prices
 /// included.
 pub mod subscription_item {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -140,13 +140,13 @@ pub mod subscription_item {
         /// The quantity (none for metered prices).
         pub quantity: Option<i64>,
         /// When the row was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
 /// `billing_usage`: recorded metered usage.
 pub mod usage {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -165,15 +165,15 @@ pub mod usage {
         /// How much was used.
         pub quantity: i64,
         /// When it was recorded.
-        pub recorded_at: DateTime<Utc>,
+        pub recorded_at: Timestamp,
         /// When `billing:report-usage` sent it to the provider.
-        pub reported_at: Option<DateTime<Utc>>,
+        pub reported_at: Option<Timestamp>,
     }
 }
 
 /// `billing_events`: every webhook received.
 pub mod event {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -192,9 +192,9 @@ pub mod event {
         /// The raw JSON body.
         pub payload: String,
         /// When it arrived.
-        pub received_at: DateTime<Utc>,
+        pub received_at: Timestamp,
         /// When the `billing.process_event` job finished it.
-        pub processed_at: Option<DateTime<Utc>>,
+        pub processed_at: Option<Timestamp>,
         /// Processing attempts so far.
         pub attempts: i32,
         /// The error of the last failed attempt.
