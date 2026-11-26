@@ -2,10 +2,10 @@
 //! library's documentation.
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::ExitCode;
 use std::time::SystemTime;
 
-use xtask::metadata::{Workspace, cargo};
+use xtask::metadata::Workspace;
 use xtask::publish::{Flags, Outcome};
 use xtask::{check, native_models, order, prepare, publish, stage, time};
 
@@ -15,7 +15,6 @@ const USAGE: &str = "\
 cargo xtask release <command>
 cargo xtask native-models [--check]
 cargo xtask tz-tables <dir> [--check]
-cargo xtask time-golden [--check]
 
 native-models [--check]
     Writes the Kotlin, Swift and C# models of Navree Native's protocol from
@@ -26,12 +25,6 @@ tz-tables <dir> [--check]
     Writes crates/navree-datetime/src/zone/tables.rs from an unpacked IANA
     tzdata release folder; with --check, writes nothing and fails when the
     tables differ from that release.
-
-time-golden [--check]
-    Writes crates/navree-datetime/tests/golden/*.jsonl: how dates and times
-    are written and read today (their text, their JSON and the bytes each
-    database driver sends); with --check, writes nothing and fails when a
-    file differs.
 
 Release commands:
   prepare <version> [--date YYYY-MM-DD]
@@ -78,7 +71,6 @@ fn main() -> ExitCode {
         ["native-models"] => cmd_native_models(false),
         ["native-models", "--check"] => cmd_native_models(true),
         ["tz-tables", rest @ ..] => tz::cmd(&root(), rest),
-        ["time-golden", rest @ ..] => cmd_time_golden(rest),
         ["help" | "--help" | "-h"] | ["release"] | ["release", "help" | "--help" | "-h"] | [] => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
@@ -262,25 +254,6 @@ fn cmd_native_models(check: bool) -> Result<ExitCode, String> {
     }
     eprintln!("write them again with `cargo xtask native-models`");
     Ok(ExitCode::FAILURE)
-}
-
-/// `time-golden` is this package's second program (`src/time_golden.rs`),
-/// behind the `time-golden` feature: it needs chrono, navree-time and SQLx,
-/// which no release command does. This builds it with the feature and runs
-/// it, so the command is `cargo xtask time-golden` like the others.
-fn cmd_time_golden(args: &[&str]) -> Result<ExitCode, String> {
-    let status = Command::new(cargo())
-        .args(["run", "--quiet", "--package", "xtask"])
-        .args(["--features", "time-golden", "--bin", "time-golden", "--"])
-        .args(args)
-        .current_dir(root())
-        .status()
-        .map_err(|e| format!("cannot run cargo: {e}"))?;
-    Ok(match status.code() {
-        Some(0) => ExitCode::SUCCESS,
-        Some(code) => ExitCode::from(u8::try_from(code).unwrap_or(1)),
-        None => ExitCode::FAILURE,
-    })
 }
 
 fn value<'a>(args: &mut std::slice::Iter<'_, &'a str>, flag: &str) -> Result<&'a str, String> {

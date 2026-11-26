@@ -74,10 +74,6 @@ criteria = "safe-to-deploy"
 version = "10.6.3"
 criteria = "safe-to-deploy"
 
-[[exemptions.android_system_properties]]
-version = "0.1.6"
-criteria = "safe-to-deploy"
-
 [[exemptions.anstream]]
 version = "1.0.0"
 criteria = "safe-to-deploy"
@@ -314,10 +310,6 @@ criteria = "safe-to-deploy"
 version = "1.0.5"
 criteria = "safe-to-deploy"
 
-[[exemptions.chrono]]
-version = "0.4.45"
-criteria = "safe-to-deploy"
-
 [[exemptions.cipher]]
 version = "0.5.2"
 criteria = "safe-to-deploy"
@@ -404,10 +396,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.crc-catalog]]
 version = "2.5.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.crc-fast]]
-version = "1.10.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.crc32c]]
@@ -854,10 +842,6 @@ criteria = "safe-to-deploy"
 version = "0.1.21"
 criteria = "safe-to-deploy"
 
-[[exemptions.iana-time-zone]]
-version = "0.1.65"
-criteria = "safe-to-deploy"
-
 [[exemptions.icu_calendar]]
 version = "2.4.0"
 criteria = "safe-to-deploy"
@@ -1290,10 +1274,6 @@ criteria = "safe-to-deploy"
 version = "0.3.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.object_store]]
-version = "0.14.2"
-criteria = "safe-to-deploy"
-
 [[exemptions.oid-registry]]
 version = "0.8.1"
 criteria = "safe-to-deploy"
@@ -1551,10 +1531,6 @@ version = "2.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.quick-xml]]
-version = "0.41.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.quick-xml]]
 version = "0.42.0"
 criteria = "safe-to-deploy"
 
@@ -1695,7 +1671,7 @@ version = "1.43.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.rust_xlsxwriter]]
-version = "0.101.0"
+version = "0.104.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustc-hash]]
@@ -1920,10 +1896,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.spin]]
 version = "0.9.9"
-criteria = "safe-to-deploy"
-
-[[exemptions.spin]]
-version = "0.10.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.spki]]
@@ -2400,18 +2372,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.winapi-x86_64-pc-windows-gnu]]
 version = "0.4.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.windows-core]]
-version = "0.62.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.windows-implement]]
-version = "0.60.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.windows-interface]]
-version = "0.59.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.windows-registry]]
