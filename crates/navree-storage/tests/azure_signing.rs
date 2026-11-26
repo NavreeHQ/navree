@@ -184,7 +184,7 @@ async fn a_user_delegation_sas_is_signed_with_the_delegation_key() {
          \n\
          \n\
          \n\
-         \n\
+         https\n\
          {VERSION}\n\
          b\n\
          \n\
@@ -195,17 +195,34 @@ async fn a_user_delegation_sas_is_signed_with_the_delegation_key() {
          \n"
     );
     assert_eq!(
-        key.string_to_sign("agrastorage", &hosted, "r", start, expiry),
+        key.string_to_sign(
+            "agrastorage",
+            "challans",
+            "ਲੁਧਿਆਣਾ ₹100+18%.pdf",
+            &hosted,
+            "r",
+            start,
+            expiry,
+        ),
         expected_to_sign
     );
 
-    key.sign("agrastorage", &mut hosted, "r", start, expiry);
+    key.sign(
+        "agrastorage",
+        "challans",
+        "ਲੁਧਿਆਣਾ ₹100+18%.pdf",
+        &mut hosted,
+        "r",
+        start,
+        expiry,
+    );
     let params: BTreeMap<String, String> = hosted.query_pairs().into_owned().collect();
     assert_eq!(params["sv"], VERSION);
     assert_eq!(params["sp"], "r");
     assert_eq!(params["st"], "2026-11-26T06:00:00Z");
     assert_eq!(params["se"], "2026-11-26T06:15:00Z");
     assert_eq!(params["sr"], "b");
+    assert_eq!(params["spr"], "https");
     assert_eq!(params["skoid"], "11111111-2222-3333-4444-555555555555");
     assert_eq!(params["sktid"], "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     assert_eq!(params["skt"], "2026-11-26T00:00:00Z");
@@ -368,11 +385,12 @@ async fn the_credential_chain_order_is_todays() {
     };
     match Storage::new(&bad_options, b"signing-key") {
         Err(StorageError::InvalidOptions(msg)) => {
-            assert!(
-                msg.starts_with("storage.disks.archive.access_key is not a base64 account key:"),
-                "{msg}"
+            assert_eq!(
+                msg,
+                "storage.disks.archive.access_key is not a base64 account key"
             );
             assert!(!msg.contains("not-valid-base64"), "{msg}");
+            assert!(!msg.contains("symbol") && !msg.contains("offset"), "{msg}");
         }
         other => panic!("expected InvalidOptions, got {other:?}"),
     }
@@ -850,4 +868,229 @@ async fn blob_operations_pagination_and_errors_keep_secrets_out_of_messages() {
         "{rendered}"
     );
     assert!(!rendered.contains(AZURITE_KEY), "{rendered}");
+}
+
+#[tokio::test]
+async fn sas_canonical_resource_partial_credentials_and_legacy_msi_behave_strictly() {
+    use navree_storage::cloud::ErrorKind;
+
+    // 1. Custom domain where `container == account` (`acmefiles`) never strips
+    //    the container segment from the signed SAS canonical resource, and pins
+    //    `spr=https` on HTTPS endpoints.
+    let hands = Hands::new();
+    let clock = hands.clone();
+    let custom = AzureStore::from_env(
+        AzureConfig {
+            access_key: Some(AZURITE_KEY.to_owned().into()),
+            endpoint: Some("https://blobs.amritsar.example".to_owned()),
+            ..AzureConfig::new("acmefiles", "acmefiles")
+        },
+        &BTreeMap::new(),
+    )
+    .unwrap()
+    .with_clock(move || clock.now());
+
+    let signed = custom
+        .signed_url(
+            "other-container/secret.pdf",
+            Method::GET,
+            Duration::from_secs(300),
+        )
+        .await
+        .unwrap();
+    let params: BTreeMap<String, String> = signed.query_pairs().into_owned().collect();
+    assert_eq!(params["spr"], "https");
+    let expected_sts = format!(
+        "r\n{}\n{}\n/blob/acmefiles/acmefiles/other-container/secret.pdf\n\n\nhttps\n{VERSION}\nb\n\n\n\n\n\n\n",
+        params["st"], params["se"],
+    );
+    let key_bytes = STANDARD.decode(AZURITE_KEY).unwrap();
+    assert_eq!(
+        params["sig"],
+        STANDARD.encode(hmac_sha256(&key_bytes, expected_sts.as_bytes()))
+    );
+
+    // 2. Empty keys, remote plain-HTTP authorities, remote plain-HTTP MSI, and
+    //    partial credential tuples fail closed rather than falling through to IMDS.
+    assert!(SharedKey::new("agrastorage", "").is_err());
+    assert!(SharedKey::new("agrastorage", "   ").is_err());
+
+    let base_cfg = AzureConfig::new("agrastorage", "archive");
+    for partial in [
+        vec![("AZURE_CLIENT_SECRET", "only-secret")],
+        vec![
+            ("AZURE_TENANT_ID", "tid-agra"),
+            ("AZURE_CLIENT_SECRET", "only-secret"),
+        ],
+        vec![("AZURE_FEDERATED_TOKEN_FILE", "/tmp/tok")],
+        vec![("AZURE_TENANT_ID", "tid-agra")],
+        vec![("AZURE_STORAGE_CLIENT_SECRET", "storage-secret")],
+        vec![
+            ("AZURE_TENANT_ID", "tid-agra"),
+            ("AZURE_CLIENT_ID", "cid-agra"),
+            ("AZURE_STORAGE_CLIENT_SECRET", "storage-secret"),
+        ],
+        vec![("IDENTITY_ENDPOINT", "http://127.0.0.1:9999/msi")],
+        vec![("IDENTITY_HEADER", "only-header")],
+        vec![("MSI_ENDPOINT", "http://127.0.0.1:9999/msi")],
+        vec![("MSI_SECRET", "only-secret")],
+    ] {
+        let err = match AzureStore::from_env(base_cfg.clone(), &env_map(&partial)) {
+            Err(err) => err,
+            Ok(_) => panic!("expected partial Azure env {partial:?} to fail closed"),
+        };
+        assert_eq!(err.kind(), ErrorKind::Credential, "{partial:?}");
+    }
+
+    for refused_env in [
+        vec![
+            ("AZURE_TENANT_ID", "tid-agra"),
+            ("AZURE_CLIENT_ID", "cid-agra"),
+            ("AZURE_CLIENT_SECRET", "sec"),
+            ("AZURE_AUTHORITY_HOST", "http://login.amritsar.example"),
+        ],
+        vec![
+            ("IDENTITY_ENDPOINT", "http://203.0.113.10/msi"),
+            ("IDENTITY_HEADER", "hdr"),
+        ],
+        vec![(
+            "AZURE_STORAGE_ENDPOINT",
+            "http://evil.amritsar.example/otheraccount",
+        )],
+    ] {
+        let err = match AzureStore::from_env(base_cfg.clone(), &env_map(&refused_env)) {
+            Err(err) => err,
+            Ok(_) => panic!("expected untrusted plain HTTP env {refused_env:?} to be refused"),
+        };
+        assert_eq!(err.kind(), ErrorKind::Refused, "{refused_env:?}");
+    }
+
+    // 3. `AZURE_STORAGE_*` service principal takes cohesive precedence over
+    //    `AZURE_*` without mixing principals, and legacy `MSI_ENDPOINT` +
+    //    `MSI_SECRET` uses `api-version=2017-09-01`, `secret` header and
+    //    `clientid` query parameter.
+    let storage_oauth = MockServer::start().await;
+    let msi_server = MockServer::start().await;
+    let blob_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/tid-storage/oauth2/v2.0/token"))
+        .respond_with(|req: &wiremock::Request| {
+            let form: BTreeMap<String, String> = url::form_urlencoded::parse(&req.body)
+                .into_owned()
+                .collect();
+            assert_eq!(form["client_id"], "cid-storage");
+            assert_eq!(form["client_secret"], "sec-storage");
+            ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "storage-sp-token",
+                "expires_in": u64::MAX
+            }))
+        })
+        .expect(1)
+        .mount(&storage_oauth)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(query_param("api-version", "2017-09-01"))
+        .and(query_param("resource", "https://storage.azure.com/"))
+        .and(query_param("clientid", "cid-legacy"))
+        .and(header("secret", "legacy-msi-secret"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "legacy-msi-token",
+            "expires_on": "253402300799"
+        })))
+        .expect(1)
+        .mount(&msi_server)
+        .await;
+
+    Mock::given(method("PUT"))
+        .respond_with(
+            ResponseTemplate::new(201)
+                .insert_header("etag", "\"0x1\"")
+                .insert_header("last-modified", "Thu, 26 Nov 2026 06:00:00 GMT"),
+        )
+        .mount(&blob_server)
+        .await;
+
+    let sp_store = AzureStore::from_env(
+        AzureConfig {
+            endpoint: Some(blob_server.uri()),
+            ..AzureConfig::new("agrastorage", "archive")
+        },
+        &env_map(&[
+            ("AZURE_STORAGE_TENANT_ID", "tid-storage"),
+            ("AZURE_STORAGE_CLIENT_ID", "cid-storage"),
+            ("AZURE_STORAGE_CLIENT_SECRET", "sec-storage"),
+            ("AZURE_STORAGE_AUTHORITY_HOST", &storage_oauth.uri()),
+            ("AZURE_TENANT_ID", "tid-pod"),
+            ("AZURE_CLIENT_ID", "cid-pod"),
+        ]),
+    )
+    .unwrap();
+    sp_store
+        .put("a.txt", Bytes::from_static(b"1"))
+        .await
+        .unwrap();
+
+    let legacy_msi_store = AzureStore::from_env(
+        AzureConfig {
+            endpoint: Some(blob_server.uri()),
+            ..AzureConfig::new("agrastorage", "archive")
+        },
+        &env_map(&[
+            ("AZURE_CLIENT_ID", "cid-legacy"),
+            ("MSI_ENDPOINT", &msi_server.uri()),
+            ("MSI_SECRET", "legacy-msi-secret"),
+        ]),
+    )
+    .unwrap();
+    legacy_msi_store
+        .put("b.txt", Bytes::from_static(b"2"))
+        .await
+        .unwrap();
+
+    // 4. Invalid `<SignedExpiry>` or short-lived `<UserDelegationKey>` is
+    //    refused, and 2-step `NextMarker` cycles fail cleanly.
+    Mock::given(method("POST"))
+        .and(query_param("restype", "service"))
+        .and(query_param("comp", "userdelegationkey"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\
+             <UserDelegationKey>\
+               <SignedOid>oid-1</SignedOid>\
+               <SignedTid>tid-1</SignedTid>\
+               <SignedStart>2026-11-26T00:00:00Z</SignedStart>\
+               <SignedExpiry>not-a-timestamp</SignedExpiry>\
+               <SignedService>b</SignedService>\
+               <SignedVersion>{VERSION}</SignedVersion>\
+               <Value>{AZURITE_KEY}</Value>\
+             </UserDelegationKey>"
+        )))
+        .mount(&blob_server)
+        .await;
+    assert!(
+        sp_store
+            .signed_url("a.txt", Method::GET, Duration::from_secs(300))
+            .await
+            .is_err()
+    );
+
+    Mock::given(method("GET"))
+        .and(query_param("restype", "container"))
+        .and(query_param("comp", "list"))
+        .respond_with(|req: &wiremock::Request| {
+            let params: BTreeMap<String, String> = req.url.query_pairs().into_owned().collect();
+            let next = if params.get("marker").map(String::as_str) == Some("m1") {
+                "m2"
+            } else {
+                "m1"
+            };
+            ResponseTemplate::new(200).set_body_string(format!(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\
+                 <EnumerationResults><Blobs /><NextMarker>{next}</NextMarker></EnumerationResults>"
+            ))
+        })
+        .mount(&blob_server)
+        .await;
+    assert!(sp_store.list("docs").await.is_err());
 }

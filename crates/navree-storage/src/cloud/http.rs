@@ -52,6 +52,13 @@ pub const METADATA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 /// The most that is kept of the body of an answer that is not a success.
 pub const ERROR_BODY_LIMIT: usize = 64 * 1024;
 
+/// Maximum `200 OK` body buffered when a non-compliant store ignores `Range`
+/// on a ranged `GET`.
+const RANGED_FALLBACK_MAX_BYTES: usize = 16 * 1024 * 1024;
+
+/// Extra slack beyond `range.end` tolerated on a small `200 OK` fallback body.
+const RANGED_FALLBACK_SLACK_BYTES: usize = 64 * 1024;
+
 /// What the client calls itself.
 const USER_AGENT: &str = concat!("navree-storage/", env!("CARGO_PKG_VERSION"));
 
@@ -451,6 +458,76 @@ impl Response {
                 return Err(too_long());
             }
             body.extend_from_slice(&chunk);
+        }
+    }
+
+    /// Reads the body of a ranged `GET` (`span.start < span.end`) within
+    /// strict memory bounds:
+    ///
+    /// - on `206 Partial Content`, validates `Content-Range` (when sent)
+    ///   against `span` and reads at most `span.end - span.start` bytes via
+    ///   [`bytes_up_to`](Self::bytes_up_to);
+    /// - on `200 OK` (an emulator that ignored `Range`), bounds the body via
+    ///   [`bytes_up_to`](Self::bytes_up_to) so a large object never exhausts
+    ///   memory on a small sniff, then slices `[span.start..span.end]`;
+    /// - refuses any other status with [`ErrorKind::Answer`].
+    pub async fn ranged_bytes(self, span: Range<u64>) -> Result<Bytes> {
+        let wanted = usize::try_from(span.end - span.start).map_err(|_| {
+            Error::new(
+                ErrorKind::Refused,
+                "the requested byte range does not fit in memory",
+            )
+        })?;
+        match self.status() {
+            StatusCode::PARTIAL_CONTENT => {
+                let expected_len = if self.headers().contains_key(CONTENT_RANGE) {
+                    let Some((actual, _)) = self.content_range() else {
+                        return Err(Error::new(
+                            ErrorKind::Answer,
+                            "the answer has an invalid Content-Range header",
+                        ));
+                    };
+                    if actual.start != span.start || actual.end > span.end {
+                        return Err(Error::new(
+                            ErrorKind::Answer,
+                            "the answer's Content-Range does not match the range asked for",
+                        ));
+                    }
+                    Some(actual.end - actual.start)
+                } else {
+                    None
+                };
+                let body = self.bytes_up_to(wanted).await?;
+                if let Some(expected_len) = expected_len
+                    && body.len() as u64 != expected_len
+                {
+                    return Err(Error::new(
+                        ErrorKind::Answer,
+                        "the answer's body length does not match its Content-Range",
+                    ));
+                }
+                Ok(body)
+            }
+            StatusCode::OK => {
+                let fallback_limit = usize::try_from(span.end)
+                    .ok()
+                    .and_then(|end| end.checked_add(RANGED_FALLBACK_SLACK_BYTES))
+                    .filter(|&limit| limit <= RANGED_FALLBACK_MAX_BYTES)
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorKind::Answer,
+                            "the store ignored Range and sent a full 200 OK response past the safe limit",
+                        )
+                    })?;
+                let body = self.bytes_up_to(fallback_limit).await?;
+                let end = usize::try_from(span.end).map_or(body.len(), |end| end.min(body.len()));
+                let start = usize::try_from(span.start).map_or(end, |start| start.min(end));
+                Ok(body.slice(start..end))
+            }
+            other => Err(Error::new(
+                ErrorKind::Answer,
+                format!("the store answered {other} to a ranged GET"),
+            )),
         }
     }
 

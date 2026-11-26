@@ -308,7 +308,11 @@ impl Disk {
             None,
             listed.as_ref().err(),
         );
-        let mut files: Vec<FileMeta> = listed?.into_iter().map(file_meta).collect();
+        let mut files: Vec<FileMeta> = listed?
+            .into_iter()
+            .filter(|meta| !meta.path.is_empty() && !meta.path.ends_with('/'))
+            .map(file_meta)
+            .collect();
         files.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(files)
     }
@@ -381,16 +385,22 @@ impl Disk {
         }
     }
 
-    /// How long a provider-signed link to `expires_at` lasts (at least a
-    /// second), refused beyond the provider's limit.
+    /// How long a provider-signed link to `expires_at` lasts (refused when
+    /// `expires_at` is not in the future or exceeds the provider's limit).
     pub(crate) fn provider_ttl(
         &self,
         provider: &Provider,
         expires_at: DateTime<Utc>,
     ) -> Result<std::time::Duration, StorageError> {
-        // Rounded up: a link asked for "in one hour" lasts 3600 seconds.
         let millis = (expires_at - Utc::now()).num_milliseconds();
-        let seconds = millis.saturating_add(999).div_euclid(1000).max(1);
+        if millis <= 0 {
+            return Err(StorageError::Signing {
+                disk: self.inner.name.clone(),
+                reason: "the link expiry must be in the future".to_owned(),
+            });
+        }
+        // Rounded up: a link asked for "in one hour" lasts 3600 seconds.
+        let seconds = millis.saturating_add(999).div_euclid(1000);
         let ttl = std::time::Duration::from_secs(seconds.unsigned_abs());
         match provider.max_ttl() {
             Some(max) if ttl > max => Err(StorageError::Signing {

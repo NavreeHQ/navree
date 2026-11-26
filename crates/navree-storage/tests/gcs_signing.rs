@@ -862,3 +862,215 @@ async fn an_expired_token_is_refreshed_between_parts() {
     let shown = format!("{store} {store:?}");
     assert!(!shown.contains("ya29."), "{shown}");
 }
+
+#[tokio::test]
+async fn credential_token_uri_is_restricted_while_token_endpoint_override_works() {
+    let email = "harpreet@agra-media.iam.gserviceaccount.com";
+
+    // Production GcsConfig (`endpoint: None`) refuses untrusted or loopback
+    // HTTP `token_uri` values inside service_account and authorized_user JSON.
+    for bad_uri in [
+        "https://tokens.amritsar.example/token",
+        "https://10.0.0.5/token",
+        "http://127.0.0.1:9999/token",
+        "https://oauth2.googleapis.com:8443/token",
+        "https://oauth2.googleapis.com/token?extra=1",
+    ] {
+        let sa_json = json!({
+            "type": "service_account",
+            "private_key": PRIVATE_KEY,
+            "client_email": email,
+            "token_uri": bad_uri,
+        });
+        let err = match GcsStore::builder(GcsConfig {
+            service_account_key: Some(sa_json.to_string().into()),
+            ..GcsConfig::new("agra-media")
+        })
+        .env(std::iter::empty::<(String, String)>())
+        .build()
+        {
+            Err(err) => err,
+            Ok(_) => panic!("expected untrusted token_uri `{bad_uri}` to be refused"),
+        };
+        assert_eq!(
+            err.kind(),
+            navree_storage::cloud::ErrorKind::Refused,
+            "{bad_uri}"
+        );
+    }
+
+    // Trusted Google OAuth HTTPS hosts on default port 443 are accepted.
+    for trusted in [
+        "https://oauth2.googleapis.com/token",
+        "https://accounts.google.com/o/oauth2/token",
+        "https://www.googleapis.com/oauth2/v4/token",
+    ] {
+        let sa_json = json!({
+            "type": "service_account",
+            "private_key": PRIVATE_KEY,
+            "client_email": email,
+            "token_uri": trusted,
+        });
+        assert!(
+            GcsStore::builder(GcsConfig {
+                service_account_key: Some(sa_json.to_string().into()),
+                ..GcsConfig::new("agra-media")
+            })
+            .env(std::iter::empty::<(String, String)>())
+            .build()
+            .is_ok(),
+            "{trusted}"
+        );
+    }
+
+    // Explicit `GcsStoreBuilder::token_endpoint` works for local mock OAuth
+    // servers even when `GcsConfig.endpoint` is unset, and unprefixed
+    // Kubernetes `SERVICE_ACCOUNT=default` never shadows the metadata server.
+    let mock_oauth = MockServer::start().await;
+    let sa_json = json!({
+        "type": "service_account",
+        "private_key": PRIVATE_KEY,
+        "client_email": email,
+    });
+    assert!(
+        GcsStore::builder(GcsConfig {
+            service_account_key: Some(sa_json.to_string().into()),
+            ..GcsConfig::new("agra-media")
+        })
+        .token_endpoint(format!("{}/token", mock_oauth.uri()))
+        .env([("SERVICE_ACCOUNT", "default")])
+        .build()
+        .is_ok()
+    );
+
+    // With only `SERVICE_ACCOUNT=default` in `env` (no `GOOGLE_*` variable),
+    // `GcsStore` falls through to the metadata server rather than trying to
+    // open a file named `default`.
+    let metadata = MockServer::start().await;
+    assert!(
+        GcsStore::builder(GcsConfig::new("agra-media"))
+            .env([
+                ("SERVICE_ACCOUNT", "default".to_owned()),
+                ("GCE_METADATA_HOST", metadata.uri()),
+            ])
+            .build()
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn gcs_rejects_bad_tokens_cross_path_locations_reserved_headers_and_listing_cycles() {
+    let email = "simran@ludhiana-docs.iam.gserviceaccount.com";
+    let bucket_url = Url::parse("https://storage.googleapis.com/ludhiana-docs").unwrap();
+    let hands = Hands::new();
+
+    // 1. Reserved signing/auth headers and empty signatures are refused on V4 URLs.
+    for bad_hdr in ["authorization", "x-goog-signature", "x-goog-credential"] {
+        let headers = [(
+            HeaderName::from_static(bad_hdr),
+            HeaderValue::from_static("val"),
+        )];
+        assert!(
+            signed_url::prepare(
+                &bucket_url,
+                "a.pdf",
+                &Method::GET,
+                Duration::from_secs(60),
+                &headers,
+                email,
+                hands.now(),
+            )
+            .is_err(),
+            "{bad_hdr}"
+        );
+    }
+    let prepared = signed_url::prepare(
+        &bucket_url,
+        "a.pdf",
+        &Method::GET,
+        Duration::from_secs(60),
+        &[],
+        email,
+        hands.now(),
+    )
+    .unwrap();
+    assert!(prepared.finish(&[]).is_err());
+
+    // 2. Resumable upload `Location` pointing at another path on the same
+    //    origin is refused before any PUT/DELETE can touch that path; and
+    //    `expires_in: u64::MAX` in OAuth responses is clamped without panicking.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "ya29.safe-ascii-token",
+            "expires_in": u64::MAX,
+        })))
+        .mount(&server)
+        .await;
+    let bad_location = format!("{}/storage/v1/b/other-bucket/o/keep.pdf", server.uri());
+    Mock::given(method("POST"))
+        .and(path("/upload/storage/v1/b/ludhiana-docs/o"))
+        .respond_with(ResponseTemplate::new(200).insert_header("location", bad_location.as_str()))
+        .mount(&server)
+        .await;
+
+    // 2-step `nextPageToken` cycle (`t1` -> `t2` -> `t1`) fails cleanly.
+    Mock::given(method("GET"))
+        .and(path("/storage/v1/b/ludhiana-docs/o"))
+        .respond_with(|req: &MockRequest| {
+            let q = req.url.query().unwrap_or_default();
+            let next = if q.contains("pageToken=t1") {
+                "t2"
+            } else {
+                "t1"
+            };
+            ResponseTemplate::new(200).set_body_json(json!({
+                "items": [],
+                "nextPageToken": next,
+            }))
+        })
+        .mount(&server)
+        .await;
+
+    let sa_json = json!({
+        "type": "service_account",
+        "private_key": PRIVATE_KEY,
+        "client_email": email,
+        "token_uri": format!("{}/token", server.uri()),
+    });
+    let store = GcsStore::builder(GcsConfig {
+        service_account_key: Some(sa_json.to_string().into()),
+        endpoint: Some(server.uri()),
+        ..GcsConfig::new("ludhiana-docs")
+    })
+    .env(std::iter::empty::<(String, String)>())
+    .build()
+    .unwrap();
+
+    assert!(store.begin_upload("doc.pdf").await.is_err());
+    assert!(store.list("docs").await.is_err());
+
+    // 3. Zero `expires_in` and non-ASCII `access_token` are refused without caching.
+    for bad_token_body in [
+        json!({ "access_token": "ya29.चालान", "expires_in": 3600 }),
+        json!({ "access_token": "ya29.ok", "expires_in": 0 }),
+    ] {
+        let bad_oauth = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(bad_token_body.clone()))
+            .mount(&bad_oauth)
+            .await;
+        let bad_store = GcsStore::builder(GcsConfig {
+            service_account_key: Some(sa_json.to_string().into()),
+            endpoint: Some(server.uri()),
+            ..GcsConfig::new("ludhiana-docs")
+        })
+        .token_endpoint(format!("{}/token", bad_oauth.uri()))
+        .env(std::iter::empty::<(String, String)>())
+        .build()
+        .unwrap();
+        assert!(bad_store.head("doc.pdf").await.is_err(), "{bad_token_body}");
+    }
+}

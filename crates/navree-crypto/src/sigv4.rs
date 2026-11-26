@@ -178,10 +178,11 @@ impl Signer {
         if let Some(token) = &self.credentials.session_token {
             signed.push(("x-amz-security-token", token));
         }
+        let query_pairs = decode_query(url.query());
         let canonical = canonical_request(
             method,
             &canonical_path(url.path(), self.encode_path_twice),
-            &canonical_query(url.query_pairs()),
+            &canonical_query(query_pairs.iter().map(|(k, v)| (k.as_str(), v.as_str()))),
             &signed,
             &payload_hash,
         );
@@ -282,6 +283,55 @@ pub fn canonical_path(path: &str, encode_twice: bool) -> String {
         .map(|segment| uri_encode(segment, true))
         .collect::<Vec<_>>()
         .join("/")
+}
+
+/// Decodes a raw URL query string (`url.query()`) per RFC 3986: `%XX` hex
+/// escapes are decoded to UTF-8 while literal `+` stays `+` (rather than
+/// becoming a space as `application/x-www-form-urlencoded` would).
+pub fn decode_query(query: Option<&str>) -> Vec<(String, String)> {
+    let Some(query) = query.filter(|q| !q.is_empty()) else {
+        return Vec::new();
+    };
+    query
+        .split('&')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let (raw_name, raw_value) = part.split_once('=').unwrap_or((part, ""));
+            (
+                percent_decode_rfc3986(raw_name),
+                percent_decode_rfc3986(raw_value),
+            )
+        })
+        .collect()
+}
+
+fn percent_decode_rfc3986(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && let (Some(hi), Some(lo)) =
+                (hex_nibble(bytes[index + 1]), hex_nibble(bytes[index + 2]))
+        {
+            out.push((hi << 4) | lo);
+            index += 3;
+        } else {
+            out.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 /// The canonical query of decoded `(name, value)` pairs: each encoded with

@@ -10,7 +10,7 @@ mod credentials;
 mod delegation;
 mod shared_key;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::ops::Range;
 use std::sync::Arc;
@@ -18,7 +18,7 @@ use std::time::{Duration, SystemTime};
 
 use ::http::{HeaderMap, Method, StatusCode};
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use futures_util::TryStreamExt;
 use navree_kernel::BoxFuture;
 use url::Url;
@@ -32,13 +32,13 @@ use crate::azure_sas::SharedKeySas;
 pub use crate::azure_sas::UserDelegationKey;
 use crate::cloud::credentials::Provider;
 use crate::cloud::http::{Client, Request, Response};
-use crate::cloud::keys::{check_prefix, encode_component, object_url};
+use crate::cloud::keys::{check_key, check_prefix, encode_component, object_url};
 use crate::cloud::retry::{Replay, RetryPolicy, with_backoff};
-use crate::cloud::{Error, ErrorKind, Result, xml};
+use crate::cloud::{Error, ErrorKind, MAX_LIST_ENTRIES, MAX_LIST_PAGES, Result, xml};
 use crate::options::AzureConfig;
 use crate::store::{HeaderName, HeaderValue, Meta, Object, Store, StoreError, StoreResult, Upload};
 
-use self::blocks::BlockUpload;
+use self::blocks::{BlockUpload, MAX_BLOCK_SIZE};
 use self::credentials::{AuthSource, Clock, ResolveError};
 use self::delegation::{DelegationKeys, MAX_DELEGATION_TTL};
 
@@ -132,9 +132,13 @@ impl AzureStore {
         env: &BTreeMap<String, String>,
     ) -> std::result::Result<Self, StorageError> {
         Self::resolve(config, env).map_err(|error| match error {
-            ResolveError::InvalidAccessKey(decode) => StorageError::InvalidOptions(format!(
-                "storage.disks.{name}.access_key is not a base64 account key: {decode}"
+            ResolveError::InvalidDiskAccessKey => StorageError::InvalidOptions(format!(
+                "storage.disks.{name}.access_key is not a base64 account key"
             )),
+            ResolveError::InvalidEnvAccessKey(var) => StorageError::Backend {
+                disk: name.to_owned(),
+                source: Box::new(Error::from(ResolveError::InvalidEnvAccessKey(var))),
+            },
             ResolveError::Cloud(error) => StorageError::Backend {
                 disk: name.to_owned(),
                 source: Box::new(error),
@@ -152,7 +156,9 @@ impl AzureStore {
         let shared_key_sas = resolved
             .auth
             .shared_key()
-            .map(|key| SharedKeySas::from_bytes(&resolved.account, key.key_bytes().to_vec()));
+            .map(|key| SharedKeySas::from_bytes(&resolved.account, key.key_bytes().to_vec()))
+            .transpose()
+            .map_err(|_| ResolveError::InvalidDiskAccessKey)?;
         let credentials = resolved
             .auth
             .clone()
@@ -177,13 +183,13 @@ impl AzureStore {
     }
 
     /// Sets the block size threshold at which [`Store::begin_upload`]
-    /// stages a block (`DEFAULT_BLOCK_SIZE` by default).
+    /// stages a block (`DEFAULT_BLOCK_SIZE` by default, capped at 4000 MiB).
     #[must_use]
     pub fn with_block_size(self, block_size: usize) -> Self {
         self.rebuild(
             self.inner.clock.clone(),
             self.inner.policy.clone(),
-            block_size.max(1),
+            block_size.clamp(1, MAX_BLOCK_SIZE),
         )
     }
 
@@ -302,10 +308,13 @@ impl Store for AzureStore {
                 self.head(path).await?;
                 return Ok(Bytes::new());
             }
-            let range_header = range.map(|r| format!("bytes={}-{}", r.start, r.end - 1));
+            let range_header = range
+                .as_ref()
+                .map(|r| format!("bytes={}-{}", r.start, r.end - 1));
             let inner = &self.inner;
             let bytes = with_backoff(&inner.policy, Replay::Safe, || {
                 let range_header = range_header.clone();
+                let span = range.clone();
                 let url = url.clone();
                 async move {
                     let cred = inner.credentials.credential().await?;
@@ -315,12 +324,18 @@ impl Store for AzureStore {
                     }
                     let request = inner.authorize(request, &cred.secret)?;
                     let response = inner.client.send(request).await?;
-                    if response.status() == StatusCode::RANGE_NOT_SATISFIABLE {
+                    if range_header.is_some()
+                        && response.status() == StatusCode::RANGE_NOT_SATISFIABLE
+                    {
+                        ensure_blob_file(&response)?;
                         return Ok(Bytes::new());
                     }
                     let response = check_response(response).await?;
                     ensure_blob_file(&response)?;
-                    response.bytes().await
+                    match span {
+                        Some(span) => response.ranged_bytes(span).await,
+                        None => response.bytes().await,
+                    }
                 }
             })
             .await?;
@@ -426,9 +441,20 @@ impl Store for AzureStore {
 
             let mut files = Vec::new();
             let mut marker: Option<String> = None;
+            let mut seen_markers = HashSet::new();
+            let mut pages = 0usize;
             let xml_limit = xml::Limits::default().max_bytes;
 
             loop {
+                pages += 1;
+                if pages > MAX_LIST_PAGES {
+                    return Err(Error::new(
+                        ErrorKind::Answer,
+                        "the blob listing exceeded the maximum page limit",
+                    )
+                    .into());
+                }
+
                 let mut query = String::from("restype=container&comp=list");
                 if let Some(ref dir) = directory {
                     query.push_str("&prefix=");
@@ -482,13 +508,18 @@ impl Store for AzureStore {
                             )
                             .into());
                         };
-                        if name.is_empty() {
-                            continue;
-                        }
+                        check_key(name)?;
                         if let Some(ref dir) = directory
                             && (!name.starts_with(dir.as_str()) || name.len() <= dir.len())
                         {
                             continue;
+                        }
+                        if files.len() >= MAX_LIST_ENTRIES {
+                            return Err(Error::new(
+                                ErrorKind::Answer,
+                                "the blob listing exceeded the maximum object count",
+                            )
+                            .into());
                         }
                         let size = props
                             .value("Content-Length")
@@ -515,10 +546,10 @@ impl Store for AzureStore {
 
                 match root.value("NextMarker").filter(|next| !next.is_empty()) {
                     Some(next) => {
-                        if marker.as_deref() == Some(next) {
+                        if !seen_markers.insert(next.to_owned()) {
                             return Err(Error::new(
                                 ErrorKind::Answer,
-                                "the blob listing repeated its NextMarker",
+                                "the blob listing repeated a NextMarker",
                             )
                             .into());
                         }
@@ -555,21 +586,35 @@ impl Store for AzureStore {
                     )));
                 }
             };
-            if expires_in.is_zero() {
+            if expires_in < Duration::from_secs(1) {
                 return Err(StoreError::failed(
-                    "a signed link must stay valid for a positive duration",
+                    "a signed link must stay valid for at least 1 second",
                 ));
             }
 
-            let start: DateTime<Utc> = (self.inner.clock)().into();
+            let raw_start: DateTime<Utc> = (self.inner.clock)().into();
+            let start = DateTime::from_timestamp(raw_start.timestamp(), 0)
+                .ok_or_else(|| StoreError::failed("the clock timestamp is out of range"))?;
             let delta = chrono::Duration::from_std(expires_in)
                 .map_err(|_| StoreError::failed("the link would expire too far in the future"))?;
             let expiry = start
                 .checked_add_signed(delta)
                 .ok_or_else(|| StoreError::failed("the link would expire too far in the future"))?;
+            if !(1970..=9999).contains(&start.year()) || !(1970..=9999).contains(&expiry.year()) {
+                return Err(StoreError::failed(
+                    "Azure SAS timestamps must fall within years 1970..=9999",
+                ));
+            }
 
             if let Some(ref shared_key) = self.inner.shared_key_sas {
-                shared_key.sign(&mut url, permissions, start, expiry);
+                shared_key.sign(
+                    &self.inner.container,
+                    path,
+                    &mut url,
+                    permissions,
+                    start,
+                    expiry,
+                );
                 return Ok(url);
             }
 
@@ -578,12 +623,20 @@ impl Store for AzureStore {
                     "Azure user delegation SAS links last at most 7 days",
                 ));
             }
-            let delegation_key = self
+            let (delegation_key, effective_start) = self
                 .inner
                 .delegation_keys
                 .key_for(&self.inner, start, expiry, expires_in)
                 .await?;
-            delegation_key.sign(&self.inner.account, &mut url, permissions, start, expiry);
+            delegation_key.sign(
+                &self.inner.account,
+                &self.inner.container,
+                path,
+                &mut url,
+                permissions,
+                effective_start,
+                expiry,
+            );
             Ok(url)
         })
     }

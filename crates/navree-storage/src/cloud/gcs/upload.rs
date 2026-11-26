@@ -86,10 +86,15 @@ impl GcsUpload {
                 "the resumable upload Location is not a valid URL",
             )
         })?;
-        if session_url.origin() != base_url.origin() {
+        if session_url.origin() != upload_endpoint.origin()
+            || session_url.path() != upload_endpoint.path()
+            || !session_url.username().is_empty()
+            || session_url.password().is_some()
+            || session_url.fragment().is_some()
+        {
             return Err(Error::new(
                 ErrorKind::Answer,
-                "the resumable upload session points to another origin",
+                "the resumable upload session points outside the bucket upload endpoint",
             ));
         }
 
@@ -111,7 +116,7 @@ impl GcsUpload {
         let content_range = format!("bytes {start}-{end}/*");
         let (client, tokens, session_url) = (&self.client, &self.tokens, &self.session_url);
 
-        with_backoff(&self.retry, Replay::Safe, || async {
+        let committed_end = with_backoff(&self.retry, Replay::Safe, || async {
             let token = tokens.credential().await?;
             let request = Request::new(Method::PUT, session_url.clone())
                 .secret("authorization", &format!("Bearer {}", token.secret))?
@@ -119,7 +124,16 @@ impl GcsUpload {
                 .with_body(part.clone());
             let answer = client.send(request).await?;
             if answer.status() == StatusCode::PERMANENT_REDIRECT {
-                return Ok(());
+                let next_offset = match answer.header("range") {
+                    None => end + 1,
+                    Some(range_header) => parse_308_committed_offset(range_header, start, end)?,
+                };
+                if next_offset <= start {
+                    return Err(Error::busy(
+                        "the resumable upload session made no forward progress",
+                    ));
+                }
+                return Ok(next_offset);
             }
             let answer = answer.success().await.map_err(attach_error_code)?;
             Err(Error::new(
@@ -132,9 +146,34 @@ impl GcsUpload {
         })
         .await?;
 
-        self.offset += len;
+        let committed_in_part = (committed_end - start) as usize;
+        if committed_in_part < part.len() {
+            let mut rest = BytesMut::from(&part[committed_in_part..]);
+            rest.extend_from_slice(&self.buffer);
+            self.buffer = rest;
+        }
+        self.offset = committed_end;
         Ok(())
     }
+}
+
+/// Parses GCS's `Range: bytes=0-<last>` header on a `308 Resume Incomplete`
+/// response and returns the next uncommitted byte offset (`last + 1`).
+fn parse_308_committed_offset(header: &str, start: u64, end: u64) -> Result<u64> {
+    let invalid = || {
+        Error::new(
+            ErrorKind::Answer,
+            "the resumable upload 308 Range header is invalid",
+        )
+    };
+    let rest = header.trim().strip_prefix("bytes=").ok_or_else(invalid)?;
+    let (first_str, last_str) = rest.split_once('-').ok_or_else(invalid)?;
+    let first: u64 = first_str.trim().parse().map_err(|_| invalid())?;
+    let last: u64 = last_str.trim().parse().map_err(|_| invalid())?;
+    if first > start || last < first || last > end {
+        return Err(invalid());
+    }
+    last.checked_add(1).ok_or_else(invalid)
 }
 
 impl Upload for GcsUpload {

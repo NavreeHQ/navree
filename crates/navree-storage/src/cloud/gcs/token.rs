@@ -33,6 +33,16 @@ const ASSERTION_TTL_SECS: u64 = 3600;
 /// The largest OAuth 2.0 token answer read into memory.
 const TOKEN_ANSWER_LIMIT: usize = 64 * 1024;
 
+/// Maximum lifetime accepted from a token response (one year in seconds).
+const MAX_TOKEN_TTL_SECS: u64 = 365 * 24 * 60 * 60;
+
+/// Trusted Google OAuth 2.0 token hosts permitted inside credential JSON files.
+const TRUSTED_GOOGLE_TOKEN_HOSTS: [&str; 3] = [
+    "oauth2.googleapis.com",
+    "www.googleapis.com",
+    "accounts.google.com",
+];
+
 /// The `grant_type` of an OAuth 2.0 JWT bearer assertion request (RFC 7523).
 const JWT_BEARER_GRANT: &str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 
@@ -210,10 +220,50 @@ pub fn assertion(
     ))
 }
 
-/// Validates `token_uri` and builds the HTTP client restricted to it:
-/// `https://` anywhere, or `http://` to a loopback address only (for local
-/// mock servers in tests).
-pub(crate) fn token_client_and_url(token_uri: &str) -> Result<(Client, Url)> {
+/// Validates `token_uri` read from a `service_account` or `authorized_user`
+/// credential JSON file: must be one of Google's HTTPS OAuth 2.0 hosts on
+/// default port 443 with no userinfo, query or fragment (or a loopback
+/// `http://` address strictly when the storage `endpoint` itself is an
+/// explicit loopback `http://` emulator).
+pub(crate) fn credential_token_client_and_url(
+    token_uri: &str,
+    allow_loopback_http: bool,
+) -> Result<(Client, Url)> {
+    let refused = || {
+        Error::new(
+            ErrorKind::Refused,
+            "a credential token_uri must point to a Google OAuth 2.0 https:// host",
+        )
+    };
+    let url = Url::parse(token_uri).map_err(|_| refused())?;
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(refused());
+    }
+    match (url.scheme(), url.host_str()) {
+        ("https", Some(host))
+            if url.port().is_none()
+                && TRUSTED_GOOGLE_TOKEN_HOSTS
+                    .iter()
+                    .any(|trusted| host.eq_ignore_ascii_case(trusted)) =>
+        {
+            Ok((Client::for_endpoint(None)?, url))
+        }
+        ("http", Some(_)) if allow_loopback_http && is_loopback(&url) => {
+            let origin = url.origin().ascii_serialization();
+            Ok((Client::for_endpoint(Some(&origin))?, url))
+        }
+        _ => Err(refused()),
+    }
+}
+
+/// Validates an explicit programmatic token endpoint set on
+/// [`super::GcsStoreBuilder::token_endpoint`]: `https://` anywhere, or
+/// loopback `http://` for local mock OAuth servers.
+pub(crate) fn override_token_client_and_url(token_uri: &str) -> Result<(Client, Url)> {
     let refused = || {
         Error::new(
             ErrorKind::Refused,
@@ -236,7 +286,7 @@ pub(crate) fn token_client_and_url(token_uri: &str) -> Result<(Client, Url)> {
 
 /// Whether `url`'s host is the local loopback interface (`localhost`,
 /// `127.0.0.0/8` or `::1`).
-fn is_loopback(url: &Url) -> bool {
+pub(crate) fn is_loopback(url: &Url) -> bool {
     match url.host() {
         Some(url::Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
         Some(url::Host::Ipv4(addr)) => addr.is_loopback(),
@@ -329,19 +379,30 @@ pub(crate) fn parse_token_answer(body: &[u8], now: SystemTime) -> Result<Credent
             "the token answer is not a valid JSON object",
         )
     })?;
-    let token = parsed.access_token.trim();
-    if token.is_empty()
-        || token
-            .chars()
-            .any(|ch| ch.is_control() || ch.is_whitespace())
-    {
+    let token = parsed.access_token.trim_ascii();
+    if token.is_empty() || !token.bytes().all(|byte| (0x21..=0x7E).contains(&byte)) {
         return Err(Error::new(
             ErrorKind::Answer,
             "the token answer did not carry a valid access_token",
         ));
     }
-    let ttl = Duration::from_secs(parsed.expires_in.unwrap_or(ASSERTION_TTL_SECS));
-    Ok(Credential::until(token.to_owned(), now + ttl))
+    if parsed.expires_in == Some(0) {
+        return Err(Error::new(
+            ErrorKind::Answer,
+            "the token answer had a zero expires_in lifetime",
+        ));
+    }
+    let secs = parsed
+        .expires_in
+        .unwrap_or(ASSERTION_TTL_SECS)
+        .min(MAX_TOKEN_TTL_SECS);
+    let expires_at = now.checked_add(Duration::from_secs(secs)).ok_or_else(|| {
+        Error::new(
+            ErrorKind::Answer,
+            "the token expiry timestamp overflows the system clock",
+        )
+    })?;
+    Ok(Credential::until(token.to_owned(), expires_at))
 }
 
 /// Extracts Google's short error code (`error.status`, `error.errors[0].reason`

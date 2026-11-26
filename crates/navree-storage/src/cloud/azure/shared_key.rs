@@ -56,14 +56,18 @@ impl fmt::Debug for SharedKey {
 }
 
 impl SharedKey {
-    /// Decodes the base64 `access_key` of `account`.
+    /// Decodes the base64 `access_key` of `account`, refusing empty keys.
     pub fn new(
         account: impl Into<String>,
         access_key: &str,
     ) -> std::result::Result<Self, base64::DecodeError> {
+        let key = STANDARD.decode(access_key.trim_ascii())?;
+        if key.is_empty() {
+            return Err(base64::DecodeError::InvalidLength(0));
+        }
         Ok(Self {
             account: account.into(),
-            key: STANDARD.decode(access_key.trim())?,
+            key,
         })
     }
 
@@ -82,6 +86,7 @@ impl SharedKey {
     /// and a sensitive `Authorization: SharedKey <account>:<signature>`
     /// header to `request`.
     pub fn sign(&self, mut request: Request, now: SystemTime) -> Result<Request> {
+        request.headers.remove("authorization");
         if !request.headers.contains_key(&MS_DATE) {
             request = request.header("x-ms-date", &http_date(now))?;
         }
@@ -91,7 +96,7 @@ impl SharedKey {
                 .insert(MS_VERSION.clone(), HeaderValue::from_static(VERSION));
         }
         let writes = matches!(request.method, Method::PUT | Method::POST | Method::PATCH);
-        if (writes || !request.body.is_empty()) && !request.headers.contains_key(CONTENT_LENGTH) {
+        if writes || !request.body.is_empty() {
             request
                 .headers
                 .insert(CONTENT_LENGTH, HeaderValue::from(request.body.len() as u64));
@@ -195,7 +200,7 @@ fn canonicalize_headers(headers: &HeaderMap, out: &mut String) {
 /// single spaces, as Azure's `CanonicalizedHeaders` rule specifies.
 fn push_unfolded(text: &str, out: &mut String) {
     let mut in_space = false;
-    for ch in text.trim().chars() {
+    for ch in text.trim_ascii().chars() {
         if matches!(ch, ' ' | '\t' | '\r' | '\n') {
             in_space = true;
         } else {

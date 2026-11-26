@@ -151,7 +151,9 @@ mod cloud {
             .endpoint
             .clone()
             .or_else(|| from_env(&["AWS_ENDPOINT_URL_S3", "AWS_ENDPOINT_URL", "AWS_ENDPOINT"]));
-        let path_style = config.path_style.unwrap_or(endpoint.is_some());
+        let path_style = config
+            .path_style
+            .unwrap_or_else(|| endpoint.is_some() || config.bucket.contains('.'));
         let endpoint = match endpoint {
             Some(endpoint) if !path_style => Some(bucket_subdomain(&endpoint, &config.bucket)),
             endpoint => endpoint.map(|url| url.trim_end_matches('/').to_owned()),

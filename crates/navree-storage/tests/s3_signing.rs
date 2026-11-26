@@ -1151,3 +1151,292 @@ async fn s3_store_lists_pages_reads_ranges_and_deletes_missing_as_not_found() {
     let chunks: Vec<Bytes> = opened.stream.try_collect().await.unwrap();
     assert_eq!(chunks.concat(), b"Amritsar");
 }
+
+#[test]
+fn presign_and_header_signing_handle_multibyte_query_keys_and_literal_plus() {
+    let now = DateTime::parse_from_rfc3339("2026-11-26T06:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let creds = Credentials::new("AKIALUDHIANA", "ludhiana-secret-key");
+
+    // Multi-byte UTF-8 query keys where byte index 6 splits a multi-byte scalar
+    // must never panic when checking for reserved `X-Amz-*` prefixes.
+    for raw in [
+        "https://agra-uploads.s3.ap-south-1.amazonaws.com/a.pdf?abcdeé=1",
+        "https://agra-uploads.s3.ap-south-1.amazonaws.com/a.pdf?aचालान=1",
+        "https://agra-uploads.s3.ap-south-1.amazonaws.com/a.pdf?ਲੁਧਿਆਣਾ=1&tag=a+b",
+    ] {
+        let url = Url::parse(raw).unwrap();
+        let signed = presign_url(
+            &Method::GET,
+            &url,
+            &[],
+            Duration::from_secs(300),
+            &creds,
+            "ap-south-1",
+            now,
+        )
+        .unwrap();
+        assert!(signed.as_str().contains("X-Amz-Signature="), "{signed}");
+        if raw.contains("tag=a+b") {
+            assert!(signed.as_str().contains("tag=a%2Bb"), "{signed}");
+        }
+    }
+
+    // Literal `+` in a raw query string is signed per RFC 3986 (`%2B`), not
+    // form-decoded to `%20`, and any pre-existing `host` header is stripped.
+    let url = Url::parse("https://agra-uploads.s3.ap-south-1.amazonaws.com/a.pdf?tag=agra+jaipur")
+        .unwrap();
+    let mut req = Request::new(Method::GET, url)
+        .header("host", "spoofed.amritsar.example")
+        .unwrap();
+    sign_request(&mut req, &creds, "ap-south-1", now).unwrap();
+    assert!(!req.headers.contains_key("host"));
+
+    let expected_canonical = sigv4::canonical_request(
+        "GET",
+        "/a.pdf",
+        "tag=agra%2Bjaipur",
+        &[
+            ("host", "agra-uploads.s3.ap-south-1.amazonaws.com"),
+            ("x-amz-content-sha256", &sha256_hex(b"")),
+            ("x-amz-date", "20261126T060000Z"),
+        ],
+        &sha256_hex(b""),
+    );
+    let expected_sig = sigv4::signature(
+        "ludhiana-secret-key",
+        "20261126T060000Z",
+        "ap-south-1",
+        "s3",
+        &expected_canonical.text,
+    );
+    assert!(
+        req.headers["authorization"]
+            .to_str()
+            .unwrap()
+            .ends_with(&format!("Signature={expected_sig}"))
+    );
+
+    // Invalid access_key_id or region delimiters are refused upfront.
+    let bad_creds = Credentials::new("AKIA/injected", "secret");
+    let clean_url = Url::parse("https://agra-uploads.s3.ap-south-1.amazonaws.com/a.pdf").unwrap();
+    assert!(
+        presign_url(
+            &Method::GET,
+            &clean_url,
+            &[],
+            Duration::from_secs(60),
+            &bad_creds,
+            "ap-south-1",
+            now,
+        )
+        .is_err()
+    );
+    assert!(
+        presign_url(
+            &Method::GET,
+            &clean_url,
+            &[],
+            Duration::from_secs(60),
+            &creds,
+            "ap-south-1/extra",
+            now,
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn partial_s3_credentials_bucket_dots_and_malformed_vhost_endpoints_are_refused() {
+    let imds = FakeImds::start(StatusCode::OK).await;
+    let base_cfg = S3Config::new("agra-uploads").region("ap-south-1");
+
+    // Partial Web Identity and partial AWS_SESSION_TOKEN fail closed before
+    // ever reaching IMDS.
+    for partial in [
+        vec![
+            ("AWS_WEB_IDENTITY_TOKEN_FILE", "/tmp/projected-token"),
+            ("AWS_METADATA_ENDPOINT", imds.endpoint.as_str()),
+        ],
+        vec![
+            ("AWS_ROLE_ARN", "arn:aws:iam::111122223333:role/agra"),
+            ("AWS_METADATA_ENDPOINT", imds.endpoint.as_str()),
+        ],
+        vec![
+            ("AWS_SESSION_TOKEN", "orphan-session"),
+            ("AWS_METADATA_ENDPOINT", imds.endpoint.as_str()),
+        ],
+    ] {
+        let err = match S3Store::with_env(&base_cfg, &env_map(&partial)) {
+            Err(err) => err,
+            Ok(_) => panic!("expected partial S3 env {partial:?} to fail closed"),
+        };
+        assert_eq!(err.kind(), ErrorKind::Credential, "{partial:?}");
+    }
+    assert!(imds.log().is_empty(), "IMDS must never be contacted");
+
+    // `session_token` alone on `S3Config` fails closed too.
+    let mut orphan_session_cfg = S3Config::new("agra-uploads").region("ap-south-1");
+    orphan_session_cfg.session_token = Some(Secret::new("tok".to_owned()));
+    let orphan_err = match S3Store::with_env(&orphan_session_cfg, &BTreeMap::new()) {
+        Err(err) => err,
+        Ok(_) => panic!("expected orphan session_token to fail closed"),
+    };
+    assert_eq!(orphan_err.kind(), ErrorKind::Credential);
+
+    // Invalid bucket dot/dash labels are refused.
+    for bad_bucket in [".agra", "agra.", "-agra", "agra-", "agra..media"] {
+        let cfg = S3Config::new(bad_bucket).credentials("AKIAAGRA", "secret");
+        let err = match S3Store::with_env(&cfg, &BTreeMap::new()) {
+            Err(err) => err,
+            Ok(_) => panic!("expected bucket `{bad_bucket}` to be refused"),
+        };
+        assert_eq!(err.kind(), ErrorKind::Refused, "{bad_bucket}");
+    }
+
+    // Dotted AWS bucket defaults to path-style (`https://s3.<region>.amazonaws.com/<bucket>/...`)
+    // so wildcard TLS verification succeeds.
+    let dotted = S3Store::with_env(
+        &S3Config::new("media.ludhiana.in")
+            .region("ap-south-1")
+            .credentials("AKIALUDHIANA", "secret"),
+        &BTreeMap::new(),
+    )
+    .unwrap();
+    let link = dotted
+        .signed_url("inv.pdf", Method::GET, Duration::from_secs(60))
+        .await
+        .unwrap();
+    assert_eq!(link.host_str(), Some("s3.ap-south-1.amazonaws.com"));
+    assert_eq!(link.path(), "/media.ludhiana.in/inv.pdf");
+
+    // Malformed authority `http:///...` and IP-literal virtual-hosted endpoints
+    // are refused.
+    for bad_ep in [
+        "http:///internal.ludhiana.example:9000",
+        "http://127.0.0.1:9000",
+        "http://10.0.1:9000",
+    ] {
+        let cfg = S3Config::new("127")
+            .endpoint(bad_ep)
+            .path_style(false)
+            .credentials("AKIALUDHIANA", "secret");
+        let err = match S3Store::with_env(&cfg, &BTreeMap::new()) {
+            Err(err) => err,
+            Ok(_) => panic!("expected endpoint `{bad_ep}` with path_style=false to fail"),
+        };
+        assert_eq!(err.kind(), ErrorKind::Refused, "{bad_ep}");
+    }
+}
+
+#[tokio::test]
+async fn s3_listing_rejects_cycles_and_traversal_keys_and_presign_refreshes_expiring_sessions() {
+    // 1. 2-step continuation cycle (`tok-a` -> `tok-b` -> `tok-a`) fails cleanly.
+    let cycle_server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/agra-cycle"))
+        .respond_with(|req: &wiremock::Request| {
+            let q = req.url.query().unwrap_or_default();
+            let next = if q.contains("continuation-token=tok-a") {
+                "tok-b"
+            } else {
+                "tok-a"
+            };
+            ResponseTemplate::new(200).set_body_string(format!(
+                "<ListBucketResult>\
+                   <IsTruncated>true</IsTruncated>\
+                   <NextContinuationToken>{next}</NextContinuationToken>\
+                 </ListBucketResult>"
+            ))
+        })
+        .mount(&cycle_server)
+        .await;
+    let cycle_store = S3Store::new(
+        S3Config::new("agra-cycle")
+            .endpoint(cycle_server.uri())
+            .credentials("AKIAAGRA", "secret"),
+    )
+    .unwrap();
+    assert!(cycle_store.list("docs").await.is_err());
+
+    // 2. Traversal `<Key>` in listing fails with ErrorKind::Key; exact folder
+    //    marker `docs/` is skipped cleanly.
+    let marker_server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/agra-markers"))
+        .respond_with(|req: &wiremock::Request| {
+            let q = req.url.query().unwrap_or_default();
+            if q.contains("prefix=bad%2F") {
+                ResponseTemplate::new(200).set_body_string(
+                    "<ListBucketResult>\
+                       <IsTruncated>false</IsTruncated>\
+                       <Contents><Key>bad/../secret.pdf</Key><Size>5</Size></Contents>\
+                     </ListBucketResult>",
+                )
+            } else {
+                ResponseTemplate::new(200).set_body_string(
+                    "<ListBucketResult>\
+                       <IsTruncated>false</IsTruncated>\
+                       <Contents><Key>docs/</Key><Size>0</Size></Contents>\
+                       <Contents><Key>docs/ok.pdf</Key><Size>9</Size></Contents>\
+                     </ListBucketResult>",
+                )
+            }
+        })
+        .mount(&marker_server)
+        .await;
+    let marker_store = S3Store::new(
+        S3Config::new("agra-markers")
+            .endpoint(marker_server.uri())
+            .credentials("AKIAAGRA", "secret"),
+    )
+    .unwrap();
+    let listed = marker_store.list("docs").await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].path, "docs/ok.pdf");
+    assert!(marker_store.list("bad").await.is_err());
+
+    // 3. Presigned link whose `expires_in` exceeds the remaining lifetime of
+    //    a cached temporary credential triggers an early refresh.
+    let hands = Hands::at(1_795_000_000);
+    let fetches = Arc::new(AtomicUsize::new(0));
+    let counted = fetches.clone();
+    let source_hands = hands.clone();
+    let clock_hands = hands.clone();
+    let provider = navree_storage::cloud::credentials::Provider::with_clock(
+        move || {
+            let n = counted.fetch_add(1, Ordering::SeqCst) + 1;
+            let exp = source_hands.now() + Duration::from_secs(1800);
+            async move {
+                Ok(navree_storage::cloud::credentials::Credential::until(
+                    Credentials::new(format!("ASIAAGRA{n}"), "secret")
+                        .with_session_token(Some(format!("tok-{n}"))),
+                    exp,
+                ))
+            }
+        },
+        move || clock_hands.now(),
+    );
+    let clock_store = hands.clone();
+    let store = S3Store::with_env_and_clock(
+        &S3Config::new("agra-uploads").region("ap-south-1"),
+        &env_map(&[
+            ("AWS_ACCESS_KEY_ID", "UNUSED"),
+            ("AWS_SECRET_ACCESS_KEY", "UNUSED"),
+        ]),
+        move || clock_store.now(),
+    )
+    .unwrap()
+    .with_credentials(provider);
+
+    // First 5-minute link uses `ASIAAGRA1` (30 minutes left).
+    assert_eq!(signed_identity(&store).await.0, "ASIAAGRA1");
+    // Advance 10 minutes (20 minutes left) and sign a 1-hour link: refreshes to `ASIAAGRA2`.
+    hands.advance_secs(600);
+    let long_link = store
+        .signed_url("a.pdf", Method::GET, Duration::from_secs(3600))
+        .await
+        .unwrap();
+    assert!(long_link.as_str().contains("ASIAAGRA2"), "{long_link}");
+}
