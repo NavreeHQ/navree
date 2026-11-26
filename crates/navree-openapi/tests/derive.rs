@@ -6,7 +6,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned};
 use navree_openapi::{Schema, ToSchema};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -54,8 +54,8 @@ fn a_struct_lists_its_fields_with_their_docs() {
         title: String,
         amount: Option<u64>,
         tags: Vec<String>,
-        created_at: DateTime<Utc>,
-        closes_on: Option<NaiveDate>,
+        created_at: Timestamp,
+        closes_on: Option<Date>,
         label: Cow<'static, str>,
         kind: &'static str,
         data: Value,
@@ -93,6 +93,22 @@ fn a_struct_lists_its_fields_with_their_docs() {
     );
     assert_eq!(Deal::name(), "Deal");
     assert!(components::<Deal>().is_empty());
+
+    #[derive(ToSchema)]
+    struct ScheduleSlot {
+        seen_at: Zoned,
+        wall: DateTime,
+        opens: Time,
+    }
+    assert_eq!(
+        schema::<ScheduleSlot>()["properties"],
+        json!({
+            "seen_at": {"type": "string", "format": "date-time"},
+            "wall": {"type": "string", "format": "date-time"},
+            "opens": {"type": "string"},
+        })
+    );
+    assert!(components::<ScheduleSlot>().is_empty());
 }
 
 #[test]
