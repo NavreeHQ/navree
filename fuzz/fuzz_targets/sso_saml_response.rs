@@ -18,18 +18,16 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, Utc};
 use libfuzzer_sys::fuzz_target;
+use navree_datetime::{Span, Timestamp};
 use navree_fuzz::sso as fixtures;
 use navree_sso::SsoFake;
 use navree_sso::saml::{
     IdpMetadata, ResponseCheck, SamlAssertion, ServiceProvider, validate_response,
 };
 
-fn now() -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339("2026-10-27T12:01:00Z")
-        .unwrap()
-        .with_timezone(&Utc)
+fn now() -> Timestamp {
+    "2026-10-27T12:01:00Z".parse().unwrap()
 }
 
 struct Fixed {
@@ -63,7 +61,7 @@ fn accepted(assertion: &SamlAssertion, idp: &IdpMetadata, skew: Duration) {
     assert!(!assertion.id.is_empty());
     assert!(!assertion.name_id.is_empty());
     assert_eq!(assertion.name_id, assertion.name_id.trim());
-    let skew = chrono::TimeDelta::from_std(skew).unwrap();
+    let skew = Span::try_from(skew).unwrap();
     assert!(
         assertion.not_on_or_after > now() - skew,
         "an expired assertion"

@@ -10,9 +10,9 @@
 #![no_main]
 
 use arbitrary::Arbitrary;
-use chrono::DateTime;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use libfuzzer_sys::fuzz_target;
+use navree_datetime::Timestamp;
 use navree_webhooks::{
     AwsSns, GitHub, GooglePubSub, Hmac, Mailgun, Meta, MicrosoftGraph, Paddle, Postmark,
     PubSubPush, Slack, SnsMessage, StandardWebhooks, Stripe, Tolerance, Twilio, Vonage,
@@ -57,7 +57,7 @@ fn attack(input: &Input) {
             headers.append(HeaderName::from_static(name), value);
         }
     }
-    let now = DateTime::from_timestamp(i64::from(input.now), 0).expect("a time");
+    let now = Timestamp::from_secs(i64::from(input.now)).expect("a time");
     let tolerance = input
         .tolerance
         .map(|secs| Tolerance::at(now, u64::from(secs)));
@@ -118,7 +118,7 @@ fn signed(input: &Input) {
         return;
     }
     let ts = i64::from(input.now);
-    let now = DateTime::from_timestamp(ts, 0).expect("a time");
+    let now = Timestamp::from_secs(ts).expect("a time");
     let tolerance = Some(Tolerance::at(now, 300));
     let secret = input.secret.as_str();
     let body = input.body.as_slice();

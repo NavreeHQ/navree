@@ -17,7 +17,6 @@ path = "src/lib.rs"
 
 [dependencies]
 arbitrary = { version = "1.4.2", features = ["derive"] }
-chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
 http = "1.5.0"
 # The handler's body of `http_compression`, and the gzip it is checked with.
 http-body = "1.0.1"
@@ -36,6 +35,7 @@ navree-cli = { path = "../crates/navree-cli" }
 navree-config = { path = "../crates/navree-config" }
 navree-contracts = { path = "../crates/navree-contracts" }
 navree-crypto = { path = "../crates/navree-crypto" }
+navree-datetime = { path = "../crates/navree-datetime" }
 navree-directory = { path = "../crates/navree-directory" }
 navree-glob = { path = "../crates/navree-glob" }
 navree-documents = { path = "../crates/navree-documents", default-features = false, features = ["docx"] }
