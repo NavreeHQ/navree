@@ -329,7 +329,7 @@ pub(crate) fn parse_builtin_cast(text: &LitStr) -> syn::Result<Option<BuiltinCas
         "datetime_format" => {
             return Err(syn::Error::new(
                 text.span(),
-                "datetime_format casts take a chrono format: \"datetime_format(\\\"%d/%m/%Y %H:%M\\\")\"",
+                "datetime_format casts take a date-time pattern: \"datetime_format(\\\"%d/%m/%Y %H:%M\\\")\"",
             ));
         }
         _ => None,
@@ -368,19 +368,12 @@ pub(crate) fn parse_builtin_cast(text: &LitStr) -> syn::Result<Option<BuiltinCas
     Ok(None)
 }
 
-/// Checks a chrono format string when the model compiles.
+/// Checks a date-time pattern when the model compiles.
 fn check_date_format(format: &str) -> Result<(), String> {
-    use chrono::format::{Item, StrftimeItems};
-
     if format.trim().is_empty() {
         return Err("the date-time format cannot be empty".to_owned());
     }
-    if StrftimeItems::new(format).any(|item| matches!(item, Item::Error)) {
-        return Err(format!(
-            "`{format}` is not a valid chrono format (see chrono::format::strftime)"
-        ));
-    }
-    Ok(())
+    navree_datetime::pattern::check(format).map_err(|error| error.to_string())
 }
 
 /// The cast's name in the model's metadata.

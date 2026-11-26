@@ -5678,8 +5678,8 @@ dependencies = [
 name = "navree-orm-macros"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "heck",
+ "navree-datetime",
  "proc-macro-crate",
  "proc-macro2",
  "quote",

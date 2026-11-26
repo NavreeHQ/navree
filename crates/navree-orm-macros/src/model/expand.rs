@@ -10,7 +10,7 @@ use super::attributes::{self, MultiPart};
 use super::{Column, KeyType, Model, option_inner, plain_name};
 use crate::errors::Errors;
 
-/// The type as written, without the token spacing (`Option<DateTime<Utc>>`).
+/// The type as written, without the token spacing (`Option<Timestamp>`).
 fn type_text(ty: &Type) -> String {
     quote!(#ty)
         .to_string()
@@ -328,7 +328,7 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStr
             let field = &column.ident;
             let ty = &column.ty;
             quote!(#name => {
-                self.#field = <#ty as #krate::Timestamp>::from_now(now);
+                self.#field = <#ty as #krate::HasTimestamps>::from_now(now);
                 ::core::result::Result::Ok(())
             })
         });
@@ -347,7 +347,7 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStr
             let name = &column.name;
             let field = &column.ident;
             let ty = &column.ty;
-            quote!(#name => <#ty as #krate::Timestamp>::is_empty(&self.#field),)
+            quote!(#name => <#ty as #krate::HasTimestamps>::is_empty(&self.#field),)
         });
         quote!(match column {
             #(#arms)*
@@ -364,7 +364,7 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStr
             let name = &column.name;
             let field = &column.ident;
             let ty = &column.ty;
-            quote!(#name => { self.#field = <#ty as #krate::Timestamp>::empty(); })
+            quote!(#name => { self.#field = <#ty as #krate::HasTimestamps>::empty(); })
         });
         quote!(match column {
             #(#arms)*
@@ -380,7 +380,7 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStr
             let name = &column.name;
             let ty = &column.ty;
             quote!(#name => ::core::option::Option::Some(
-                #krate::Field::to_value(&<#ty as #krate::Timestamp>::from_now(now))
+                #krate::Field::to_value(&<#ty as #krate::HasTimestamps>::from_now(now))
             ),)
         });
         quote!(match column {
@@ -550,7 +550,7 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStr
                 }
             }
 
-            fn touch_timestamp(&mut self, column: &str, now: #private::DateTime<#private::Utc>) -> #krate::Result<()> {
+            fn touch_timestamp(&mut self, column: &str, now: #private::Timestamp) -> #krate::Result<()> {
                 #touch_body
             }
 
@@ -562,7 +562,7 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStr
                 #clear_body
             }
 
-            fn timestamp_value(column: &str, now: #private::DateTime<#private::Utc>) -> ::core::option::Option<#krate::Value> {
+            fn timestamp_value(column: &str, now: #private::Timestamp) -> ::core::option::Option<#krate::Value> {
                 #timestamp_value_body
             }
 
@@ -622,9 +622,12 @@ mod tests {
 
     #[test]
     fn types_are_written_without_token_spacing() {
-        let ty: Type = syn::parse_str("Option<chrono::DateTime<chrono::Utc>>").unwrap();
-        assert_eq!(type_text(&ty), "Option<chrono::DateTime<chrono::Utc>>");
-        let ty: Type = syn::parse_str("std::collections::HashMap<String, u8>").unwrap();
-        assert_eq!(type_text(&ty), "std::collections::HashMap<String, u8>");
+        let ty: Type = syn::parse_str("Option<navree_datetime::Timestamp>").unwrap();
+        assert_eq!(type_text(&ty), "Option<navree_datetime::Timestamp>");
+        let ty: Type = syn::parse_str("std::collections::HashMap<String, Option<u8>>").unwrap();
+        assert_eq!(
+            type_text(&ty),
+            "std::collections::HashMap<String, Option<u8>>"
+        );
     }
 }

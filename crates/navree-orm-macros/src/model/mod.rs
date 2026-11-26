@@ -439,7 +439,7 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
             )),
             Some(found) if found.cast.is_some() || found.field.multi.is_some() => errors.push(syn::Error::new(
                 found.ident.span(),
-                "a timestamp field cannot have a cast: use `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime` or `i64` (or an `Option` of one)",
+                "a timestamp field cannot have a cast: use `Timestamp`, `Zoned`, `DateTime`, `Date`, `Time` or `i64` (or an `Option` of one)",
             )),
             Some(_) => {}
         }
@@ -470,7 +470,7 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
             errors.push(syn::Error::new(
                 column.ident.span(),
                 format!(
-                    "the soft-delete column `{name}` must be nullable: make the field an `Option<DateTime<Utc>>` (NULL means not deleted)"
+                    "the soft-delete column `{name}` must be nullable: make the field an `Option<Timestamp>` (NULL means not deleted)"
                 ),
             ));
         }
