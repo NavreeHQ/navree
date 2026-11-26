@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree_datetime::{Date, Timestamp};
 use navree_mongo::ObjectId;
 use navree_orm::{Decimal, Model};
 use serde::{Deserialize, Serialize};
@@ -44,10 +44,10 @@ pub struct Deal {
     pub meta: Option<DealMeta>,
     #[model(cast = "json")]
     pub tags: Vec<String>,
-    pub closes_on: Option<NaiveDate>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub closes_on: Option<Date>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 impl Deal {
@@ -68,8 +68,8 @@ pub struct Company {
     pub name: String,
     pub country: Option<String>,
     pub employees: i32,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// A ticket: an integer key the database assigns (counted in
@@ -88,7 +88,7 @@ pub struct Reading {
     pub id: ObjectId,
     pub sensor: String,
     pub celsius: f64,
-    pub taken_at: DateTime<Utc>,
+    pub taken_at: Timestamp,
 }
 
 /// An account keyed by its email (the document's `_id` is MongoDB's own).

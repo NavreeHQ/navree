@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bson::{Bson, Document, doc};
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use futures_util::TryStreamExt;
 use navree_kernel::{AppContext, BoxFuture};
 use serde::Serialize;
@@ -328,7 +328,7 @@ pub struct MongoMigrationStatus {
     /// The batch it was applied in.
     pub batch: Option<i64>,
     /// When it was applied.
-    pub applied_at: Option<DateTime<Utc>>,
+    pub applied_at: Option<Timestamp>,
 }
 
 /// One migration in run order.
@@ -347,7 +347,7 @@ impl Step<'_> {
 #[derive(Clone, Debug)]
 struct Applied {
     batch: i64,
-    applied_at: Option<DateTime<Utc>>,
+    applied_at: Option<Timestamp>,
 }
 
 /// Runs the MongoDB migrations of an app, recording each in the
@@ -478,7 +478,7 @@ impl MongoMigrator {
             let applied_at = document
                 .get_datetime("applied_at")
                 .ok()
-                .map(|at| at.to_chrono());
+                .and_then(|at| Timestamp::try_from(*at).ok());
             applied.insert(id.to_owned(), Applied { batch, applied_at });
         }
         Ok(applied)

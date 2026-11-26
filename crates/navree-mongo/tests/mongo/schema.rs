@@ -4,7 +4,7 @@
 //! continuous aggregates, pretending, renames and drops.
 
 use bson::{Bson, Document, doc};
-use chrono::{DateTime, Duration, TimeZone, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_mongo::MongoError;
 use navree_orm::{Model, table};
 use navree_schema::ContinuousAggregate;
@@ -313,14 +313,14 @@ async fn hypertables_are_time_series_collections() {
         .unwrap();
 
     // Models read and write it like any collection.
-    let start: DateTime<Utc> = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
+    let start: Timestamp = Timestamp::utc(2026, 10, 27, 8, 0, 0).unwrap();
     for (sensor, minutes, celsius) in [("roof", 5, 10.0), ("roof", 65, 20.0), ("cellar", 10, 4.0)] {
         Reading::create(
             &t.db,
             Reading {
                 sensor: sensor.into(),
                 celsius,
-                taken_at: start + Duration::minutes(minutes),
+                taken_at: start + Span::minutes(minutes),
                 ..Reading::default()
             },
         )
@@ -353,7 +353,7 @@ async fn hypertables_are_time_series_collections() {
         .get(&t.db)
         .await
         .unwrap();
-    let rows: Vec<(DateTime<Utc>, String, f64, i64)> = hourly
+    let rows: Vec<(Timestamp, String, f64, i64)> = hourly
         .iter()
         .map(|row| {
             (
@@ -369,7 +369,7 @@ async fn hypertables_are_time_series_collections() {
         [
             (start, "cellar".to_owned(), 4.0, 1),
             (start, "roof".to_owned(), 10.0, 1),
-            (start + Duration::hours(1), "roof".to_owned(), 20.0, 1),
+            (start + Span::hours(1), "roof".to_owned(), 20.0, 1),
         ]
     );
     assert!(

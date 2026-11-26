@@ -11,9 +11,9 @@
 //! | [`ObjectId`](crate::ObjectId) | ObjectId | `Enum` of type `ObjectId` |
 //! | `Uuid` | binary, subtype 4 | `Uuid` |
 //! | `Vec<u8>` | binary, generic subtype | `Bytes` |
-//! | `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime` (UTC) | date (milliseconds) | `Timestamp` |
-//! | `NaiveDate` | date at midnight UTC | `Timestamp` (reads as a `NaiveDate`) |
-//! | `NaiveTime` | string `HH:MM:SS.ffffff` | `String` (reads as a `NaiveTime`) |
+//! | `Timestamp`, `Zoned`, `DateTime` (UTC) | date (milliseconds) | `Timestamp` |
+//! | `Date` | date at midnight UTC | `Timestamp` (reads as a `Date`) |
+//! | `Time` | string `HH:MM:SS.ffffff` | `String` (reads as a `Time`) |
 //! | JSON (`serde_json::Value`, JSON casts) | embedded document, array or scalar | `Json` (relaxed extended JSON) |
 //! | a vector (`Value::Vector`) | array of doubles | `Json` |
 //! | NULL of any type | null | NULL |
@@ -30,7 +30,7 @@ use std::str::FromStr;
 
 use bson::spec::BinarySubtype;
 use bson::{Binary, Bson, Decimal128, Document};
-use chrono::{NaiveTime, TimeZone, Utc};
+use navree_datetime::{Time, Timestamp};
 use navree_orm::{Decimal, OrmError, Row, Value, is_null};
 
 use crate::error::invalid;
@@ -85,15 +85,11 @@ pub fn to_bson(value: &Value) -> Result<Bson, OrmError> {
             bytes: bytes.clone(),
         }),
         Value::Json(json) => json_to_bson(json)?,
-        Value::Date(date) => Bson::DateTime(bson::DateTime::from_chrono(
-            Utc.from_utc_datetime(&date.and_time(NaiveTime::MIN)),
-        )),
+        Value::Date(date) => Bson::DateTime(bson::DateTime::from(date.at(Time::MIDNIGHT).in_utc())),
         Value::Time(time) => Bson::String(time.format(TIME_FORMAT).to_string()),
-        Value::DateTime(at) => {
-            Bson::DateTime(bson::DateTime::from_chrono(Utc.from_utc_datetime(at)))
-        }
-        Value::Timestamp(at) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
-        Value::TimestampTz(at) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
+        Value::DateTime(at) => Bson::DateTime(bson::DateTime::from(at.in_utc())),
+        Value::Timestamp(at) => Bson::DateTime(bson::DateTime::from(*at)),
+        Value::TimestampTz(at) => Bson::DateTime(bson::DateTime::from(*at)),
         Value::Uuid(uuid) => Bson::Binary(Binary {
             subtype: BinarySubtype::Uuid,
             bytes: uuid.as_bytes().to_vec(),
@@ -143,7 +139,7 @@ pub fn from_bson(bson: Bson) -> Value {
         Bson::Int32(v) => Value::I32(v),
         Bson::Int64(v) => Value::I64(v),
         Bson::ObjectId(id) => ObjectId::from(id).to_value(),
-        Bson::DateTime(at) => Value::Timestamp(at.to_chrono()),
+        Bson::DateTime(at) => Value::Timestamp(Timestamp::try_from(at).unwrap_or_default()),
         Bson::Binary(binary) => match binary.subtype {
             BinarySubtype::Uuid if binary.bytes.len() == 16 => {
                 match uuid::Uuid::from_slice(&binary.bytes) {
@@ -211,7 +207,7 @@ pub fn document_row(mut document: Document, columns: Option<&[String]>) -> Row {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, NaiveDate, NaiveDateTime};
+    use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned};
     use navree_orm::Field;
 
     use super::*;
@@ -241,9 +237,9 @@ mod tests {
         assert_eq!(round_trip(uuid), uuid);
         let id = ObjectId::new();
         assert_eq!(round_trip(id), id);
-        let day = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
+        let day = Date::new(2026, 10, 27).unwrap();
         assert_eq!(round_trip(day), day);
-        let time = NaiveTime::from_hms_micro_opt(8, 30, 15, 250_000).unwrap();
+        let time = Time::new(8, 30, 15).and_then(|t| t.with_nanos(250000000)).unwrap();
         assert_eq!(round_trip(time), time);
         let json = serde_json::json!({ "tags": ["a", "b"], "n": 3, "nested": { "ok": true } });
         assert_eq!(round_trip(json.clone()), json);
@@ -253,18 +249,17 @@ mod tests {
 
     #[test]
     fn date_times_keep_milliseconds() {
-        let at = DateTime::parse_from_rfc3339("2026-10-27T09:30:00.123456Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        let back: DateTime<Utc> = round_trip(at);
+        let at = Timestamp::parse_rfc3339("2026-10-27T09:30:00.123456Z")
+            .unwrap();
+        let back: Timestamp = round_trip(at);
         assert_eq!(back.to_rfc3339(), "2026-10-27T09:30:00.123+00:00");
-        let naive: NaiveDateTime = round_trip(at.naive_utc());
-        assert_eq!(naive, back.naive_utc());
-        let offset = DateTime::parse_from_rfc3339("2026-10-27T11:30:00.500+02:00").unwrap();
-        let back: DateTime<chrono::FixedOffset> = round_trip(offset);
+        let naive: DateTime = round_trip(at.date_time_utc());
+        assert_eq!(naive, back.date_time_utc());
+        let offset = Zoned::parse_rfc3339("2026-10-27T11:30:00.500+02:00").unwrap();
+        let back: Zoned = round_trip(offset);
         assert_eq!(back, offset, "the same instant, read in UTC");
         assert_eq!(
-            to_bson(&Value::from(NaiveDate::from_ymd_opt(2026, 10, 27).unwrap())).unwrap(),
+            to_bson(&Value::from(Date::new(2026, 10, 27).unwrap())).unwrap(),
             Bson::DateTime(bson::DateTime::from_millis(1_793_059_200_000))
         );
     }
@@ -284,7 +279,7 @@ mod tests {
             })
         );
         assert_eq!(
-            to_bson(&Value::from(NaiveTime::from_hms_opt(8, 5, 0).unwrap())).unwrap(),
+            to_bson(&Value::from(Time::new(8, 5, 0).unwrap())).unwrap(),
             Bson::String("08:05:00.000000".into())
         );
     }

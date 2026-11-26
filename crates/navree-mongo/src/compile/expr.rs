@@ -409,7 +409,7 @@ mod tests {
 
     #[test]
     fn origin_is_monday_2000_01_03() {
-        let origin = chrono::DateTime::from_timestamp_millis(BUCKET_ORIGIN_MS).unwrap();
+        let origin = navree_datetime::Timestamp::from_millis(BUCKET_ORIGIN_MS).unwrap();
         assert_eq!(origin.to_rfc3339(), "2000-01-03T00:00:00+00:00");
     }
 

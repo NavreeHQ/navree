@@ -3,7 +3,7 @@
 //! writes, time buckets, full text, workspace scopes and refusals.
 
 use bson::doc;
-use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
+use navree_datetime::{Date, Span, Timestamp};
 use navree_mongo::{MongoDb, MongoFilter, ObjectId, ToMongo};
 use navree_orm::ir::{FullText, Operator, Order};
 use navree_orm::{Decimal, Expr, Filter, Model, OrmError, Value, col, table};
@@ -94,7 +94,7 @@ async fn seed(mongo: &MongoDb) -> (Vec<Company>, Vec<Deal>) {
                     labels: Vec::new(),
                 }),
                 tags: tags.into_iter().map(str::to_owned).collect(),
-                closes_on: NaiveDate::from_ymd_opt(closes.0, closes.1, closes.2),
+                closes_on: Date::new(closes.0, closes.1, closes.2).ok(),
                 ..Deal::new(title, amount)
             },
         )
@@ -208,7 +208,7 @@ async fn conditions_become_filter_documents() {
             q().where_date(
                 Deal::CLOSES_ON,
                 "=",
-                NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()
+                Date::new(2026, 6, 1).unwrap()
             )
         )
         .await,
@@ -755,11 +755,11 @@ async fn mass_writes_update_and_delete_in_one_command() {
             [
                 [
                     ("action", Value::from("login")),
-                    ("at", Value::from(Utc::now())),
+                    ("at", Value::from(Timestamp::now())),
                 ],
                 [
                     ("action", Value::from("logout")),
-                    ("at", Value::from(Utc::now())),
+                    ("at", Value::from(Timestamp::now())),
                 ],
             ],
         )
@@ -776,14 +776,14 @@ async fn time_buckets_and_first_and_last() {
         return;
     };
     let mongo = &t.db;
-    let start: DateTime<Utc> = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
+    let start: Timestamp = Timestamp::utc(2026, 10, 27, 8, 0, 0).unwrap();
     for (minutes, celsius) in [(5, 10.0), (20, 12.0), (55, 14.0), (65, 20.0), (110, 22.0)] {
         Reading::create(
             mongo,
             Reading {
                 sensor: "roof".into(),
                 celsius,
-                taken_at: start + Duration::minutes(minutes),
+                taken_at: start + Span::minutes(minutes),
                 ..Reading::default()
             },
         )
@@ -807,13 +807,13 @@ async fn time_buckets_and_first_and_last() {
         .await
         .unwrap();
     assert_eq!(hours.len(), 2);
-    assert_eq!(hours[0].get::<DateTime<Utc>>("bucket").unwrap(), start);
+    assert_eq!(hours[0].get::<Timestamp>("bucket").unwrap(), start);
     assert_eq!(hours[0].get::<f64>("average").unwrap(), 12.0);
     assert_eq!(hours[0].get::<f64>("opening").unwrap(), 10.0);
     assert_eq!(hours[0].get::<f64>("closing").unwrap(), 14.0);
     assert_eq!(
-        hours[1].get::<DateTime<Utc>>("bucket").unwrap(),
-        start + Duration::hours(1)
+        hours[1].get::<Timestamp>("bucket").unwrap(),
+        start + Span::hours(1)
     );
     assert_eq!(hours[1].get::<f64>("closing").unwrap(), 22.0);
     // Weekly buckets start on Mondays, as on TimescaleDB.
@@ -825,8 +825,8 @@ async fn time_buckets_and_first_and_last() {
         .unwrap();
     assert_eq!(weeks.len(), 1);
     assert_eq!(
-        weeks[0].get::<DateTime<Utc>>("week").unwrap(),
-        Utc.with_ymd_and_hms(2026, 10, 26, 0, 0, 0).unwrap()
+        weeks[0].get::<Timestamp>("week").unwrap(),
+        Timestamp::utc(2026, 10, 26, 0, 0, 0).unwrap()
     );
     t.cleanup().await;
 }

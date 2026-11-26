@@ -32,7 +32,7 @@
 //! ## Models
 //!
 //! ```
-//! use chrono::{DateTime, Utc};
+//! use navree_datetime::Timestamp;
 //! use navree_mongo::ObjectId;
 //! use navree_orm::Model;
 //! use serde::{Deserialize, Serialize};
@@ -55,9 +55,9 @@
 //!     pub terms: Option<Terms>, // an embedded document
 //!     #[model(cast = "json")]
 //!     pub tags: Vec<String>, // an array
-//!     pub created_at: DateTime<Utc>,
-//!     pub updated_at: DateTime<Utc>,
-//!     pub deleted_at: Option<DateTime<Utc>>,
+//!     pub created_at: Timestamp,
+//!     pub updated_at: Timestamp,
+//!     pub deleted_at: Option<Timestamp>,
 //! }
 //!
 //! let query = Deal::query()
