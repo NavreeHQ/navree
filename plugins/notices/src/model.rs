@@ -2,7 +2,7 @@
 
 /// The `notice` entity (`notices_notices` table, subject `notices.Notice`).
 pub mod notice {
-    use chrono::{DateTime, Utc};
+    use navree::datetime::Timestamp;
     use serde::{Deserialize, Serialize};
     use uuid::Uuid;
 
@@ -24,8 +24,8 @@ pub mod notice {
         /// Identifier of the user who posted the notice.
         pub posted_by: Uuid,
         /// Instant when the notice expires.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// Instant when the notice was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }

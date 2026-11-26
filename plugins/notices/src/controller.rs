@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use chrono::{TimeDelta, Utc};
 use http::Method;
 use http::request::Parts;
 use navree::contracts::{Clock, permitted};
+use navree::datetime::{Span, Timestamp};
 use navree::db::Uow;
 use navree::http::{
     AppError, Controller, Created, CurrentPrincipal, Guard, Json, NoContent, Path,
@@ -180,14 +180,14 @@ impl NoticesController {
         let settings = self.active_options().await?;
         let now = match self.app.try_get::<dyn Clock>().await {
             Some(clock) => clock.now(),
-            None => Utc::now(),
+            None => Timestamp::now(),
         };
         let mut record = Record::new(notice::Model {
             id: 0,
             title: input.title,
             body: input.body,
             posted_by: principal.user_id,
-            expires_at: now + TimeDelta::days(i64::from(settings.keep_days)),
+            expires_at: now + Span::days(i64::from(settings.keep_days)),
             created_at: now,
         });
         record.save(&uow).await.map_err(AppError::internal)?;

@@ -8,9 +8,9 @@
 use std::fs;
 use std::process::Command;
 
-use chrono::{TimeDelta, TimeZone, Utc};
 use navree::access::AccessService;
 use navree::crypto::generate_key;
+use navree::datetime::{Span, Timestamp};
 use navree::db::Db;
 use navree::helm::HelmModule;
 use navree::i18n::I18nModule;
@@ -297,8 +297,8 @@ async fn its_table_is_created_by_its_migration_and_a_notice_round_trips() {
         .build()
         .await;
 
-    let posted_at = Utc.with_ymd_and_hms(2026, 11, 15, 6, 0, 0).unwrap();
-    let expires_at = posted_at + TimeDelta::days(30);
+    let posted_at = Timestamp::utc(2026, 11, 15, 6, 0, 0).unwrap();
+    let expires_at = posted_at + Span::days(30);
     let harpreet = Uuid::now_v7();
 
     let db = app.get::<Db>().await;
@@ -603,7 +603,7 @@ async fn the_expire_command_removes_expired_notices() {
         .build()
         .await;
 
-    let now = Utc::now();
+    let now = Timestamp::now();
     let harpreet = Uuid::now_v7();
     let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
@@ -613,8 +613,8 @@ async fn the_expire_command_removes_expired_notices() {
         title: "Old generator servicing".to_owned(),
         body: "Completed last month in Model Town, Ludhiana.".to_owned(),
         posted_by: harpreet,
-        expires_at: now - TimeDelta::days(5),
-        created_at: now - TimeDelta::days(35),
+        expires_at: now - Span::days(5),
+        created_at: now - Span::days(35),
     });
     old_notice.save(&uow).await.unwrap();
 
@@ -623,8 +623,8 @@ async fn the_expire_command_removes_expired_notices() {
         title: "Water supply off on Sunday".to_owned(),
         body: "Tank cleaning at Model Town, Ludhiana, from 6 am to 10 am IST.".to_owned(),
         posted_by: harpreet,
-        expires_at: now + TimeDelta::days(29),
-        created_at: now - TimeDelta::days(1),
+        expires_at: now + Span::days(29),
+        created_at: now - Span::days(1),
     });
     fresh_notice.save(&uow).await.unwrap();
     uow.commit().await.unwrap();
@@ -675,8 +675,8 @@ async fn the_expiry_is_scheduled_daily_at_two_thirty_ist() {
 
     let scheduler = app.get::<Scheduler>().await;
     // 2026-11-15 20:00 UTC is 2026-11-16 01:30 IST; the next 02:30 IST is 2026-11-15 21:00 UTC.
-    let before = Utc.with_ymd_and_hms(2026, 11, 15, 20, 0, 0).unwrap();
-    let due_utc = Utc.with_ymd_and_hms(2026, 11, 15, 21, 0, 0).unwrap();
+    let before = Timestamp::utc(2026, 11, 15, 20, 0, 0).unwrap();
+    let due_utc = Timestamp::utc(2026, 11, 15, 21, 0, 0).unwrap();
 
     let tasks = scheduler.list(before);
     let expire = tasks
@@ -689,7 +689,7 @@ async fn the_expiry_is_scheduled_daily_at_two_thirty_ist() {
 
     // Not due one minute before 02:30 IST.
     let outcomes = scheduler
-        .tick(due_utc - TimeDelta::minutes(1))
+        .tick(due_utc - Span::minutes(1))
         .await
         .unwrap();
     assert!(outcomes.is_empty());
@@ -940,13 +940,13 @@ async fn setting_notices_enabled_false_disables_routes_and_expiry() {
     let simran = Uuid::now_v7();
     let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    let old = Utc.with_ymd_and_hms(2026, 10, 1, 6, 0, 0).unwrap();
+    let old = Timestamp::utc(2026, 10, 1, 6, 0, 0).unwrap();
     let mut row = Record::new(notice::Model {
         id: 0,
         title: "Lift maintenance in Block C".to_owned(),
         body: "Scheduled inspection at Model Town, Ludhiana.".to_owned(),
         posted_by: simran,
-        expires_at: old + TimeDelta::days(1),
+        expires_at: old + Span::days(1),
         created_at: old,
     });
     row.save(&uow).await.expect("insert expired notice");

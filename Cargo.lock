@@ -5745,12 +5745,12 @@ name = "navree-plugin-godam"
 version = "0.1.0"
 dependencies = [
  "bytes",
- "chrono",
  "futures-util",
  "http",
  "http-body-util",
  "navree",
  "navree-contracts",
+ "navree-datetime",
  "navree-http",
  "navree-kernel",
  "navree-storage",
@@ -5766,7 +5766,6 @@ dependencies = [
 name = "navree-plugin-notices"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "http",
  "navree",
  "serde",

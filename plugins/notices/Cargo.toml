@@ -22,7 +22,6 @@ test-postgres = ["navree/postgres"]
 test-mysql = ["navree/mysql"]
 
 [dependencies]
-chrono = { version = "0.4.45", features = ["serde"] }
 http = "1.5.0"
 navree = { path = "../../crates/navree", default-features = false, features = ["helm", "orm", "queue", "schedule", "ui", "view"] }
 serde = { version = "1.0.229", features = ["derive"] }
