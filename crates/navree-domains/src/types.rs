@@ -1,7 +1,7 @@
 //! The public shapes: [`CustomDomain`], its statuses, the DNS records a
 //! customer creates, [`NewDomain`] and the summaries of the commands.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -122,26 +122,26 @@ pub struct CustomDomain {
     /// Where its certificate is.
     pub tls: TlsStatus,
     /// When its certificate expires, when known.
-    pub certificate_expires_at: Option<DateTime<Utc>>,
+    pub certificate_expires_at: Option<Timestamp>,
     /// Why the last issuance or probe failed.
     pub tls_error: Option<String>,
     /// What the last check found missing.
     pub last_error: Option<String>,
     /// When DNS was last checked.
-    pub last_checked_at: Option<DateTime<Utc>>,
+    pub last_checked_at: Option<Timestamp>,
     /// When the scheduler checks it next.
-    pub next_check_at: Option<DateTime<Utc>>,
+    pub next_check_at: Option<Timestamp>,
     /// When it was verified.
-    pub verified_at: Option<DateTime<Utc>>,
+    pub verified_at: Option<Timestamp>,
     /// The records to create: the TXT record, then the CNAME (or A and
     /// AAAA records for an apex domain).
     pub dns_records: Vec<DnsInstruction>,
     /// Who added it.
     pub created_by: Option<Uuid>,
     /// When it was added.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl CustomDomain {
@@ -199,10 +199,10 @@ pub struct CertificateRun {
     pub renewed: Vec<String>,
     /// Hosts whose certificate was read over TLS (on-demand), with its
     /// expiry.
-    pub probed: Vec<(String, DateTime<Utc>)>,
+    pub probed: Vec<(String, Timestamp)>,
     /// Hosts whose issuance or probe failed, with the reason.
     pub failed: Vec<(String, String)>,
     /// Hosts whose certificate expires within
     /// `domains.certificates.warn_days`, with its expiry.
-    pub expiring: Vec<(String, DateTime<Utc>)>,
+    pub expiring: Vec<(String, Timestamp)>,
 }

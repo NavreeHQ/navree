@@ -4668,7 +4668,6 @@ name = "navree-domains"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "hickory-resolver",
  "http",
  "http-body-util",
@@ -4680,6 +4679,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-domains",
  "navree-events",

@@ -8,8 +8,8 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use navree_contracts::Secret;
+use navree_datetime::Timestamp;
 use navree_domains::{
     AcmeClient, AcmeFake, AcmeOptions, AcmeOrder, AskQuery, CertificateOptions, CertificateProbe,
     CertificateRun, CloudflareDns, CloudflareOptions, CurrentDomain, CustomDomain,
@@ -185,7 +185,7 @@ fn statuses_events_codes_and_names() {
 
 #[test]
 fn the_public_shapes_have_their_documented_fields() {
-    let now: DateTime<Utc> = Utc::now();
+    let now: Timestamp = Timestamp::now();
     let id = Uuid::now_v7();
     let domain = CustomDomain {
         id,
@@ -388,12 +388,12 @@ async fn the_drivers_fakes_and_services_exist() {
     assert!(dns.lookups().is_empty());
     let ca = AcmeFake::new();
     assert!(ca.ca_pem().contains("BEGIN CERTIFICATE"));
-    ca.expire_at(Utc::now());
+    ca.expire_at(Timestamp::now());
     ca.fail_next("no");
     ca.keep_challenges();
     assert!(ca.orders().is_empty() && ca.challenges().is_empty());
     let probe = ProbeFake::new();
-    probe.expires("a.test", Utc::now());
+    probe.expires("a.test", Timestamp::now());
     probe.fail("b.test", "no");
     assert!(probe.probed().is_empty());
     let zone = DnsProviderFake::new();

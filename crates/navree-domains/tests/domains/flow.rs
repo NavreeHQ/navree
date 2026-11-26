@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_db::Db;
 use navree_domains::{DomainStatus, DomainsError, NewDomain, TlsStatus, models};
 use navree_orm::Model as _;
@@ -66,7 +66,7 @@ async fn domains_work_end_to_end() {
     assert_eq!(crm.verified_at, Some(world.now()));
     let go = domains.get(go.id).await.unwrap();
     assert_eq!(go.points_to_app, Some(false));
-    assert_eq!(go.next_check_at, Some(world.now() + TimeDelta::minutes(5)));
+    assert_eq!(go.next_check_at, Some(world.now() + Span::minutes(5)));
     assert!(domains.verify_due().await.unwrap().is_empty());
     world.advance(Duration::from_secs(5 * 60));
     assert_eq!(domains.verify_due().await.unwrap().len(), 1);

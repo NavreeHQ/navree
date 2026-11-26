@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::Uow;
 use navree_kernel::AppContext;
 use navree_orm::{Assignment, Model as _, Record};
@@ -375,7 +375,7 @@ impl Domains {
                                 models::Domain::TRANSFER.set(true),
                                 models::Domain::POINTS_TO_APP.set(None::<bool>),
                                 models::Domain::CHECK_ATTEMPTS.set(0),
-                                models::Domain::LAST_CHECKED_AT.set(None::<DateTime<Utc>>),
+                                models::Domain::LAST_CHECKED_AT.set(None::<Timestamp>),
                                 models::Domain::NEXT_CHECK_AT.set(saved.next_check_at),
                                 models::Domain::LAST_ERROR.set(None::<String>),
                                 models::Domain::TLS_STATUS.set(saved.tls_status),
@@ -847,7 +847,7 @@ impl Domains {
                     _ => {
                         row.check_attempts = row.check_attempts.saturating_add(1);
                         let deadline = row.created_at
-                            + TimeDelta::hours(i64::from(
+                            + Span::hours(i64::from(
                                 rt.options.verification.give_up_after_hours,
                             ));
                         if scheduled && was == DomainStatus::Pending && now >= deadline {
@@ -1057,7 +1057,7 @@ impl Domains {
                     &uow,
                     [
                         models::Domain::STATUS.set(DomainStatus::Failed.as_str()),
-                        models::Domain::NEXT_CHECK_AT.set(None::<DateTime<Utc>>),
+                        models::Domain::NEXT_CHECK_AT.set(None::<Timestamp>),
                         models::Domain::LAST_ERROR.set(Some(reason.clone())),
                         models::Domain::UPDATED_AT.set(now),
                     ],
@@ -1139,7 +1139,7 @@ impl Domains {
         if hours == 0 {
             return Ok(0);
         }
-        let before = rt.now() - TimeDelta::hours(i64::from(hours));
+        let before = rt.now() - Span::hours(i64::from(hours));
         let stale = || {
             models::Domain::query()
                 .where_(models::Domain::STATUS.eq(DomainStatus::Failed.as_str()))
@@ -1158,14 +1158,14 @@ impl Domains {
     }
 
     /// When a pending domain is checked next.
-    fn retry_at(&self, now: DateTime<Utc>) -> DateTime<Utc> {
-        now + TimeDelta::minutes(i64::from(self.rt.options.verification.interval_mins))
+    fn retry_at(&self, now: Timestamp) -> Timestamp {
+        now + Span::minutes(i64::from(self.rt.options.verification.interval_mins))
     }
 
     /// When a verified domain is checked next (`None`: never).
-    fn recheck_at(&self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    fn recheck_at(&self, now: Timestamp) -> Option<Timestamp> {
         let hours = self.rt.options.verification.recheck_hours;
-        (hours > 0).then(|| now + TimeDelta::hours(i64::from(hours)))
+        (hours > 0).then(|| now + Span::hours(i64::from(hours)))
     }
 
     /// The certificate status of a domain with `status`.

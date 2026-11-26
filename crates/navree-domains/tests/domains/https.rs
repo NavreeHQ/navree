@@ -6,9 +6,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use chrono::TimeDelta;
 use http_body_util::{BodyExt, Empty};
 use hyper_util::rt::{TokioExecutor, TokioIo};
+use navree_datetime::Span;
 use navree_domains::{CertificateProbe, HttpsServer, TlsProbe};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
@@ -93,7 +93,7 @@ async fn the_app_is_served_over_https_with_each_domains_certificate() {
         .expires_at("crm.acme-corp.test")
         .unwrap();
     assert_eq!(found.not_after, expected);
-    assert_eq!(found.not_after - found.not_before, TimeDelta::days(90));
+    assert_eq!(found.not_after - found.not_before, Span::days(90));
     let error = TlsProbe::new()
         .connect_to("unknown.test", addr)
         .probe("unknown.test")

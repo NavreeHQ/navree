@@ -9,12 +9,12 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use bytes::Bytes;
-use chrono::{DateTime, Datelike, TimeDelta, Utc};
 use http_body_util::{BodyExt, Full};
 use instant_acme::{
     Account, AccountCredentials, AuthorizationStatus, BodyWrapper, BytesResponse, ChallengeType,
     HttpClient, Identifier, NewAccount, NewOrder, OrderStatus, RetryPolicy,
 };
+use navree_datetime::{Span, Timestamp};
 use navree_kernel::BoxFuture;
 
 use crate::DomainsError;
@@ -397,7 +397,7 @@ struct FakeRoot {
 struct FakeCa {
     orders: Vec<String>,
     failures: Vec<String>,
-    valid_until: Option<DateTime<Utc>>,
+    valid_until: Option<Timestamp>,
     keep_challenges: bool,
     published: Vec<(String, String, String)>,
 }
@@ -448,7 +448,7 @@ impl AcmeFake {
 
     /// Certificates issued from now on expire at `at` (default: 90 days
     /// after they are issued).
-    pub fn expire_at(&self, at: DateTime<Utc>) {
+    pub fn expire_at(&self, at: Timestamp) {
         self.with(|ca| ca.valid_until = Some(at));
     }
 
@@ -473,11 +473,11 @@ impl AcmeFake {
         self.with(|ca| ca.published.clone())
     }
 
-    fn sign(&self, host: &str, not_after: DateTime<Utc>) -> Result<IssuedCertificate, String> {
+    fn sign(&self, host: &str, not_after: Timestamp) -> Result<IssuedCertificate, String> {
         let key = rcgen::KeyPair::generate().map_err(|error| error.to_string())?;
         let mut params = rcgen::CertificateParams::new(vec![host.to_owned()])
             .map_err(|error| error.to_string())?;
-        let not_before = not_after - TimeDelta::days(90);
+        let not_before = not_after - Span::days(90);
         let (year, month, day) = ymd(not_before);
         params.not_before = rcgen::date_time_ymd(year, month, day);
         let (year, month, day) = ymd(not_after);
@@ -494,12 +494,9 @@ impl AcmeFake {
 }
 
 /// The calendar day of `at` (UTC), for rcgen's `date_time_ymd`.
-fn ymd(at: DateTime<Utc>) -> (i32, u8, u8) {
-    (
-        at.year(),
-        u8::try_from(at.month()).unwrap_or(1),
-        u8::try_from(at.day()).unwrap_or(1),
-    )
+fn ymd(at: Timestamp) -> (i32, u8, u8) {
+    let date = at.date_time_utc().date();
+    (date.year(), date.month_number(), date.day())
 }
 
 impl AcmeClient for AcmeFake {
@@ -529,7 +526,7 @@ impl AcmeClient for AcmeFake {
             }
             let not_after = self
                 .with(|ca| ca.valid_until)
-                .unwrap_or_else(|| Utc::now() + TimeDelta::days(90));
+                .unwrap_or_else(|| Timestamp::now() + Span::days(90));
             self.sign(&host, not_after)
                 .map_err(|reason| DomainsError::acme(host, reason))
         })

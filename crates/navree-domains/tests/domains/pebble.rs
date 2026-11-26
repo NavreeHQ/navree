@@ -52,7 +52,7 @@ async fn certificates_come_from_a_real_acme_server() {
         .issue_certificate("crm.acme-corp.test")
         .await
         .unwrap();
-    assert!(expires > chrono::Utc::now());
+    assert!(expires > navree_datetime::Timestamp::now());
     let domain = domains.get(domain.id).await.unwrap();
     assert_eq!(domain.tls, TlsStatus::Active);
     assert!(domains.certificates().contains("crm.acme-corp.test"));
