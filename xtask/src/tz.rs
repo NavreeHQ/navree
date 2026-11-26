@@ -1,5 +1,5 @@
 //! `cargo xtask tz-tables DIR [--check]`: compiles an unpacked IANA time zone
-//! database release into `crates/navree-time/src/tables.rs`.
+//! database release into `crates/navree-datetime/src/zone/tables.rs`.
 //!
 //! Reads the release identifier (`version` or `NEWS`), the ten standard data
 //! files (`africa`, `antarctica`, `asia`, `australasia`, `europe`,
@@ -9,8 +9,7 @@
 //!   last change;
 //! - every zone and link name of the release;
 //! - the legacy alias table that normalizes old names to PostgreSQL-safe
-//!   canonical names, the per-country zone list (primary zone first) and the
-//!   weekend table.
+//!   canonical names, and the per-country zone list (primary zone first).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as _;
@@ -20,7 +19,7 @@ use std::process::ExitCode;
 use xtask::time::{civil_from_days, days_from_civil};
 
 /// Output file, relative to the workspace root.
-pub const TABLES_PATH: &str = "crates/navree-time/src/tables.rs";
+pub const TABLES_PATH: &str = "crates/navree-datetime/src/zone/tables.rs";
 
 /// Standard IANA source files included in a tz database build.
 const DATA_FILES: &[&str] = &[
@@ -88,29 +87,6 @@ const PRIMARY_COUNTRY_ZONE: &[(&str, &str)] = &[
     ("UZ", "Asia/Tashkent"),
 ];
 
-/// Countries whose weekend is not Saturday and Sunday (ISO weekday numbers:
-/// 1 = Monday .. 7 = Sunday), from Unicode CLDR week data.
-const WEEKENDS: &[(&str, &[u8])] = &[
-    ("AF", &[4, 5]),
-    ("BH", &[5, 6]),
-    ("DZ", &[5, 6]),
-    ("EG", &[5, 6]),
-    ("IL", &[5, 6]),
-    ("IN", &[7]),
-    ("IQ", &[5, 6]),
-    ("IR", &[5]),
-    ("JO", &[5, 6]),
-    ("KW", &[5, 6]),
-    ("LY", &[5, 6]),
-    ("OM", &[5, 6]),
-    ("QA", &[5, 6]),
-    ("SA", &[5, 6]),
-    ("SD", &[5, 6]),
-    ("SY", &[5, 6]),
-    ("UG", &[7]),
-    ("YE", &[5, 6]),
-];
-
 /// Runs `cargo xtask tz-tables DIR [--check]`.
 pub fn cmd(root: &Path, args: &[&str]) -> Result<ExitCode, String> {
     let mut dir: Option<&str> = None;
@@ -138,7 +114,7 @@ pub fn cmd(root: &Path, args: &[&str]) -> Result<ExitCode, String> {
     Ok(ExitCode::FAILURE)
 }
 
-/// Generates `crates/navree-time/src/tables.rs` from `tzdata_dir`, or with
+/// Generates `crates/navree-datetime/src/zone/tables.rs` from `tzdata_dir`, or with
 /// `check` writes nothing and returns the stale path if it differs.
 pub fn run(root: &Path, tzdata_dir: &Path, check: bool) -> Result<Vec<PathBuf>, String> {
     let generated = generate(tzdata_dir)?;
@@ -1386,10 +1362,9 @@ fn render_tables(
     .unwrap();
     writeln!(
         out,
-        "//! zones compiled from IANA tzdata {version} (public domain), with weekend"
+        "//! zones compiled from IANA tzdata {version} (public domain)."
     )
     .unwrap();
-    writeln!(out, "//! days from Unicode CLDR.").unwrap();
     writeln!(out).unwrap();
     writeln!(
         out,
@@ -1636,26 +1611,6 @@ fn render_tables(
     for (code, list) in countries {
         let items: Vec<String> = list.iter().map(|z| format!("{z:?}")).collect();
         writeln!(out, "    ({code:?}, &[{}]),", items.join(", ")).unwrap();
-    }
-    writeln!(out, "];").unwrap();
-    writeln!(out).unwrap();
-
-    // WEEKENDS
-    writeln!(
-        out,
-        "/// Countries whose weekend is not Saturday and Sunday, with their weekend"
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "/// days (ISO numbers: 1 is Monday, 7 is Sunday), sorted by code."
-    )
-    .unwrap();
-    writeln!(out, "#[rustfmt::skip]").unwrap();
-    writeln!(out, "pub(crate) const WEEKENDS: &[(&str, &[u8])] = &[").unwrap();
-    for (code, days) in WEEKENDS {
-        let nums: Vec<String> = days.iter().map(u8::to_string).collect();
-        writeln!(out, "    ({code:?}, &[{}]),", nums.join(", ")).unwrap();
     }
     writeln!(out, "];").unwrap();
 

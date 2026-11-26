@@ -22,9 +22,9 @@ native-models [--check]
     writes nothing and fails when a written model is stale.
 
 tz-tables <dir> [--check]
-    Writes crates/navree-time/src/tables.rs from an unpacked IANA tzdata
-    release folder; with --check, writes nothing and fails when the tables
-    differ from that release.
+    Writes crates/navree-datetime/src/zone/tables.rs from an unpacked IANA
+    tzdata release folder; with --check, writes nothing and fails when the
+    tables differ from that release.
 
 Release commands:
   prepare <version> [--date YYYY-MM-DD]

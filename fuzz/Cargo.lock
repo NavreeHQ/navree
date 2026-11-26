@@ -2258,6 +2258,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-datetime"
+version = "1.5.0"
+
+[[package]]
 name = "navree-db"
 version = "1.6.0"
 dependencies = [
@@ -3144,6 +3148,7 @@ dependencies = [
  "http",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",

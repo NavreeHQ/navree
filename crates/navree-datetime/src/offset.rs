@@ -65,4 +65,12 @@ impl Offset {
     pub const fn seconds(self) -> i32 {
         self.secs
     }
+
+    /// The offset `seconds` east of UTC, for a number known to be within
+    /// 25:59:59 of UTC. It is not checked: the offsets of the compiled time
+    /// zone tables come through here, and a test of the tables holds each
+    /// of them to the limit.
+    pub(crate) const fn from_seconds_unchecked(seconds: i32) -> Offset {
+        Offset { secs: seconds }
+    }
 }

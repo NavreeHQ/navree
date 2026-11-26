@@ -32,9 +32,10 @@
 //!
 //! Time zone transitions, standing rules, links, legacy aliases and country
 //! zones come from the public-domain IANA time zone database (release
-//! [`tzdata_version`]), compiled into `src/tables.rs` by
+//! [`tzdata_version`]). navree-datetime holds them, compiled by
 //! `cargo xtask tz-tables DIR` from an unpacked IANA `tzdata` release
-//! folder, with weekend days from Unicode CLDR.
+//! folder, with the one algorithm that reads them; the zones here stand on
+//! both. Weekend days are from Unicode CLDR.
 //!
 //! ```no_run
 //! use navree_config::{ConfigModule, ConfigSources};
@@ -63,7 +64,6 @@ mod module;
 mod options;
 pub mod rules;
 mod sql;
-mod tables;
 mod tz;
 mod window;
 mod zone;
