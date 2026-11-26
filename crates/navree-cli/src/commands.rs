@@ -33,6 +33,7 @@ use crate::plugin::make::{MakePluginOptions, make_plugin};
 use crate::plugin::remove::{self, RemoveOptions};
 use crate::project::{project_root, run_root};
 use crate::resource::make_resource;
+use crate::upgrade;
 
 /// Runs `cli` with `cwd` as the working directory.
 pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
@@ -313,6 +314,12 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             list::run(cwd, &options, &mut ProcessRunner, &mut std::io::stdout())?;
             Ok(ExitCode::SUCCESS)
         }
+        Command::Upgrade(args) => {
+            let target = absolute(cwd, args.path.as_deref());
+            let report = upgrade::run(&target, args.check)?;
+            print_upgrade(&report);
+            Ok(exit_code(!(args.check && !report.is_empty())))
+        }
         Command::Forward(words) => {
             let Some((command, args)) = words.split_first() else {
                 anyhow::bail!("no command given");
@@ -433,6 +440,43 @@ fn print_skills(dir: &Path, report: &navree_navigator::skills::InstallReport) {
         println!("  removed  {name} (not a skill of this Navree version)");
     }
     println!("Commit them with your code so every teammate's agent has them.");
+}
+
+/// Prints what `navree upgrade` changed, or with `--check` what it would change.
+fn print_upgrade(report: &upgrade::Report) {
+    if report.is_empty() {
+        println!("Everything is already on Navree's dates and times.");
+        return;
+    }
+    let verb = if report.check_only {
+        "would update"
+    } else {
+        "updated"
+    };
+    for file in &report.files {
+        println!("  {verb:<12} {}", file.relative);
+        for note in &file.notes {
+            println!(
+                "  note         {}:{}: {}",
+                file.relative, note.line, note.message
+            );
+        }
+    }
+    if report.check_only {
+        println!(
+            "\n{} file(s) would change ({} rewrite(s), {} note(s)); nothing was written (--check).",
+            report.files.len(),
+            report.rewrites,
+            report.notes
+        );
+    } else {
+        println!(
+            "\nUpdated {} file(s) ({} rewrite(s), {} note(s)).",
+            report.files.len(),
+            report.rewrites,
+            report.notes
+        );
+    }
 }
 
 /// The app containing `cwd`.

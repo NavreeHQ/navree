@@ -40,6 +40,7 @@
 //! | `navree plugin:add [PACKAGE] [--version REQ] [--path DIR] [--no-wire] [--publish-config]` | Install a plugin, wire its module, and write its suggested grants and page sources ([`plugin::add::run`]) |
 //! | `navree plugin:remove PACKAGE` | Unwire a plugin and remove its crate, keeping its configuration, grants and data ([`plugin::remove::run`]) |
 //! | `navree plugin:list [--json]` | List the plugins this app depends on and whether each is wired ([`plugin::list::run`]) |
+//! | `navree upgrade [--check] [PATH]` | Move an app's or crate's dates and times onto `navree::datetime` ([`upgrade::run`]) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass
@@ -80,3 +81,4 @@ pub mod resource;
 pub mod scaffold;
 mod shared_settings;
 pub mod templates;
+pub mod upgrade;

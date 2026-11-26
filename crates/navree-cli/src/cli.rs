@@ -156,6 +156,8 @@ pub enum Command {
     /// List the plugins this app depends on and whether each is wired.
     #[command(name = "plugin:list")]
     PluginList(PluginListArgs),
+    /// Move an app's or crate's dates and times off chrono onto Navree's own.
+    Upgrade(UpgradeArgs),
     /// A command of the app binary.
     #[command(external_subcommand)]
     Forward(Vec<String>),
@@ -382,6 +384,17 @@ pub struct PluginListArgs {
     /// Print the plugin list as JSON.
     #[arg(long)]
     pub json: bool,
+}
+
+/// `navree upgrade [--check] [PATH]`.
+#[derive(Debug, Args, PartialEq, Eq)]
+pub struct UpgradeArgs {
+    /// Report the files that would change and the notes that would be added, without writing anything.
+    #[arg(long)]
+    pub check: bool,
+    /// The app, crate or directory to upgrade (default: `.`).
+    #[arg(value_name = "PATH")]
+    pub path: Option<PathBuf>,
 }
 
 /// `navree make:page <Name> [--module <module>] [--public] [--path src/modules]
@@ -1513,5 +1526,37 @@ mod tests {
                 "{command} missing from help:\n{help}"
             );
         }
+    }
+
+    #[test]
+    fn upgrade_options() {
+        let Command::Upgrade(args) = parse(&["upgrade"]) else {
+            panic!("expected upgrade");
+        };
+        assert_eq!(
+            args,
+            UpgradeArgs {
+                check: false,
+                path: None,
+            }
+        );
+        let Command::Upgrade(args) = parse(&["upgrade", "--check", "apps/store-demo"]) else {
+            panic!("expected upgrade --check PATH");
+        };
+        assert_eq!(
+            args,
+            UpgradeArgs {
+                check: true,
+                path: Some(PathBuf::from("apps/store-demo")),
+            }
+        );
+        let Command::Upgrade(args) = parse(&["upgrade", "crates/navree-orm", "--check"]) else {
+            panic!("expected upgrade PATH --check");
+        };
+        assert!(args.check);
+        assert_eq!(
+            args.path.as_deref(),
+            Some(std::path::Path::new("crates/navree-orm"))
+        );
     }
 }

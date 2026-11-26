@@ -48,14 +48,17 @@ navree-dock = { workspace = true }
 navree-harbor = { workspace = true }
 navree-navigator = { workspace = true }
 notify = { workspace = true }
+# Byte offsets on `syn` spans for `navree upgrade`'s source-preserving rewrites.
+proc-macro2 = { workspace = true, features = ["span-locations"] }
+quote = { workspace = true }
 # `navree browser:install`: downloads Chrome for Testing (rustls with ring)
 # and unpacks the zip.
 reqwest = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-# Reads models for `make:resource`.
-syn = { workspace = true }
+# Reads models for `make:resource` and AST spans for `navree upgrade`.
+syn = { workspace = true, features = ["visit"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
