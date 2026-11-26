@@ -5593,7 +5593,6 @@ dependencies = [
 name = "navree-observe"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "http",
  "http-body-util",
@@ -5602,6 +5601,7 @@ dependencies = [
  "metrics-exporter-prometheus",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-http",
  "navree-http-client",
  "navree-kernel",

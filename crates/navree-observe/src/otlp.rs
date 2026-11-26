@@ -166,8 +166,8 @@ pub(crate) fn span_data(span: RecordedSpan, scope: &InstrumentationScope) -> Spa
             SpanKind::Internal => OtelSpanKind::Internal,
         },
         name: Cow::Owned(span.name),
-        start_time: SystemTime::from(span.start),
-        end_time: SystemTime::from(span.end),
+        start_time: to_system_time(span.start),
+        end_time: to_system_time(span.end),
         attributes: span
             .attributes
             .into_iter()
@@ -194,5 +194,27 @@ fn key_value(key: String, value: Value) -> KeyValue {
         },
         Value::String(text) => KeyValue::new(key, text),
         other => KeyValue::new(key, other.to_string()),
+    }
+}
+
+/// A [`Timestamp`](navree_datetime::Timestamp) as a [`SystemTime`] for the OpenTelemetry SDK.
+fn to_system_time(at: navree_datetime::Timestamp) -> SystemTime {
+    let secs = at.as_secs();
+    let nanos = at.subsec_nanos();
+    if secs >= 0 {
+        SystemTime::UNIX_EPOCH
+            .checked_add(Duration::new(secs as u64, nanos))
+            .unwrap_or(SystemTime::UNIX_EPOCH)
+    } else if nanos == 0 {
+        SystemTime::UNIX_EPOCH
+            .checked_sub(Duration::from_secs(secs.unsigned_abs()))
+            .unwrap_or(SystemTime::UNIX_EPOCH)
+    } else {
+        SystemTime::UNIX_EPOCH
+            .checked_sub(Duration::new(
+                (secs + 1).unsigned_abs(),
+                1_000_000_000 - nanos,
+            ))
+            .unwrap_or(SystemTime::UNIX_EPOCH)
     }
 }
