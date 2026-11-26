@@ -10,8 +10,8 @@
 //! expression on a fixed offset.
 #![no_main]
 
-use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
 use libfuzzer_sys::fuzz_target;
+use navree_datetime::{Offset, Span, Timestamp, Zone};
 use navree_schedule::CronExpression;
 use navree_time::Tz;
 
@@ -50,9 +50,9 @@ fuzz_target!(|data: &[u8]| {
     // Instants from the whole range and from the neighbourhood of "now",
     // where the daylight saving changes of the zones above are.
     let after = if header[0] % 2 == 0 {
-        DateTime::from_timestamp(far, 0)
+        Timestamp::from_secs(far).ok()
     } else {
-        DateTime::from_timestamp(1_700_000_000 + i64::from(near % 20_000_000) * 60, 0)
+        Timestamp::from_secs(1_700_000_000 + i64::from(near % 20_000_000) * 60).ok()
     };
     let Some(after) = after else { return };
 
@@ -66,19 +66,19 @@ fuzz_target!(|data: &[u8]| {
             "{cron} on {zone}: {next} is not due"
         );
     }
-    if let Some(next) = cron.next_after(after, &Utc) {
+    if let Some(next) = cron.next_after(after, &Zone::UTC) {
         assert!(next > after);
-        assert!(cron.is_due(next, &Utc));
+        assert!(cron.is_due(next, &Zone::UTC));
         if cron.follows_wall_clock() {
             // Nothing is due between `after` and the next run (checked for
             // a few minutes: the search is exhaustive on a fixed offset).
             let mut minute =
-                after.checked_add_signed(TimeDelta::seconds(60 - after.timestamp().rem_euclid(60)));
+                after.checked_add(Span::seconds(60 - after.as_secs().rem_euclid(60)));
             for _ in 0..16 {
                 match minute {
                     Some(m) if m < next => {
-                        assert!(!cron.is_due(m, &Utc), "{cron}: {m} is due before {next}");
-                        minute = m.checked_add_signed(TimeDelta::minutes(1));
+                        assert!(!cron.is_due(m, &Zone::UTC), "{cron}: {m} is due before {next}");
+                        minute = m.checked_add(Span::minutes(1));
                     }
                     _ => break,
                 }
@@ -86,7 +86,7 @@ fuzz_target!(|data: &[u8]| {
         }
     }
     let offset = i32::from(offset_minutes) * 60;
-    if let Some(fixed) = FixedOffset::east_opt(offset.clamp(-86_399, 86_399)) {
+    if let Ok(fixed) = Offset::east(offset.clamp(-86_399, 86_399)) {
         if let Some(next) = cron.next_after(after, &fixed) {
             assert!(next > after);
             assert!(cron.is_due(next, &fixed));

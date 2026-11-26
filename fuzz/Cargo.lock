@@ -2085,11 +2085,11 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 name = "navree-access"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree-bounded",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",
@@ -2124,7 +2124,6 @@ name = "navree-auth"
 version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
- "chrono",
  "form_urlencoded",
  "http",
  "navree-access",
@@ -2132,6 +2131,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-http-client",
@@ -2192,6 +2192,8 @@ dependencies = [
  "navree-navigator",
  "navree-template",
  "notify",
+ "proc-macro2",
+ "quote",
  "reqwest",
  "rustls",
  "serde",
@@ -2223,7 +2225,7 @@ dependencies = [
 name = "navree-contracts"
 version = "1.6.0"
 dependencies = [
- "chrono",
+ "navree-datetime",
  "navree-kernel",
  "serde",
  "serde_json",
@@ -2238,11 +2240,11 @@ dependencies = [
  "aes-gcm",
  "argon2",
  "base64 0.23.1",
- "chrono",
  "hex",
  "hmac",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-kernel",
  "rand 0.10.4",
  "ring",
@@ -2259,18 +2261,21 @@ dependencies = [
 
 [[package]]
 name = "navree-datetime"
-version = "1.5.0"
+version = "1.6.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "navree-db"
 version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
- "chrono",
  "futures-util",
  "http",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-http",
  "navree-kernel",
  "navree-openapi",
@@ -2293,13 +2298,13 @@ name = "navree-directory"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "hex",
  "http",
  "ldap3",
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
@@ -2341,10 +2346,10 @@ version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
- "chrono",
  "http",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-http",
  "navree-kernel",
  "navree-pdf",
@@ -2365,7 +2370,6 @@ name = "navree-domains"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "hickory-resolver",
  "http",
  "http-body-util",
@@ -2374,6 +2378,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
@@ -2419,7 +2424,6 @@ dependencies = [
  "arbitrary",
  "base64 0.23.1",
  "bytes",
- "chrono",
  "flate2",
  "futures",
  "http",
@@ -2434,6 +2438,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-directory",
  "navree-documents",
  "navree-domains",
@@ -2480,9 +2485,9 @@ dependencies = [
  "aes-gcm",
  "anyhow",
  "base64 0.23.1",
- "chrono",
  "clap",
  "flate2",
+ "navree-datetime",
  "navree-template",
  "rand 0.10.4",
  "rpassword",
@@ -2500,7 +2505,6 @@ name = "navree-http"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "dashmap",
  "encoding_rs",
  "flate2",
@@ -2518,6 +2522,7 @@ dependencies = [
  "mime",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-kernel",
  "navree-openapi",
  "navree-telemetry",
@@ -2539,12 +2544,12 @@ name = "navree-http-client"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "futures-util",
  "http",
  "ipnet",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-glob",
  "navree-kernel",
  "navree-telemetry",
@@ -2566,13 +2571,13 @@ version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
- "chrono",
  "form_urlencoded",
  "http",
  "navree-cache",
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
@@ -2607,7 +2612,6 @@ name = "navree-logbook"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "form_urlencoded",
  "http",
  "http-body",
@@ -2615,6 +2619,7 @@ dependencies = [
  "navree-auth",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-glob",
  "navree-http",
@@ -2649,7 +2654,6 @@ version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
- "chrono",
  "css-inline",
  "encoding_rs",
  "hex",
@@ -2662,6 +2666,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
@@ -2701,7 +2706,6 @@ dependencies = [
  "async-trait",
  "base64 0.23.1",
  "bytes",
- "chrono",
  "dashmap",
  "futures",
  "http",
@@ -2712,6 +2716,7 @@ dependencies = [
  "navree-cache",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",
@@ -2731,11 +2736,11 @@ name = "navree-micro"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "futures-util",
  "http",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
@@ -2761,10 +2766,10 @@ dependencies = [
 name = "navree-navigator"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "html5ever",
  "navree-config",
+ "navree-datetime",
  "navree-dock",
  "reqwest",
  "rusqlite",
@@ -2784,7 +2789,6 @@ name = "navree-oauth"
 version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
- "chrono",
  "form_urlencoded",
  "http",
  "navree-access",
@@ -2793,6 +2797,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",
@@ -2814,8 +2819,8 @@ dependencies = [
 name = "navree-openapi"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "indexmap",
+ "navree-datetime",
  "navree-macros",
  "serde",
  "serde_json",
@@ -2828,7 +2833,6 @@ version = "1.6.0"
 dependencies = [
  "argon2",
  "base64 0.23.1",
- "chrono",
  "futures",
  "heck",
  "http",
@@ -2838,6 +2842,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
@@ -2859,8 +2864,8 @@ dependencies = [
 name = "navree-orm-macros"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "heck",
+ "navree-datetime",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
@@ -2891,12 +2896,12 @@ version = "1.6.0"
 name = "navree-queue"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "hex",
  "http",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",
@@ -2948,10 +2953,10 @@ dependencies = [
 name = "navree-schedule"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-kernel",
  "navree-telemetry",
@@ -2979,13 +2984,13 @@ dependencies = [
 name = "navree-search"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures",
  "hex",
  "http",
  "navree-access",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-http-client",
@@ -3010,7 +3015,6 @@ version = "1.6.0"
 dependencies = [
  "bytes",
  "chardetng",
- "chrono",
  "csv",
  "encoding_rs",
  "futures-util",
@@ -3018,6 +3022,7 @@ dependencies = [
  "http",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",
@@ -3045,7 +3050,6 @@ name = "navree-sso"
 version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
- "chrono",
  "flate2",
  "form_urlencoded",
  "http",
@@ -3054,6 +3058,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
@@ -3078,7 +3083,6 @@ name = "navree-storage"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "futures-util",
  "hex",
  "http",
@@ -3087,6 +3091,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-http",
  "navree-kernel",
  "navree-telemetry",
@@ -3103,7 +3108,7 @@ dependencies = [
 name = "navree-telemetry"
 version = "1.6.0"
 dependencies = [
- "chrono",
+ "navree-datetime",
  "navree-kernel",
  "rand 0.10.4",
  "serde",
@@ -3144,7 +3149,6 @@ dependencies = [
 name = "navree-time"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree-config",
  "navree-contracts",
@@ -3166,12 +3170,12 @@ version = "1.6.0"
 dependencies = [
  "brotli",
  "bytes",
- "chrono",
  "futures-util",
  "http",
  "http-body",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-http",
  "navree-kernel",
  "navree-markdown",
@@ -3204,13 +3208,13 @@ dependencies = [
 name = "navree-validation"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "form_urlencoded",
  "html5ever",
  "http",
  "icu_locale_core",
  "memchr",
  "navree-config",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",
@@ -3244,8 +3248,8 @@ dependencies = [
 name = "navree-view"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "navree-config",
+ "navree-datetime",
  "navree-kernel",
  "navree-template",
  "serde",
@@ -3260,7 +3264,6 @@ version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
- "chrono",
  "form_urlencoded",
  "hex",
  "hmac",
@@ -3268,6 +3271,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
@@ -3296,7 +3300,6 @@ name = "navree-workspace"
 version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
- "chrono",
  "form_urlencoded",
  "heck",
  "http",
@@ -3304,6 +3307,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",
@@ -4509,7 +4513,6 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "cfg-if",
- "chrono",
  "crc",
  "crossbeam-queue",
  "either",
@@ -4586,7 +4589,6 @@ dependencies = [
  "bitflags",
  "byteorder",
  "bytes",
- "chrono",
  "crc",
  "digest",
  "dotenvy",
@@ -4616,7 +4618,6 @@ dependencies = [
  "base64 0.22.1",
  "bitflags",
  "byteorder",
- "chrono",
  "crc",
  "dotenvy",
  "etcetera",
@@ -4651,7 +4652,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88b6b78a34ddcb1db4046d462db8f79cee811019d7297b99fca8fac5de26672e"
 dependencies = [
  "atoi",
- "chrono",
  "flume",
  "form_urlencoded",
  "futures-channel",

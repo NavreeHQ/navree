@@ -15,6 +15,7 @@ use std::task::{Context, Poll, Waker};
 use arbitrary::Arbitrary;
 use http::{HeaderValue, Method, Request, Response, StatusCode, Uri};
 use libfuzzer_sys::fuzz_target;
+use navree_datetime::{Span, Timestamp};
 use navree_http::{CorsLayer, CorsOptions, UrlSigner};
 use tower::{Layer, Service, service_fn};
 
@@ -111,8 +112,8 @@ fn cors(input: &Input) {
 
 fn signed_url(input: &Input) {
     let signer = UrlSigner::new(b"fuzzing-signing-key-0123456789abc");
-    let now = chrono::DateTime::from_timestamp(1_792_929_600, 0).expect("a time");
-    let later = now + chrono::TimeDelta::hours(1);
+    let now = Timestamp::from_secs(1_792_929_600).expect("a time");
+    let later = now + Span::hours(1);
     // A URL we signed verifies, and no longer once it has expired. `sign`
     // takes a path and query as they go on the wire: no fragment.
     if let Ok(path) =
@@ -121,7 +122,7 @@ fn signed_url(input: &Input) {
         let signed = signer.sign(path.as_str(), later);
         if let Ok(uri) = signed.parse::<Uri>() {
             assert!(signer.verify(&uri, now), "a signed URL verifies: {signed}");
-            assert!(!signer.verify(&uri, later + chrono::TimeDelta::seconds(1)));
+            assert!(!signer.verify(&uri, later + Span::seconds(1)));
         }
     }
     // Whatever arrives on the wire.

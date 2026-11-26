@@ -12,12 +12,12 @@
 
 use std::sync::{Arc, OnceLock};
 
-use chrono::{TimeZone, Utc};
 use libfuzzer_sys::fuzz_target;
 use navree_auth::JwtOptions;
 use navree_auth::{AuthError, JwtService, LEEWAY_SECS, TokenType};
 use navree_contracts::FixedClock;
 use navree_crypto::jose::{Algorithm, SigningKey};
+use navree_datetime::Timestamp;
 use serde_json::{Value, json};
 
 const SECRET: &[u8] = b"fuzzing-secret-0123456789abcdef!";
@@ -34,7 +34,7 @@ const TYPES: [TokenType; 5] = [
 fn service() -> &'static (JwtService, SigningKey) {
     static SERVICE: OnceLock<(JwtService, SigningKey)> = OnceLock::new();
     SERVICE.get_or_init(|| {
-        let clock = Arc::new(FixedClock::new(Utc.timestamp_opt(NOW, 0).unwrap()));
+        let clock = Arc::new(FixedClock::new(Timestamp::from_secs(NOW).unwrap()));
         (
             JwtService::new(SECRET, &JwtOptions::default()).with_clock(clock),
             SigningKey::hmac(Algorithm::HS256, SECRET).unwrap(),
