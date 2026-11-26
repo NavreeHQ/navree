@@ -43,8 +43,8 @@ Helpers: `timestamps_tz()` (nullable `created_at`, `updated_at`),
 | `Ulid` key | `ulid_primary()` |
 | `String` | `string`, `text`, `char` |
 | `i32`, `i64`, `bool`, `Decimal` | `integer`, `big_integer`, `boolean`, `decimal(name, p, s)` |
-| `DateTime<Utc>` | `timestamp_tz` (`timestamps_tz()`, `soft_deletes_tz()`) |
-| `NaiveDate` | `date` |
+| `Timestamp`, `Zoned` | `timestamp_tz` (`timestamps_tz()`, `soft_deletes_tz()`) |
+| `Date`, `Time`, `DateTime` | `date`, `time`, `date_time` |
 | `cast = "json"`, `serde_json::Value` | `json` (`jsonb` on PostgreSQL) |
 | `cast = "string_enum"` | `string(..).length(n)` or `enumeration` |
 | `Option<T>` | the same, `.nullable()` |

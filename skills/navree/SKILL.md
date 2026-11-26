@@ -21,7 +21,7 @@ or by a Next.js or Nuxt app beside the API.
 ## Recognize a Navree app
 
 - `Cargo.toml` depends on `navree` (plus `serde`, whose derives name their
-  own crate, and `chrono` and `uuid`).
+  own crate, and `uuid`).
 - `src/app.rs` builds the root with `Navree::app().module(..)` and a
   `// navree:modules` marker; `src/main.rs` calls `app(ConfigSources::defaults()).run()`.
 - Feature code lives in `src/modules/<name>/` (`mod.rs`, `controller.rs`,
@@ -95,7 +95,7 @@ navree list                                 # every command of the app
 `navree <cmd>` runs `cargo run --quiet -- <cmd>` for anything the CLI
 doesn't own: `new`, `make:*`, `dev`, `check`, `gate`, `dock*`, the Harbor
 commands, `mcp`, `skills:install`, `browser:install`, `openapi:client`,
-`native:coverage`, `native:doctor` and `native:init` run in the CLI itself.
+`native:coverage`, `native:doctor`, `native:init` and `upgrade` run in the CLI itself.
 
 ## Which skill to load
 
@@ -186,7 +186,7 @@ commands, `mcp`, `skills:install`, `browser:install`, `openapi:client`,
   request's writes escape its rollback.
 - Reading a relation inside a loop over records: eager load it with
   `with("relation")`; in development the ORM refuses the lazy load.
-- Using `Utc::now()` where tests need a fixed time: inject `Arc<dyn Clock>`.
+- Using `Timestamp::now()` where tests need a fixed time: inject `Arc<dyn Clock>`.
 - Setting a key in both `.env` and `config/app.toml`: `.env` wins over the
   TOML file and the boot warns. Real environment variables win over both.
 - Writing a model with a mass update to get audited: `query.update(..)` and

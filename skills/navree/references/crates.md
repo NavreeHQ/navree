@@ -1,7 +1,7 @@
 # The navree facade: modules, crates and sections
 
 An app depends on the `navree` crate alone (plus `serde` for its derives,
-and `chrono` and `uuid`). Its default `full`
+and `uuid`). Its default `full`
 feature turns every module on; each module is also its own feature.
 `postgres` adds the PostgreSQL driver, `mysql` the MySQL and MariaDB
 driver and `sqlite` the SQLite driver (the bundled library). None is on by
@@ -15,7 +15,7 @@ MongoDB.
 | `navree::kernel` | navree-kernel | always | (the kernel) | | `Navree::app()`, `AppBuilder`, `Module`, `ModuleBuilder`, the DI container, `CommandSpec` |
 | `navree::bounded` | navree-bounded | always | | | the bounded in-process `Cache`: strict capacity, SIEVE eviction, TTL and TTI, single-flight loading |
 | `navree::glob` | navree-glob | always | | | `Glob::new("/webhooks/*").matches(path)`: `*` any run of characters, `?` one, everything else literal and case-sensitive |
-| `navree::datetime` | navree-datetime | always | | | dates and times of Navree's own: `Timestamp` (an exact instant; `Timestamp::now()`), `Date`, `Time`, `DateTime` (a day and a time with no zone), `Offset`, and `Span` (an exact length of time; `Span::hours(36)`) |
+| `navree::datetime` | navree-datetime | always | | | dates and times of Navree's own: `Timestamp` (an exact instant; `Timestamp::now()`), `Date`, `Time`, `DateTime` (a day and a time with no zone), `Offset`, `Zone`, `Zoned` and `Span` (an exact length of time; `Span::hours(36)`) |
 | `navree::contracts` | navree-contracts | always | | | `Principal`, `Job`, `JobContext`, `Clock`, `SystemClock`, `FixedClock`, `Broadcaster`, `Dispatcher`, `Secret<T>`, `RequestId`, `CredentialRevoker` |
 | `navree::config` | navree-config | always | `ConfigModule::for_root(sources)` | | `ConfigSources`, `Config`, `ConfigSection` (`.env`, TOML and JSON files, `APP_*` variables) |
 | `navree::telemetry` | navree-telemetry | `telemetry` (turned on by the modules that emit events) | | | typed telemetry events, sinks, W3C trace context |

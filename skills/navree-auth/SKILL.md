@@ -232,9 +232,9 @@ use navree::BoxFuture;
 use navree::auth::Strategy;
 use navree::contracts::{AuthVia, Principal};
 use navree::crypto::sha256_hex;
+use navree::datetime::Timestamp;
 use navree::db::Db;
 use navree::prelude::*;
-use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -246,8 +246,8 @@ pub struct ApiKey {
     pub user_id: Uuid,
     pub key_hash: String,
     pub abilities: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 #[injectable]

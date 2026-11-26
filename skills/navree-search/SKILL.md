@@ -42,7 +42,7 @@ sync = "queued"            # queued | inline | off
    `Serialize` and have a single-column primary key):
 
 ```rust
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::search::Searchable;
 use serde::Serialize;
 use uuid::Uuid;
@@ -64,7 +64,7 @@ pub struct Contact {
     pub notes: Option<String>,
     #[searchable(rename = "email_address", boost = 2)] // index name; rules still name `email`
     pub email: Option<String>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<Timestamp>,
 }
 ```
 

@@ -187,7 +187,7 @@ what stands at its end. `row_opens` (a drawer or sheet that answers ops) and
 naming cell opens that.
 
 ```rust
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::{DataTable, Empty, TablePage, TableQuery, TableRow, icons};
 
 /// An order as the table shows it.
@@ -205,7 +205,7 @@ pub struct OrderRow {
     #[col(sortable, numeric, role = trailing)]
     pub total: i64,
     #[col(sortable, filter = date, label = "Placed")]
-    pub placed_on: NaiveDate,
+    pub placed_on: Date,
 }
 
 /// The orders table. A tap on a row opens the order over the list.

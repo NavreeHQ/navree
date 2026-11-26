@@ -49,7 +49,7 @@ long notes in a one-line input.
 holds, then compare with the control drawn.
 
 **Navree form:** the field's Rust type picks the control (`components.md`,
-Forms): `NaiveDate` a date input, `Money` an amount, `bool` a checkbox or
+Forms): `Date` a date input, `Money` an amount, `bool` a checkbox or
 switch, an `Options` enum a select or radios, `widget = email | tel | url`,
 `widget = textarea`, a reference a select with server-side choices (a
 combobox searched on the server when the table is large, entry 4), several
@@ -263,7 +263,7 @@ asks for it (`prefetch`), so a link must never change anything.
 
 **Detect:** every time on screen: whose clock is it?
 
-**Navree form:** a calendar day is `NaiveDate`; an instant is stored in
+**Navree form:** a calendar day is `Date`; an instant is stored in
 UTC and shown in the user's or workspace's zone (`navree-time-zones`).
 Say which in the page spec.
 

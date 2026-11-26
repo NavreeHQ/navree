@@ -189,7 +189,7 @@ then `navree::db::Migrator::status(app.ctx())`.
 | events | `app.get::<EventBus>().await.subscribe_json("deal.won")` before the request | `rx.try_recv()` |
 
 `FixedClock` (`navree::testing::FixedClock`) only controls code reading the
-app's `dyn Clock` (Navree's own modules do; `Utc::now()` doesn't). The
+app's `dyn Clock` (Navree's own modules do; `Timestamp::now()` doesn't). The
 `QueueFake` records jobs even from requests that roll back, and accepts
 unregistered jobs: keep one test on the real queue.
 
@@ -223,7 +223,7 @@ concurrency tests.
   (the directory waits in `%TEMP%` while a pool holds its files; the guard
   retries for about 30 seconds, and test processes remove `navree-test-*`
   directories older than an hour).
-- Asserting on `Utc::now()` values: inject `dyn Clock` and fix it.
+- Asserting on `Timestamp::now()` values: inject `dyn Clock` and fix it.
 
 ## Docs
 

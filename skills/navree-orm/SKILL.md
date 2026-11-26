@@ -29,7 +29,7 @@ Feature `orm` (in `full`). Imports: `use navree::orm::prelude::*;` (models,
    a factory, and adds `m.model::<Deal>()` to the module's `wire`
    (`--seeder`, `--controller`, `--policy`, or `--all` for every companion).
 2. Fill in the struct and the migration together: a `Uuid` key is
-   `t.uuid_primary()`, `DateTime<Utc>` is `timestamp_tz`, `Option<T>` is
+   `t.uuid_primary()`, `Timestamp` is `timestamp_tz`, `Option<T>` is
    `.nullable()` (load `navree-migrations` for the column table). On MySQL and
    MariaDB the builder's `uuid` columns are `BINARY(16)`, the bytes a model writes.
 3. Add relations in a `#[relations] impl` block and scopes in `#[scopes]`.
@@ -44,7 +44,7 @@ The app's root needs `OrmModule::from_config()` after `DatabaseModule`
 ## Model
 
 ```rust,ignore
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::orm::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -73,10 +73,10 @@ pub struct Deal {
     pub amount_cents: i64,
     #[model(cast = "string_enum")]
     pub stage: Stage,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub closed_at: Option<Timestamp>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 #[relations]
@@ -167,7 +167,7 @@ impl DealService {
     pub async fn win(&self, uow: &Uow, id: Uuid) -> Result<Record<Deal>> {
         let mut deal = Deal::find_or_fail(uow, id).await?; // 404 when missing
         deal.stage = Stage::Won;
-        deal.closed_at = Some(chrono::Utc::now());
+        deal.closed_at = Some(navree::datetime::Timestamp::now());
         deal.save(uow).await?;
         Ok(deal)
     }

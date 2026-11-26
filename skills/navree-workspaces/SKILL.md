@@ -354,8 +354,8 @@ pub struct Template {
     pub workspace_id: Option<Uuid>,
     pub cloned_from_id: Option<Uuid>,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 impl Library for Template {}               // cloning(&mut self, src) / cloned(uow, src, copy) hooks optional
 

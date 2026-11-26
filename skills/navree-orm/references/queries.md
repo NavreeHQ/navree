@@ -109,7 +109,7 @@ rereads a record under a lock.
 let lost: u64 = Deal::query()
     .where_(Deal::STAGE.eq(Stage::Lead))
     .where_(Deal::UPDATED_AT.lt(cutoff))
-    .update(&uow, [Deal::STAGE.set(Stage::Lost), Deal::CLOSED_AT.set(Utc::now())])
+    .update(&uow, [Deal::STAGE.set(Stage::Lost), Deal::CLOSED_AT.set(Timestamp::now())])
     .await?;
 Activity::query().where_(Activity::COMPLETED_AT.lt(cutoff)).delete(&uow).await?;
 Tag::upsert(&uow, tags, [Tag::NAME], [Tag::COLOR]).await?;

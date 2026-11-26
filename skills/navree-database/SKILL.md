@@ -45,7 +45,7 @@ request, `&Db` (which joins the current unit of work) elsewhere.
 ## Model
 
 ```rust
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::orm::Model;
 use serde::Serialize;
 use uuid::Uuid;
@@ -57,8 +57,8 @@ pub struct Post {
     pub owner_id: Option<Uuid>,
     pub name: String,
     pub published: bool,
-    pub created_at: DateTime<Utc>,   // filled in and touched by `timestamps`
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,       // filled in and touched by `timestamps`
+    pub updated_at: Timestamp,
 }
 ```
 

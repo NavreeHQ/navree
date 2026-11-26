@@ -68,7 +68,7 @@ and a `Form` struct says what the form edits. Keep them apart when the
 list shows less than the model, or names from other tables.
 
 ```rust
-use chrono::{DateTime, NaiveDate, Utc};
+use navree::datetime::{Date, Timestamp};
 use navree::orm::Record;
 use navree::ui::form::{Money, Options as _};
 use navree::ui::{BadgeVariant, Form, Options, TableRow, Validate};
@@ -98,10 +98,10 @@ pub struct Deal {
     #[model(cast = "string_enum")]
     pub stage: Stage,
     pub amount: i64, // minor units
-    pub closes_on: Option<NaiveDate>,
+    pub closes_on: Option<Date>,
     pub notes: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// The stage filter's choices: the values stored, with the design's labels.
@@ -132,10 +132,10 @@ pub struct DealRow {
     pub amount: Money,
     /// Closes
     #[col(sortable, hide_on_mobile, filter = date)]
-    pub closes_on: Option<NaiveDate>,
+    pub closes_on: Option<Date>,
     /// Updated
     #[col(sortable, hide_on_mobile)]
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl DealRow {
@@ -172,7 +172,7 @@ pub struct DealInput {
     pub stage: Stage,
     /// Expected close
     #[validate(skip)]
-    pub closes_on: Option<NaiveDate>,
+    pub closes_on: Option<Date>,
     #[validate(length(max = 2000))]
     #[form(widget = textarea, rows = 4, help = "Only your team sees this.")]
     pub notes: Option<String>,
@@ -180,7 +180,7 @@ pub struct DealInput {
 ```
 
 The type picks the control: `String` a text input, a number a number
-input, `bool` a checkbox, `Option<NaiveDate>` a date input, `Money` an
+input, `bool` a checkbox, `Option<Date>` a date input, `Money` an
 amount typed like `12,500.50`, an enum with `Options` a select (or
 `widget = radio`), a `Many<T>` a multi-select. `widget = select` (the
 browser's) or `listbox` (the styled `Select`) on a `String` takes its

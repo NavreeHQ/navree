@@ -294,7 +294,7 @@ one `PointSeries` or several. `equal_domains()` gives both axes one range,
 and `Reference::identity()` draws the diagonal.
 
 ```rust
-use chrono::{Duration, NaiveDate};
+use navree::datetime::Date;
 use navree::ui::charts::{
     Axis, CalendarHeatmap, Domain, Gridlines, HeatSteps, Ink, MatrixHeatmap, PointSeries,
     Reference, Relation, RelationList, Scatter,
@@ -303,12 +303,12 @@ use navree::ui::Tone;
 
 /// A day's steps for the last 90 days; `None` where the phone recorded nothing.
 pub fn daily_steps(steps: &[Option<f64>]) -> CalendarHeatmap {
-    let last = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();
+    let last = Date::new(2026, 11, 12).unwrap_or_default();
     let days = steps
         .iter()
         .rev()
         .enumerate()
-        .map(|(back, value)| (last - Duration::days(back as i64), *value));
+        .filter_map(|(back, value)| Some((last.add_days(-(back as i64))?, *value)));
     CalendarHeatmap::new("Daily steps")
         .description("Neha Sharma, the last 90 days")
         .locale("en-IN")
@@ -414,7 +414,7 @@ motion and a screen reader get.
 | `format(NumberFormat::clock(18))` | values as minutes past 6 PM, written as times through midnight |
 
 ```rust
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::charts::{
     ActiveDot, Chart, ColorScale, CountUp, Curve, Domain, Dots, Gradient, Gridlines, Ink, Motion,
     NumberFormat, Reference, Series, Sparkline, Ticks, TooltipStyle, Zone,
@@ -422,7 +422,7 @@ use navree::ui::charts::{
 use navree::ui::{Bars, Grid, Progress, Stat, Tone};
 
 /// Resting heart rate over a fortnight, with the healthy band shaded.
-pub fn resting_heart(days: Vec<NaiveDate>, bpm: Vec<u32>) -> Chart {
+pub fn resting_heart(days: Vec<Date>, bpm: Vec<u32>) -> Chart {
     Chart::area("Resting heart rate")
         .description("Harpreet Gill, the last 14 days")
         .locale("en-IN")
@@ -470,7 +470,7 @@ pub fn body_age() -> Chart {
 }
 
 /// Bedtimes and waking times on one axis through midnight.
-pub fn bedtimes(days: Vec<NaiveDate>, to_bed: Vec<u32>, woke: Vec<u32>) -> Chart {
+pub fn bedtimes(days: Vec<Date>, to_bed: Vec<u32>, woke: Vec<u32>) -> Chart {
     Chart::line("Bedtime and waking")
         .days(days)
         .series(Series::new("To bed", to_bed).ink(Ink::slot(7)))

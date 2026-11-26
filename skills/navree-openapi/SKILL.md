@@ -25,7 +25,7 @@ security (bearer) and the access-related error responses come for free.
 ## Template
 
 ```rust
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -39,7 +39,7 @@ pub struct NoteResource {
     pub resource_type: &'static str,
     pub id: Uuid,
     pub body: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// What `POST /api/v1/notes` takes.
@@ -71,7 +71,7 @@ impl NotesController {
             resource_type: "Note",
             id: Uuid::now_v7(),
             body: input.body,
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
         };
         Ok(Created(format!("/api/v1/notes/{}", note.id), note))
     }

@@ -98,7 +98,7 @@ static DATABASE: Template = Template::new("deals", |template| {
 async fn won_deals_are_not_open(db: TestDb) -> Result<(), BoxError> {
     let deals = Deal::factory().count(3).create(db.db()).await?;
     let mut won = Deal::factory().state(DealFactory::won).create_one(db.db()).await?;
-    won.closed_at = Some(chrono::Utc::now());
+    won.closed_at = Some(navree::datetime::Timestamp::now());
     won.save(db.db()).await?;
 
     assert_eq!(Deal::query().open().count(db.db()).await?, 3);
