@@ -17,7 +17,7 @@
 use std::fmt;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use uuid::Uuid;
 
 use crate::{BoxFuture, Principal};
@@ -164,12 +164,12 @@ pub struct IssuedTicket {
     /// The sealed ticket (URL- and form-safe).
     pub ticket: String,
     /// When it stops being accepted.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 impl IssuedTicket {
     /// A ticket `ticket` that expires at `expires_at` (for implementations).
-    pub fn new(ticket: String, expires_at: DateTime<Utc>) -> Self {
+    pub fn new(ticket: String, expires_at: Timestamp) -> Self {
         Self { ticket, expires_at }
     }
 }
@@ -197,9 +197,9 @@ pub struct RedeemedTicket {
     /// The digest it was bound to, if any.
     pub binding: Option<String>,
     /// When it was issued.
-    pub issued_at: DateTime<Utc>,
+    pub issued_at: Timestamp,
     /// When it would have expired.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 impl RedeemedTicket {
@@ -209,8 +209,8 @@ impl RedeemedTicket {
         method: String,
         path: String,
         binding: Option<String>,
-        issued_at: DateTime<Utc>,
-        expires_at: DateTime<Utc>,
+        issued_at: Timestamp,
+        expires_at: Timestamp,
     ) -> Self {
         Self {
             feature,
@@ -335,7 +335,7 @@ mod tests {
         assert_eq!(check.path.as_deref(), Some("/orders/7"));
         assert_eq!(route_path("/"), "/");
         assert_eq!(route_path(""), "/");
-        let issued = IssuedTicket::new("v1.secret".to_owned(), Utc::now());
+        let issued = IssuedTicket::new("v1.secret".to_owned(), Timestamp::now());
         assert!(!format!("{issued:?}").contains("secret"));
         assert_eq!(TicketError::Used.code(), "used");
     }
