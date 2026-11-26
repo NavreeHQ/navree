@@ -109,7 +109,7 @@ mod s3 {
     use std::collections::BTreeMap;
     use std::time::Duration;
 
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use navree_contracts::{HealthCheck, HealthStatus};
     use navree_kernel::Navree;
     use navree_storage::{
@@ -199,7 +199,7 @@ mod s3 {
 
         let http = Http::network();
         let url = disk
-            .temporary_url("logo.png", Utc::now() + chrono::Duration::minutes(1))
+            .temporary_url("logo.png", Timestamp::now() + navree_datetime::Span::minutes(1))
             .await
             .unwrap();
         assert!(url.contains("/navree-test/tenants/agra/logo.png?"), "{url}");
@@ -207,7 +207,7 @@ mod s3 {
 
         let rules = UploadRules::new(1000, ["image/png"]);
         let upload = disk
-            .presigned_put("next.png", chrono::Duration::minutes(1), &rules)
+            .presigned_put("next.png", navree_datetime::Span::minutes(1), &rules)
             .content_type("image/png")
             .await
             .unwrap();
@@ -235,7 +235,7 @@ mod s3 {
         let server = S3Server::start().await;
         let disk = disk(config(&server));
         let url = disk
-            .temporary_url("a b.txt", Utc::now() + chrono::Duration::hours(1))
+            .temporary_url("a b.txt", Timestamp::now() + navree_datetime::Span::hours(1))
             .await
             .unwrap();
         assert!(
@@ -252,7 +252,7 @@ mod s3 {
         }
         // S3 refuses links over 7 days.
         let error = disk
-            .temporary_url("a.txt", Utc::now() + chrono::Duration::days(8))
+            .temporary_url("a.txt", Timestamp::now() + navree_datetime::Span::days(8))
             .await
             .unwrap_err();
         assert!(
@@ -261,7 +261,7 @@ mod s3 {
         );
         // An expiry that has already passed is refused rather than extended.
         let past_err = disk
-            .temporary_url("a.txt", Utc::now() - chrono::Duration::seconds(1))
+            .temporary_url("a.txt", Timestamp::now() - navree_datetime::Span::seconds(1))
             .await
             .unwrap_err();
         assert!(

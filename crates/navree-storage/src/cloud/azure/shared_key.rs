@@ -17,7 +17,7 @@ use ::http::header::{
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_crypto::hmac_sha256;
 use percent_encoding::percent_decode_str;
 
@@ -35,7 +35,7 @@ static MS_VERSION: HeaderName = HeaderName::from_static("x-ms-version");
 /// Formats `at` as an HTTP date (`EEE, dd MMM yyyy HH:mm:ss GMT`) for
 /// `x-ms-date`.
 pub fn http_date(at: SystemTime) -> String {
-    let dt: DateTime<Utc> = at.into();
+    let dt: Timestamp = at.into();
     dt.format("%a, %d %b %Y %H:%M:%S GMT").to_string()
 }
 

@@ -43,7 +43,6 @@ __cloud = [
 [dependencies]
 base64 = { workspace = true, optional = true }
 bytes = { workspace = true }
-chrono = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
@@ -53,6 +52,7 @@ infer = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }

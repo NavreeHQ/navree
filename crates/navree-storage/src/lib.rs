@@ -38,7 +38,7 @@
 //!   credentials and XML answers.
 //!
 //! ```
-//! use chrono::{Duration, Utc};
+//! use navree_datetime::{Span, Timestamp};
 //! use navree_storage::{DiskConfig, Storage, StorageOptions};
 //!
 //! # #[tokio::main(flavor = "current_thread")]
@@ -57,7 +57,7 @@
 //! assert!(disk.put("../escape.txt", "no").await.is_err());
 //!
 //! let link = disk
-//!     .temporary_url("reports/2026/q1.csv", Utc::now() + Duration::minutes(5))
+//!     .temporary_url("reports/2026/q1.csv", Timestamp::now() + Span::minutes(5))
 //!     .await?;
 //! assert!(link.starts_with("/storage/scratch/reports/2026/q1.csv?expires="));
 //! # Ok(())

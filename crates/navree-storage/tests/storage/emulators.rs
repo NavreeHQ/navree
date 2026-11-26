@@ -20,7 +20,7 @@ mod gcs {
     //! the in-process server that speaks the XML API and checks signatures
     //! (`drivers::gcs`).
 
-    use chrono::{Duration, Utc};
+    use navree_datetime::{Span, Timestamp};
     use futures_util::TryStreamExt;
     use navree_storage::{Disk, GcsConfig, Storage, StorageError};
     use serde_json::json;
@@ -130,7 +130,7 @@ mod gcs {
         let meta = disk.metadata("docs/readme.txt").await.unwrap();
         assert_eq!((meta.path.as_str(), meta.size), ("docs/readme.txt", 5));
         assert!(
-            meta.last_modified > Utc::now() - Duration::minutes(5),
+            meta.last_modified > Timestamp::now() - Span::minutes(5),
             "{meta:?}"
         );
         let streamed: Vec<u8> = disk
@@ -251,7 +251,7 @@ mod gcs {
         bucket.seed("reports/q1-final.csv", "region,total\n").await;
 
         let url = disk
-            .temporary_url("reports/q1-final.csv", Utc::now() + Duration::minutes(5))
+            .temporary_url("reports/q1-final.csv", Timestamp::now() + Span::minutes(5))
             .await
             .unwrap();
 
@@ -281,7 +281,7 @@ mod gcs {
         let rules = navree_storage::UploadRules::new(64 * 1024, ["image/png"]);
         let body = crate::conformance::png(2000);
         let upload = disk
-            .presigned_put("uploads/logo.png", Duration::minutes(10), &rules)
+            .presigned_put("uploads/logo.png", Span::minutes(10), &rules)
             .content_type("image/png")
             .size(body.len() as u64)
             .await

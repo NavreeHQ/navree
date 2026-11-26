@@ -41,12 +41,12 @@ use crate::options::SLOT;
 /// use std::sync::{Arc, Mutex};
 ///
 /// use bytes::{Bytes, BytesMut};
-/// use chrono::{DateTime, Utc};
 /// use futures_util::stream;
+/// use navree_datetime::Timestamp;
 /// use navree_kernel::BoxFuture;
 /// use navree_storage::{DiskDriver, DiskDriverError, DiskUpload, FileMeta, OpenedFile};
 ///
-/// type Files = Arc<Mutex<BTreeMap<String, (Bytes, DateTime<Utc>)>>>;
+/// type Files = Arc<Mutex<BTreeMap<String, (Bytes, Timestamp)>>>;
 ///
 /// /// Files in process memory.
 /// #[derive(Clone, Default)]
@@ -55,7 +55,7 @@ use crate::options::SLOT;
 /// }
 ///
 /// impl Sanduk {
-///     fn file(&self, path: &str) -> Result<(Bytes, DateTime<Utc>), DiskDriverError> {
+///     fn file(&self, path: &str) -> Result<(Bytes, Timestamp), DiskDriverError> {
 ///         let files = self.files.lock().unwrap();
 ///         files.get(path).cloned().ok_or(DiskDriverError::NotFound)
 ///     }
@@ -67,7 +67,7 @@ use crate::options::SLOT;
 ///     }
 ///
 ///     fn put<'a>(&'a self, path: &'a str, contents: Bytes) -> BoxFuture<'a, Result<(), DiskDriverError>> {
-///         self.files.lock().unwrap().insert(path.to_owned(), (contents, Utc::now()));
+///         self.files.lock().unwrap().insert(path.to_owned(), (contents, Timestamp::now()));
 ///         Box::pin(async { Ok(()) })
 ///     }
 ///
@@ -156,7 +156,7 @@ use crate::options::SLOT;
 ///
 ///     fn finish(self: Box<Self>) -> BoxFuture<'static, Result<(), DiskDriverError>> {
 ///         let SandukUpload { files, path, buffer } = *self;
-///         files.lock().unwrap().insert(path, (buffer.freeze(), Utc::now()));
+///         files.lock().unwrap().insert(path, (buffer.freeze(), Timestamp::now()));
 ///         Box::pin(async { Ok(()) })
 ///     }
 ///

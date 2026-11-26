@@ -4,7 +4,7 @@
 
 #[cfg(feature = "gcs")]
 mod gcs {
-    use chrono::{Duration, Utc};
+    use navree_datetime::{Span, Timestamp};
     use navree_storage::{Disk, GcsConfig, Storage, UploadRules};
     use serde_json::json;
     use wiremock::matchers::{header, method, path, query_param};
@@ -89,7 +89,7 @@ mod gcs {
         let disk = disk(&server, Some("site"));
         let rules = UploadRules::new(5_000_000, ["image/png"]);
         let upload = disk
-            .presigned_put("avatars/a.png", Duration::minutes(10), &rules)
+            .presigned_put("avatars/a.png", Span::minutes(10), &rules)
             .content_type("image/png")
             .await
             .unwrap();
@@ -120,7 +120,7 @@ mod gcs {
         }
 
         let download = disk
-            .temporary_url("avatars/a.png", Utc::now() + Duration::minutes(5))
+            .temporary_url("avatars/a.png", Timestamp::now() + Span::minutes(5))
             .await
             .unwrap();
         assert!(
@@ -130,7 +130,7 @@ mod gcs {
 
         // A declared size narrows the range to exactly that size.
         let sized = disk
-            .presigned_put("avatars/b.png", Duration::minutes(10), &rules)
+            .presigned_put("avatars/b.png", Span::minutes(10), &rules)
             .content_type("image/png")
             .size(48_213)
             .await
@@ -154,7 +154,7 @@ mod gcs {
 
 #[cfg(feature = "azure")]
 mod azure {
-    use chrono::{Duration, Utc};
+    use navree_datetime::{Span, Timestamp};
     use navree_storage::{AzureConfig, Disk, Storage, UploadRules};
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -220,7 +220,7 @@ mod azure {
         let disk = disk(&server);
         let rules = UploadRules::new(1000, ["application/pdf"]);
         let upload = disk
-            .presigned_put("contracts/a.pdf", Duration::minutes(10), &rules)
+            .presigned_put("contracts/a.pdf", Span::minutes(10), &rules)
             .content_type("application/pdf")
             .size(900)
             .await
@@ -245,7 +245,7 @@ mod azure {
             assert!(upload.url.contains(param), "{param}: {}", upload.url);
         }
         let download = disk
-            .temporary_url("contracts/a.pdf", Utc::now() + Duration::days(30))
+            .temporary_url("contracts/a.pdf", Timestamp::now() + Span::days(30))
             .await
             .unwrap();
         assert!(download.contains("sp=r"), "{download}");

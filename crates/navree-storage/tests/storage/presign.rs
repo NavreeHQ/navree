@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
-use chrono::{Duration, Utc};
+use navree_datetime::{Span, Timestamp};
 use futures_util::stream;
 use http::{Method, Request};
 use navree_contracts::{Clock, FixedClock};
@@ -48,7 +48,7 @@ async fn the_route_checks_size_type_and_expiry() {
         .prefix("navree-test-")
         .tempdir()
         .unwrap();
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = boot(root.path(), clock.clone()).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
     let rules = UploadRules::new(1000, ["image/png"]);
@@ -56,7 +56,7 @@ async fn the_route_checks_size_type_and_expiry() {
     for name in ["local", "memory"] {
         let disk = storage.disk(name).unwrap();
         let signed = disk
-            .presigned_put("a.png", Duration::minutes(5), &rules)
+            .presigned_put("a.png", Span::minutes(5), &rules)
             .content_type("image/png")
             .size(100)
             .await
@@ -100,7 +100,7 @@ async fn the_route_checks_size_type_and_expiry() {
     // Over the limit: refused from Content-Length, or while streaming.
     let disk = storage.disk("memory").unwrap();
     let signed = disk
-        .presigned_put("big.png", Duration::minutes(5), &rules)
+        .presigned_put("big.png", Span::minutes(5), &rules)
         .content_type("image/png")
         .await
         .unwrap();
@@ -131,12 +131,12 @@ async fn forged_links_are_refused() {
         .prefix("navree-test-")
         .tempdir()
         .unwrap();
-    let app = boot(root.path(), Arc::new(FixedClock::new(Utc::now()))).await;
+    let app = boot(root.path(), Arc::new(FixedClock::new(Timestamp::now()))).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
     let disk = storage.disk("local").unwrap();
     let rules = UploadRules::new(1000, Vec::<String>::new());
     let signed = disk
-        .presigned_put("doc.txt", Duration::minutes(5), &rules)
+        .presigned_put("doc.txt", Span::minutes(5), &rules)
         .await
         .unwrap();
     assert!(
@@ -168,7 +168,7 @@ async fn forged_links_are_refused() {
     }
     // A download link is not an upload link.
     let download = disk
-        .temporary_url("doc.txt", Utc::now() + Duration::minutes(5))
+        .temporary_url("doc.txt", Timestamp::now() + Span::minutes(5))
         .await
         .unwrap();
     let response = app
@@ -195,7 +195,7 @@ async fn links_use_the_base_url_and_serialize_as_json() {
     let rules = UploadRules::new(10, ["text/csv"]);
     let upload = storage
         .default_disk()
-        .presigned_put("/exports//q1.csv", Duration::minutes(10), &rules)
+        .presigned_put("/exports//q1.csv", Span::minutes(10), &rules)
         .content_type("text/csv")
         .await
         .unwrap();
@@ -216,7 +216,7 @@ async fn links_use_the_base_url_and_serialize_as_json() {
     // A non-positive lifetime cannot be signed.
     let disk = storage.default_disk();
     let result = disk
-        .presigned_put("a.csv", Duration::zero(), &rules)
+        .presigned_put("a.csv", Span::ZERO, &rules)
         .content_type("text/csv")
         .await;
     assert!(
@@ -228,7 +228,7 @@ async fn links_use_the_base_url_and_serialize_as_json() {
     for rules in [rules.clone(), UploadRules::new(10, Vec::<String>::new())] {
         for declared in ["text/csv\r\nx-injected: 1", "csv", "text/", "ïmage/png"] {
             let result = disk
-                .presigned_put("a.csv", Duration::minutes(1), &rules)
+                .presigned_put("a.csv", Span::minutes(1), &rules)
                 .content_type(declared)
                 .await;
             assert!(
@@ -280,7 +280,7 @@ impl Controller for UploadsController {
                     async move {
                         let rules = rules();
                         let upload = disk
-                            .presigned_put("x.png", Duration::minutes(1), &rules)
+                            .presigned_put("x.png", Span::minutes(1), &rules)
                             .content_type("image/png")
                             .size(size)
                             .await?;
@@ -296,7 +296,7 @@ impl Controller for UploadsController {
                     async move {
                         let rules = rules();
                         let upload = disk
-                            .presigned_put("x.png", Duration::minutes(1), &rules)
+                            .presigned_put("x.png", Span::minutes(1), &rules)
                             .content_type(declared)
                             .await?;
                         Ok::<_, AppError>(Json(upload))
@@ -310,7 +310,7 @@ impl Controller for UploadsController {
                     let disk = disk.clone();
                     async move {
                         let upload = disk
-                            .presigned_put("x.png", Duration::minutes(1), &rules())
+                            .presigned_put("x.png", Span::minutes(1), &rules())
                             .await?;
                         Ok::<_, AppError>(Json(upload))
                     }

@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use chrono::{DateTime, Duration, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_crypto::random_token;
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +42,7 @@ pub struct PresignedUpload {
     /// Headers the request must carry, with exactly these values.
     pub headers: BTreeMap<String, String>,
     /// When the link stops working.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 /// The request [`Disk::presigned_put`] builds; `.await` it for the
@@ -51,7 +51,7 @@ pub struct PresignedUpload {
 pub struct PresignPut<'a> {
     disk: &'a Disk,
     path: String,
-    ttl: Duration,
+    ttl: Span,
     rules: &'a UploadRules,
     content_type: Option<String>,
     size: Option<u64>,
@@ -118,10 +118,10 @@ impl PresignPut<'_> {
             }
             None => {}
         }
-        if self.ttl <= Duration::zero() {
+        if self.ttl <= Span::ZERO {
             return Err(signing("the link must stay valid for a positive duration"));
         }
-        let expires_at = Utc::now() + self.ttl;
+        let expires_at = Timestamp::now() + self.ttl;
 
         if let Some(provider) = disk.provider() {
             let ttl = disk.provider_ttl(provider, expires_at)?;
@@ -148,7 +148,7 @@ impl PresignPut<'_> {
         let grant = UploadGrant {
             disk: disk.name(),
             path: &path,
-            expires: expires_at.timestamp(),
+            expires: expires_at.as_secs(),
             content_type: content_type.as_deref(),
             max_bytes: self.rules.max_bytes,
             size: self.size,
@@ -201,12 +201,12 @@ impl Disk {
     /// [`size`](PresignPut::size), then `.await` it:
     ///
     /// ```no_run
-    /// use chrono::Duration;
+    /// use navree_datetime::Span;
     /// use navree_storage::{Disk, PresignedUpload, StorageError, UploadRules, upload_path};
     ///
     /// async fn sign(disk: &Disk) -> Result<PresignedUpload, StorageError> {
     ///     let rules = UploadRules::new(5 * 1024 * 1024, ["image/png", "image/jpeg"]);
-    ///     disk.presigned_put(&upload_path("avatars", "image/png"), Duration::minutes(10), &rules)
+    ///     disk.presigned_put(&upload_path("avatars", "image/png"), Span::minutes(10), &rules)
     ///         .content_type("image/png")
     ///         .size(48_213)
     ///         .await
@@ -233,7 +233,7 @@ impl Disk {
     pub fn presigned_put<'a>(
         &'a self,
         path: &str,
-        ttl: Duration,
+        ttl: Span,
         rules: &'a UploadRules,
     ) -> PresignPut<'a> {
         PresignPut {

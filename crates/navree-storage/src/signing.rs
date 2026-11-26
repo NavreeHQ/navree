@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_crypto::{constant_time_eq, hmac_sha256};
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 
@@ -62,13 +62,13 @@ impl Signer {
         path: &str,
         expires: i64,
         signature: &str,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<(), Refusal> {
         let given = hex::decode(signature).map_err(|_| Refusal::Invalid)?;
         if !constant_time_eq(&given, &self.mac(disk, path, expires)) {
             return Err(Refusal::Invalid);
         }
-        if now.timestamp() >= expires {
+        if now.as_secs() >= expires {
             return Err(Refusal::Expired);
         }
         Ok(())
@@ -88,13 +88,13 @@ impl Signer {
         &self,
         grant: &UploadGrant<'_>,
         signature: &str,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<(), Refusal> {
         let given = hex::decode(signature).map_err(|_| Refusal::Invalid)?;
         if !constant_time_eq(&given, &self.upload_mac(grant)) {
             return Err(Refusal::Invalid);
         }
-        if now.timestamp() >= grant.expires {
+        if now.as_secs() >= grant.expires {
             return Err(Refusal::Expired);
         }
         Ok(())
@@ -142,21 +142,21 @@ impl fmt::Debug for Signer {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Duration;
+    use navree_datetime::{Span, Timestamp};
 
     use super::*;
 
     #[test]
     fn verify_accepts_own_signature_until_expiry() {
         let signer = Signer::new(b"key");
-        let now = Utc::now();
-        let expires = (now + Duration::seconds(60)).timestamp();
+        let now = Timestamp::now();
+        let expires = (now + Span::seconds(60)).as_secs();
         let signature = signer.sign("local", "a/b.txt", expires);
         assert_eq!(
             signer.verify("local", "a/b.txt", expires, &signature, now),
             Ok(())
         );
-        let at_expiry = DateTime::from_timestamp(expires, 0).unwrap();
+        let at_expiry = Timestamp::from_secs(expires).unwrap();
         assert_eq!(
             signer.verify("local", "a/b.txt", expires, &signature, at_expiry),
             Err(Refusal::Expired)
@@ -166,8 +166,8 @@ mod tests {
     #[test]
     fn verify_rejects_tampering() {
         let signer = Signer::new(b"key");
-        let now = Utc::now();
-        let expires = (now + Duration::seconds(60)).timestamp();
+        let now = Timestamp::now();
+        let expires = (now + Span::seconds(60)).as_secs();
         let signature = signer.sign("local", "a/b.txt", expires);
         let refused = |disk, path, expires, signature: &str| {
             signer.verify(disk, path, expires, signature, now) == Err(Refusal::Invalid)
@@ -189,11 +189,11 @@ mod tests {
     #[test]
     fn upload_grants_bind_every_field() {
         let signer = Signer::new(b"key");
-        let now = Utc::now();
+        let now = Timestamp::now();
         let grant = UploadGrant {
             disk: "local",
             path: "avatars/a.png",
-            expires: (now + Duration::seconds(60)).timestamp(),
+            expires: (now + Span::seconds(60)).as_secs(),
             content_type: Some("image/png"),
             max_bytes: 1024,
             size: Some(10),
@@ -231,7 +231,7 @@ mod tests {
             size: None,
             ..grant
         }));
-        let at_expiry = DateTime::from_timestamp(grant.expires, 0).unwrap();
+        let at_expiry = Timestamp::from_secs(grant.expires).unwrap();
         assert_eq!(
             signer.verify_upload(&grant, &signature, at_expiry),
             Err(Refusal::Expired)

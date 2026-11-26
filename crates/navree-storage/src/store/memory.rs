@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use bytes::{Bytes, BytesMut};
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use futures_util::stream;
 use navree_kernel::BoxFuture;
 
@@ -36,7 +36,7 @@ pub struct MemoryStore {
 #[derive(Clone)]
 struct Entry {
     contents: Bytes,
-    last_modified: DateTime<Utc>,
+    last_modified: Timestamp,
 }
 
 type Files = Mutex<BTreeMap<String, Entry>>;
@@ -50,7 +50,7 @@ fn locked(files: &Files) -> MutexGuard<'_, BTreeMap<String, Entry>> {
 fn insert(files: &Files, path: &str, contents: Bytes) {
     let entry = Entry {
         contents,
-        last_modified: Utc::now(),
+        last_modified: Timestamp::now(),
     };
     locked(files).insert(path.to_owned(), entry);
 }
@@ -279,10 +279,10 @@ mod tests {
     #[tokio::test]
     async fn the_last_modified_time_is_the_time_of_the_write() {
         let store = MemoryStore::new();
-        let before = Utc::now();
+        let before = Timestamp::now();
         store.put("t", Bytes::new()).await.unwrap();
         let meta = store.head("t").await.unwrap();
-        assert!(meta.last_modified >= before && meta.last_modified <= Utc::now());
+        assert!(meta.last_modified >= before && meta.last_modified <= Timestamp::now());
         assert_eq!(meta.size, 0);
     }
 

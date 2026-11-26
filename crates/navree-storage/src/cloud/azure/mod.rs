@@ -18,8 +18,8 @@ use std::time::{Duration, SystemTime};
 
 use ::http::{HeaderMap, Method, StatusCode};
 use bytes::Bytes;
-use chrono::{DateTime, Datelike, Utc};
 use futures_util::TryStreamExt;
+use navree_datetime::{Span, Timestamp};
 use navree_kernel::BoxFuture;
 use url::Url;
 
@@ -592,15 +592,17 @@ impl Store for AzureStore {
                 ));
             }
 
-            let raw_start: DateTime<Utc> = (self.inner.clock)().into();
-            let start = DateTime::from_timestamp(raw_start.timestamp(), 0)
-                .ok_or_else(|| StoreError::failed("the clock timestamp is out of range"))?;
-            let delta = chrono::Duration::from_std(expires_in)
+            let raw_start: Timestamp = (self.inner.clock)().into();
+            let start = Timestamp::from_secs(raw_start.as_secs())
+                .map_err(|_| StoreError::failed("the clock timestamp is out of range"))?;
+            let delta = Span::try_from(expires_in)
                 .map_err(|_| StoreError::failed("the link would expire too far in the future"))?;
             let expiry = start
-                .checked_add_signed(delta)
+                .checked_add(delta)
                 .ok_or_else(|| StoreError::failed("the link would expire too far in the future"))?;
-            if !(1970..=9999).contains(&start.year()) || !(1970..=9999).contains(&expiry.year()) {
+            let start_year = start.date_time_utc().date().year();
+            let expiry_year = expiry.date_time_utc().date().year();
+            if !(1970..=9999).contains(&start_year) || !(1970..=9999).contains(&expiry_year) {
                 return Err(StoreError::failed(
                     "Azure SAS timestamps must fall within years 1970..=9999",
                 ));
@@ -654,10 +656,9 @@ fn ensure_blob_file(response: &Response) -> Result<()> {
     Ok(())
 }
 
-fn parse_http_date(text: &str) -> Result<DateTime<Utc>> {
+fn parse_http_date(text: &str) -> Result<Timestamp> {
     let trimmed = text.trim();
-    DateTime::parse_from_rfc2822(trimmed)
-        .or_else(|_| DateTime::parse_from_rfc3339(trimmed))
-        .map(|dt| dt.with_timezone(&Utc))
+    Timestamp::parse_rfc2822(trimmed)
+        .or_else(|_| Timestamp::parse_rfc3339(trimmed))
         .map_err(|_| Error::new(ErrorKind::Answer, "the blob Last-Modified date is invalid"))
 }

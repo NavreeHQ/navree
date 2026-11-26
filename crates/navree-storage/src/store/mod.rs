@@ -36,7 +36,7 @@ use std::ops::Range;
 use std::time::Duration;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use futures_util::stream::BoxStream;
 use navree_kernel::{BoxError, BoxFuture};
 
@@ -64,7 +64,7 @@ pub struct Meta {
     /// The size in bytes.
     pub size: u64,
     /// When the file was last written.
-    pub last_modified: DateTime<Utc>,
+    pub last_modified: Timestamp,
 }
 
 /// A file opened for streaming.

@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use bytes::Bytes;
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use futures_util::TryStreamExt;
 use navree_crypto::hmac_sha256;
 use navree_storage::cloud::azure::{
@@ -126,7 +126,8 @@ timeout:30";
         .header("x-ms-meta-city", "  Ludhiana   Punjab ")
         .unwrap()
         .with_body("challan-9");
-    let at = SystemTime::from(Utc.with_ymd_and_hms(2026, 11, 26, 6, 0, 0).unwrap());
+    let at = SystemTime::UNIX_EPOCH
+        + Duration::from_secs(Timestamp::utc(2026, 11, 26, 6, 0, 0).unwrap().as_secs() as u64);
     assert_eq!(http_date(at), "Thu, 26 Nov 2026 06:00:00 GMT");
 
     let signed = azurite.sign(put_block, at).unwrap();
@@ -162,8 +163,8 @@ async fn a_user_delegation_sas_is_signed_with_the_delegation_key() {
     )
     .unwrap();
 
-    let start = Utc.with_ymd_and_hms(2026, 11, 26, 6, 0, 0).unwrap();
-    let expiry = Utc.with_ymd_and_hms(2026, 11, 26, 6, 15, 0).unwrap();
+    let start = Timestamp::utc(2026, 11, 26, 6, 0, 0).unwrap();
+    let expiry = Timestamp::utc(2026, 11, 26, 6, 15, 0).unwrap();
     let mut hosted = Url::parse(
         "https://agrastorage.blob.core.windows.net/challans/%E0%A8%B2%E0%A9%81%E0%A8%A7%E0%A8%BF%E0%A8%86%E0%A8%A3%E0%A8%BE%20%E2%82%B9100%2B18%25.pdf",
     )

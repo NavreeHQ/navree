@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use futures_util::stream;
 use navree_config::check::CheckOptions;
 use navree_config::{ConfigModule, ConfigSources};
@@ -31,7 +31,7 @@ use serde_json::json;
 use crate::conformance::{Http, Subject};
 use crate::support::{SIGNING_KEY, TestApp, boot_error, single_disk};
 
-type Files = Arc<Mutex<BTreeMap<String, (Bytes, DateTime<Utc>)>>>;
+type Files = Arc<Mutex<BTreeMap<String, (Bytes, Timestamp)>>>;
 
 /// Files in memory, as a module's driver keeps them; it records every path
 /// it is given.
@@ -43,7 +43,7 @@ struct Sanduk {
 
 impl Sanduk {
     /// Records `path` and returns the file there.
-    fn file(&self, path: &str) -> Result<(Bytes, DateTime<Utc>), DiskDriverError> {
+    fn file(&self, path: &str) -> Result<(Bytes, Timestamp), DiskDriverError> {
         self.saw(path);
         let files = self.files.lock().unwrap();
         files.get(path).cloned().ok_or(DiskDriverError::NotFound)
@@ -72,7 +72,7 @@ impl DiskDriver for Sanduk {
         self.files
             .lock()
             .unwrap()
-            .insert(path.to_owned(), (contents, Utc::now()));
+            .insert(path.to_owned(), (contents, Timestamp::now()));
         Box::pin(async { Ok(()) })
     }
 
@@ -174,7 +174,7 @@ impl DiskUpload for SandukUpload {
         files
             .lock()
             .unwrap()
-            .insert(path, (buffer.freeze(), Utc::now()));
+            .insert(path, (buffer.freeze(), Timestamp::now()));
         Box::pin(async { Ok(()) })
     }
 

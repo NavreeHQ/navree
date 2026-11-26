@@ -7,7 +7,7 @@ mod cloud_suite;
 
 use std::sync::Arc;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use http::Method;
 use navree_storage::S3Config;
 use navree_storage::cloud::http::{Client, Request};
@@ -27,7 +27,7 @@ async fn ensure_bucket(endpoint: &str, bucket: &str, access_key: &str, secret_ke
     let url = Url::parse(&format!("{endpoint}/{bucket}")).expect("bucket URL");
     let mut request = Request::new(Method::PUT, url);
     let creds = Credentials::new(access_key, secret_key);
-    sign_request(&mut request, &creds, "us-east-1", Utc::now()).expect("sign CreateBucket");
+    sign_request(&mut request, &creds, "us-east-1", Timestamp::now()).expect("sign CreateBucket");
     let answer = client.send(request).await.expect("S3 emulator answers");
     let status = answer.status().as_u16();
     assert!(

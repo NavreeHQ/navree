@@ -1015,7 +1015,7 @@ async fn ranged_bytes_validates_content_range_and_bounds_200_ok_bodies() {
 
 #[tokio::test]
 async fn prefixed_store_list_skips_exact_directory_marker_keys() {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use navree_storage::store::{Meta, PrefixedStore, Store, StoreResult, Upload};
 
     struct MarkerStore;
@@ -1058,12 +1058,12 @@ async fn prefixed_store_list_skips_exact_directory_marker_keys() {
                     Meta {
                         path: "tenants/agra/".to_owned(),
                         size: 0,
-                        last_modified: Utc::now(),
+                        last_modified: Timestamp::now(),
                     },
                     Meta {
                         path: "tenants/agra/challan.pdf".to_owned(),
                         size: 42,
-                        last_modified: Utc::now(),
+                        last_modified: Timestamp::now(),
                     },
                 ])
             })

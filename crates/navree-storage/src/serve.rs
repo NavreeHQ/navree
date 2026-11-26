@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use futures_util::{StreamExt, stream};
 use http::header::{
     CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE, HeaderValue,
@@ -334,10 +334,10 @@ impl StorageController {
     }
 
     /// The app's clock, or the system's.
-    fn now(&self) -> chrono::DateTime<Utc> {
+    fn now(&self) -> navree_datetime::Timestamp {
         match &self.clock {
             Some(clock) => clock.now(),
-            None => Utc::now(),
+            None => Timestamp::now(),
         }
     }
 }

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_contracts::{Clock, FixedClock};
 use navree_kernel::Navree;
 use navree_storage::{Storage, StorageModule};
@@ -25,7 +25,7 @@ async fn temporary_url_valid_then_expired() {
         .prefix("navree-test-")
         .tempdir()
         .unwrap();
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = boot(root.path(), clock.clone()).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
     let disk = storage.disk("local").unwrap();
@@ -36,7 +36,7 @@ async fn temporary_url_valid_then_expired() {
     let url = disk
         .temporary_url(
             "reports/q1 final.pdf",
-            clock.now() + chrono::Duration::seconds(60),
+            clock.now() + navree_datetime::Span::seconds(60),
         )
         .await
         .unwrap();
@@ -70,22 +70,22 @@ async fn tampered_or_unsigned_urls_are_forbidden() {
         .prefix("navree-test-")
         .tempdir()
         .unwrap();
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = boot(root.path(), clock.clone()).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
     let disk = storage.disk("memory").unwrap();
     disk.put("a.txt", "secret a").await.unwrap();
     disk.put("b.txt", "secret b").await.unwrap();
-    let expires_at = clock.now() + chrono::Duration::seconds(60);
+    let expires_at = clock.now() + navree_datetime::Span::seconds(60);
     let url = disk.temporary_url("a.txt", expires_at).await.unwrap();
     assert_eq!(app.get(&url).await.text(), "secret a");
 
-    let later = (expires_at + chrono::Duration::days(1)).timestamp();
+    let later = (expires_at + navree_datetime::Span::days(1)).as_secs();
     let tampered = [
         url.replace("a.txt", "b.txt"),
         url.replace("/memory/", "/local/"),
         url.replace(
-            &format!("expires={}", expires_at.timestamp()),
+            &format!("expires={}", expires_at.as_secs()),
             &format!("expires={later}"),
         ),
         url.split('&').next().unwrap().to_owned(),
@@ -105,10 +105,10 @@ async fn signed_url_for_missing_file_is_not_found() {
         .prefix("navree-test-")
         .tempdir()
         .unwrap();
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = boot(root.path(), clock.clone()).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
-    let expires_at = clock.now() + chrono::Duration::seconds(60);
+    let expires_at = clock.now() + navree_datetime::Span::seconds(60);
 
     let url = storage
         .disk("local")
@@ -146,10 +146,10 @@ async fn active_content_is_served_as_an_attachment() {
         .prefix("navree-test-")
         .tempdir()
         .unwrap();
-    let clock = Arc::new(FixedClock::new(Utc::now()));
+    let clock = Arc::new(FixedClock::new(Timestamp::now()));
     let app = boot(root.path(), clock.clone()).await;
     let disk = app.app.ctx().get::<Storage>().await.unwrap().default_disk();
-    let expires_at = clock.now() + chrono::Duration::seconds(60);
+    let expires_at = clock.now() + navree_datetime::Span::seconds(60);
 
     disk.put("page.html", "<html><script>alert(1)</script></html>")
         .await

@@ -15,7 +15,7 @@ use std::time::{Duration, SystemTime};
 
 use ::http::{Method, StatusCode};
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use futures_util::TryStreamExt;
 use navree_kernel::BoxFuture;
 use serde::Deserialize;
@@ -362,8 +362,7 @@ fn to_meta(resource: ObjectResource, fallback_path: Option<&str>) -> Result<Meta
         },
     };
     check_key(&path)?;
-    let last_modified = DateTime::parse_from_rfc3339(&resource.updated)
-        .map(|dt| dt.with_timezone(&Utc))
+    let last_modified = Timestamp::parse_rfc3339(&resource.updated)
         .map_err(|_| {
             Error::new(
                 ErrorKind::Answer,

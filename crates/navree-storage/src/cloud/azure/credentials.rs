@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use ::http::Method;
-use chrono::DateTime;
+use navree_datetime::Timestamp;
 use serde::Deserialize;
 use url::{Host, Url};
 
@@ -405,14 +405,14 @@ where
                     .map(Some)
                     .map_err(serde::de::Error::custom);
             }
-            let parsed = DateTime::parse_from_rfc3339(trimmed)
+            let parsed = Timestamp::parse_rfc3339(trimmed)
                 .map_err(|_| serde::de::Error::custom("invalid expires_on"))?;
-            let secs = u64::try_from(parsed.timestamp())
+            let secs = u64::try_from(parsed.as_secs())
                 .map_err(|_| serde::de::Error::custom("expires_on before 1970"))?;
             if secs == 0 || secs > MAX_EPOCH_SECS {
                 return Err(serde::de::Error::custom("expires_on out of range"));
             }
-            let nanos = parsed.timestamp_subsec_nanos();
+            let nanos = parsed.subsec_nanos();
             SystemTime::UNIX_EPOCH
                 .checked_add(Duration::new(secs, nanos))
                 .map(Some)

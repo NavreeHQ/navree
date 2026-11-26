@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use ::http::Method;
 use ::http::header::{HeaderName, HeaderValue};
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_crypto::sha256_hex;
 use navree_crypto::sigv4::{
     self, ALGORITHM, UNSIGNED_PAYLOAD, canonical_path, canonical_query, canonical_request,
@@ -58,7 +58,7 @@ pub fn sign_request(
     request: &mut Request,
     credentials: &Credentials,
     region: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<()> {
     check_signer_inputs(&credentials.access_key_id, region)?;
     request.headers.remove("authorization");
@@ -134,7 +134,7 @@ pub fn presign_url(
     expires_in: Duration,
     credentials: &Credentials,
     region: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<Url> {
     if *method != Method::GET && *method != Method::PUT {
         return Err(Error::new(

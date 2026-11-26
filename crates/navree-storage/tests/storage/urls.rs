@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_storage::{DiskConfig, Storage, StorageError, StorageOptions};
 
 use crate::support::{SIGNING_KEY, options};
@@ -56,7 +56,7 @@ async fn temporary_url_is_signed_and_points_at_the_storage_route() {
         .tempdir()
         .unwrap();
     let storage = with_public_disk(root.path(), None);
-    let expires = Utc.with_ymd_and_hms(2030, 1, 2, 3, 4, 5).unwrap();
+    let expires = Timestamp::utc(2030, 1, 2, 3, 4, 5).unwrap();
     let disk = storage.disk("memory").unwrap();
 
     let url = disk
@@ -66,7 +66,7 @@ async fn temporary_url_is_signed_and_points_at_the_storage_route() {
     let (path, query) = url.split_once('?').unwrap();
     assert_eq!(path, "/storage/memory/reports/q1%20final.pdf");
     let (expires_part, signature_part) = query.split_once('&').unwrap();
-    assert_eq!(expires_part, format!("expires={}", expires.timestamp()));
+    assert_eq!(expires_part, format!("expires={}", expires.as_secs()));
     let signature = signature_part.strip_prefix("signature=").unwrap();
     assert_eq!(signature.len(), 64);
     assert!(signature.bytes().all(|b| b.is_ascii_hexdigit()));
@@ -82,7 +82,7 @@ async fn temporary_url_is_signed_and_points_at_the_storage_route() {
         disk.temporary_url("reports/q2.pdf", expires).await.unwrap(),
         url
     );
-    let later = expires + chrono::Duration::seconds(1);
+    let later = expires + navree_datetime::Span::seconds(1);
     assert!(
         !disk
             .temporary_url("reports/q1 final.pdf", later)
@@ -120,7 +120,7 @@ async fn temporary_url_uses_the_base_url() {
     let storage = with_public_disk(root.path(), Some("https://api.example.com/"));
     let url = storage
         .default_disk()
-        .temporary_url("a.txt", Utc::now())
+        .temporary_url("a.txt", Timestamp::now())
         .await
         .unwrap();
     assert!(

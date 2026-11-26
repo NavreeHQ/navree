@@ -4,7 +4,7 @@
 use std::time::{Duration, SystemTime};
 
 use ::http::Method;
-use chrono::{DateTime, SecondsFormat, Utc};
+use navree_datetime::{Precision, Timestamp};
 use tokio::sync::RwLock;
 
 use super::AzureInner;
@@ -34,8 +34,8 @@ const DELEGATION_XML_LIMIT: usize = 64 * 1024;
 
 struct CachedKey {
     key: UserDelegationKey,
-    starts_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
+    starts_at: Timestamp,
+    expires_at: Timestamp,
     fetched_at: SystemTime,
 }
 
@@ -52,10 +52,10 @@ impl DelegationKeys {
     pub(crate) async fn key_for(
         &self,
         inner: &AzureInner,
-        start: DateTime<Utc>,
-        sas_expiry: DateTime<Utc>,
+        start: Timestamp,
+        sas_expiry: Timestamp,
         expires_in: Duration,
-    ) -> Result<(UserDelegationKey, DateTime<Utc>)> {
+    ) -> Result<(UserDelegationKey, Timestamp)> {
         let now = (inner.clock)();
         if let Some(found) = usable(self.kept.read().await.as_ref(), now, start, sas_expiry) {
             return Ok(found);
@@ -67,16 +67,16 @@ impl DelegationKeys {
 
         let validity = expires_in.max(DEFAULT_KEY_VALIDITY).min(MAX_DELEGATION_TTL);
         let requested_expiry = start
-            .checked_add_signed(
-                chrono::Duration::from_std(validity).unwrap_or(chrono::Duration::days(7)),
+            .checked_add(
+                navree_datetime::Span::try_from(validity).unwrap_or(navree_datetime::Span::days(7)),
             )
             .unwrap_or(sas_expiry);
 
         let body_xml = format!(
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
              <KeyInfo><Start>{}</Start><Expiry>{}</Expiry></KeyInfo>",
-            start.to_rfc3339_opts(SecondsFormat::Secs, true),
-            requested_expiry.to_rfc3339_opts(SecondsFormat::Secs, true),
+            start.to_rfc3339_with(Precision::Secs, true),
+            requested_expiry.to_rfc3339_with(Precision::Secs, true),
         );
         let mut url = inner.service_url.clone();
         url.set_query(Some("restype=service&comp=userdelegationkey"));
@@ -113,23 +113,23 @@ impl DelegationKeys {
 fn usable(
     cached: Option<&CachedKey>,
     now: SystemTime,
-    start: DateTime<Utc>,
-    sas_expiry: DateTime<Utc>,
-) -> Option<(UserDelegationKey, DateTime<Utc>)> {
+    start: Timestamp,
+    sas_expiry: Timestamp,
+) -> Option<(UserDelegationKey, Timestamp)> {
     let cached = cached?;
     let effective_start = start.max(cached.starts_at);
     if effective_start >= sas_expiry || cached.expires_at < sas_expiry {
         return None;
     }
-    let margin = chrono::Duration::from_std(REUSE_MARGIN).unwrap_or_default();
-    let plenty_left = cached.expires_at.signed_duration_since(sas_expiry) >= margin;
+    let margin = navree_datetime::Span::try_from(REUSE_MARGIN).unwrap_or_default();
+    let plenty_left = cached.expires_at.duration_since(sas_expiry) >= margin;
     let just_fetched = now
         .duration_since(cached.fetched_at)
         .is_ok_and(|age| age < REFETCH_PAUSE);
     (plenty_left || just_fetched).then(|| (cached.key.clone(), effective_start))
 }
 
-fn parse_delegation_key(body: &[u8]) -> Result<(UserDelegationKey, DateTime<Utc>, DateTime<Utc>)> {
+fn parse_delegation_key(body: &[u8]) -> Result<(UserDelegationKey, Timestamp, Timestamp)> {
     let root = xml::parse(body)?;
     if root.name() != "UserDelegationKey" {
         return Err(Error::new(
@@ -177,16 +177,14 @@ fn parse_delegation_key(body: &[u8]) -> Result<(UserDelegationKey, DateTime<Utc>
             )
         })?;
 
-    let starts_at = DateTime::parse_from_rfc3339(signed_start)
-        .map(|dt| dt.with_timezone(&Utc))
+    let starts_at = Timestamp::parse_rfc3339(signed_start)
         .map_err(|_| {
             Error::new(
                 ErrorKind::Answer,
                 "the user delegation key has an invalid SignedStart timestamp",
             )
         })?;
-    let expires_at = DateTime::parse_from_rfc3339(signed_expiry)
-        .map(|dt| dt.with_timezone(&Utc))
+    let expires_at = Timestamp::parse_rfc3339(signed_expiry)
         .map_err(|_| {
             Error::new(
                 ErrorKind::Answer,
