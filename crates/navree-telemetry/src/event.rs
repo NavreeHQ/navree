@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -383,7 +383,7 @@ pub struct ScheduledTaskRan {
     /// The task name.
     pub task: String,
     /// The minute it was due at.
-    pub tick: DateTime<Utc>,
+    pub tick: Timestamp,
     /// How long it ran.
     #[serde(with = "millis")]
     pub duration: Duration,
@@ -637,7 +637,7 @@ pub struct EventContext {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TelemetryRecord {
     /// When the event was emitted (at the end of the operation it reports).
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
     /// The request or job it happened in.
     pub context: EventContext,
     /// The event.
