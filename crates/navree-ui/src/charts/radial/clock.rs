@@ -1,6 +1,6 @@
 //! [`DayClock`]: a day as 24 wedges round a clock face, with moments marked on it.
 
-use chrono::NaiveTime;
+use navree_datetime::Time;
 
 use super::super::format::NumberFormat;
 use super::super::motion::{CountUp, Effect, Motion};
@@ -333,8 +333,8 @@ impl DayClock {
 
     /// An hour's name: `6 AM`, or `06:00` on a 24 hour clock.
     fn hour_name(&self, hour: usize) -> String {
-        let time = NaiveTime::from_hms_opt(u32::try_from(hour).unwrap_or(0) % 24, 0, 0)
-            .unwrap_or(NaiveTime::MIN);
+        let h = u8::try_from(hour % 24).unwrap_or(0);
+        let time = Time::new(h, 0, 0).ok().unwrap_or(Time::MIDNIGHT);
         self.common.dates.format_time(time, false)
     }
 

@@ -3,13 +3,13 @@
 //! pairs as a ranked list) and [`Scatter`] (a point per pair of values).
 //!
 //! ```
-//! use chrono::NaiveDate;
+//! use navree_datetime::Date;
 //! use navree_ui::charts::*;
 //! use navree_ui::render;
 //!
-//! let first = NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
+//! let first = Date::new(2026, 5, 1).unwrap();
 //! let calendar = CalendarHeatmap::new("Training load")
-//!     .days((0..60).map(|d| (first + chrono::Duration::days(d), (d * 7 % 40) as f64)));
+//!     .days((0..60).map(|d| (first.add_days(d).unwrap(), (d * 7 % 40) as f64)));
 //! let html = render(&calendar.into());
 //! assert!(html.contains("data-slot=\"heat-cell\""));
 //! assert!(html.contains("<table"), "every chart carries its data as a table");

@@ -58,7 +58,7 @@
 
 use std::fmt;
 
-use chrono::{Datelike, NaiveDate};
+use navree_datetime::Date;
 use serde_json::{Value, json};
 
 use crate::html::LocalHref;
@@ -506,16 +506,16 @@ impl<const MAX: usize> Prop for Key<MAX> {
 
 /// A calendar day, written `2026-11-06`, from the year 1900 to 2200.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Day(NaiveDate);
+pub struct Day(Date);
 
 impl Day {
     /// The day, when it is in range.
-    pub fn new(day: NaiveDate) -> Option<Self> {
+    pub fn new(day: Date) -> Option<Self> {
         (1900..=2200).contains(&day.year()).then_some(Self(day))
     }
 
     /// The day.
-    pub fn date(self) -> NaiveDate {
+    pub fn date(self) -> Date {
         self.0
     }
 }
@@ -531,7 +531,7 @@ impl Prop for Day {
         let day = value
             .as_str()
             .filter(|text| text.len() == 10)
-            .and_then(|text| NaiveDate::parse_from_str(text, "%Y-%m-%d").ok())
+            .and_then(|text| Date::parse("%Y-%m-%d", text).ok())
             .and_then(Self::new);
         if day.is_none() {
             checker.problem(path, "must be a day written YYYY-MM-DD, from 1900 to 2200");
@@ -544,7 +544,7 @@ impl Prop for Day {
     }
 
     fn example() -> Self {
-        Self(NaiveDate::from_ymd_opt(2026, 11, 6).expect("a real day"))
+        Self(Date::new(2026, 11, 6).expect("a real day"))
     }
 }
 

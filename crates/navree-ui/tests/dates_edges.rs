@@ -1,4 +1,4 @@
-//! The calendar family at the edges: the years chrono can hold and the calendar can't, zones
+//! The calendar family at the edges: the years `Date` can hold and the calendar can't, zones
 //! with odd offsets, times that are not a time of day, rules that are costly to ask, and ids
 //! made from names. Nothing here may panic, and nothing a page or a request supplies may
 //! be taken for more than it is.
@@ -6,7 +6,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Instant;
 
-use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, NaiveTime, Utc, Weekday};
+use navree_datetime::{Date, Offset, Time, Timestamp, Weekday, Zone};
 use navree_time::Tz;
 use navree_ui::dates::grid::month_grid;
 use navree_ui::dates::zoned::{Resolved, resolve};
@@ -16,27 +16,27 @@ use navree_ui::dates::{
 };
 use navree_ui::{Node, render};
 
-fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+fn day(y: i32, m: u8, d: u8) -> Date {
+    Date::new(y, m, d).unwrap()
 }
 
 fn html(node: impl Into<Node>) -> String {
     render(&node.into())
 }
 
-/// Days at and past the edges of what chrono holds and what the calendar draws.
-fn extremes() -> Vec<NaiveDate> {
+/// Days at and past the edges of what `Date` holds and what the calendar draws.
+fn extremes() -> Vec<Date> {
     vec![
-        NaiveDate::MIN,
-        NaiveDate::MIN.succ_opt().unwrap(),
+        Date::MIN,
+        Date::MIN.tomorrow().unwrap(),
         day(-1, 12, 31),
         day(0, 1, 1),
         day(0, 12, 31),
         day(1, 1, 1),
         day(9999, 12, 31),
         day(10000, 1, 1),
-        NaiveDate::MAX.pred_opt().unwrap(),
-        NaiveDate::MAX,
+        Date::MAX.yesterday().unwrap(),
+        Date::MAX,
     ]
 }
 
@@ -78,7 +78,7 @@ fn a_zone_never_makes_a_range_panic_at_the_edges() {
                 ));
             }
             for hours in [14, -12] {
-                let zone = FixedOffset::east_opt(hours * 3600).unwrap();
+                let zone = Offset::east(hours * 3600).unwrap();
                 cases.push((
                     format!("{a} {b} fixed {hours}"),
                     Box::new(move || {
@@ -89,7 +89,7 @@ fn a_zone_never_makes_a_range_panic_at_the_edges() {
             cases.push((
                 format!("{a} {b} utc"),
                 Box::new(move || {
-                    let _ = DateRange::new(a, b).utc_bounds(&Utc);
+                    let _ = DateRange::new(a, b).utc_bounds(&Zone::UTC);
                 }),
             ));
         }
@@ -104,32 +104,32 @@ fn a_zone_never_makes_a_range_panic_at_the_edges() {
 }
 
 #[test]
-fn a_wall_time_at_the_edge_of_chrono_resolves_without_panicking() {
-    let noon = NaiveTime::from_hms_opt(12, 0, 0).unwrap();
-    let midnight = NaiveTime::MIN;
-    let east = FixedOffset::east_opt(14 * 3600).unwrap();
+fn a_wall_time_at_the_edge_of_dates_resolves_without_panicking() {
+    let noon = Time::new(12, 0, 0).unwrap();
+    let midnight = Time::MIDNIGHT;
+    let east = Offset::east(14 * 3600).unwrap();
     for date in extremes() {
         for time in [noon, midnight] {
             let _ = resolve(date, time, &east);
-            let _ = resolve(date, time, &Utc);
+            let _ = resolve(date, time, &Zone::UTC);
             let _ = resolve(date, time, &"Pacific/Apia".parse::<Tz>().unwrap());
         }
     }
     // An ordinary day still resolves as it did.
     assert!(matches!(
-        resolve(day(2026, 11, 3), noon, &Utc),
+        resolve(day(2026, 11, 3), noon, &Zone::UTC),
         Resolved::Single(_)
     ));
 }
 
 #[test]
 fn the_last_day_the_zone_holds_is_not_dropped_at_the_upper_limit() {
-    let (start, end) = DateRange::single(NaiveDate::MAX).utc_bounds(&Utc);
+    let (start, end) = DateRange::single(Date::MAX).utc_bounds(&Zone::UTC);
     assert!(start < end, "{start} to {end}");
-    assert_eq!(end, DateTime::<Utc>::MAX_UTC);
+    assert_eq!(end, Timestamp::MAX);
     // A day with a successor still spans a whole day.
-    let (start, end) = DateRange::single(day(9999, 12, 31)).utc_bounds(&Utc);
-    assert_eq!((end - start).num_hours(), 24);
+    let (start, end) = DateRange::single(day(9999, 12, 31)).utc_bounds(&Zone::UTC);
+    assert_eq!((end - start).as_hours(), 24);
 }
 
 #[test]
@@ -275,7 +275,7 @@ fn extreme_days_given_by_a_page_never_panic_anything_that_draws() {
             }),
         ));
         for preset in DatePreset::ALL {
-            for week_start in [Weekday::Sun, Weekday::Mon, Weekday::Sat] {
+            for week_start in [Weekday::Sunday, Weekday::Monday, Weekday::Saturday] {
                 cases.push((
                     format!("preset {preset:?} {a} {week_start}"),
                     Box::new(move || {
@@ -299,7 +299,7 @@ fn extreme_days_given_by_a_page_never_panic_anything_that_draws() {
         cases.push((
             format!("grid {year}-{month}"),
             Box::new(move || {
-                let grid = month_grid(year, month, Weekday::Mon, true);
+                let grid = month_grid(year, month, Weekday::Monday, true);
                 assert!(!grid.rows.is_empty());
             }),
         ));
@@ -316,27 +316,28 @@ fn extreme_days_given_by_a_page_never_panic_anything_that_draws() {
 #[test]
 fn a_time_that_is_not_a_time_of_day_is_refused() {
     let rules = TimeRules::new()
-        .min(NaiveTime::from_hms_opt(9, 0, 0).unwrap())
-        .max(NaiveTime::from_hms_opt(17, 0, 0).unwrap());
+        .min(Time::new(9, 0, 0).unwrap())
+        .max(Time::new(17, 0, 0).unwrap());
     let strict = rules.clone().strict_step();
-    let leap = NaiveTime::from_hms_nano_opt(16, 59, 59, 1_500_000_000).unwrap();
-    let fraction = NaiveTime::from_hms_nano_opt(12, 0, 0, 500_000_000).unwrap();
-    for time in [leap, fraction] {
-        assert!(rules.check(time).is_err(), "{time:?}");
-        assert!(strict.check(time).is_err(), "{time:?} strict");
-        assert!(
-            TimeRules::new().check(time).is_err(),
-            "{time:?} with no limits"
-        );
-    }
-    // Whole seconds are fine.
+    // Leap seconds cannot even be constructed on `Time`.
+    assert!(Time::new(16, 59, 60).is_err());
     assert!(
-        rules
-            .check(NaiveTime::from_hms_opt(16, 59, 59).unwrap())
-            .is_ok()
+        Time::new(16, 59, 59)
+            .and_then(|t| t.with_nanos(1_500_000_000))
+            .is_err()
     );
-    // A picker drawn with a leap second doesn't print one.
-    let page = html(TimePicker::new("t").value(leap));
+    let fraction = Time::new(12, 0, 0)
+        .and_then(|t| t.with_nanos(500_000_000))
+        .unwrap();
+    assert!(rules.check(fraction).is_err(), "{fraction:?}");
+    assert!(strict.check(fraction).is_err(), "{fraction:?} strict");
+    assert!(
+        TimeRules::new().check(fraction).is_err(),
+        "{fraction:?} with no limits"
+    );
+    // Whole seconds are fine.
+    assert!(rules.check(Time::new(16, 59, 59).unwrap()).is_ok());
+    let page = html(TimePicker::new("t").value(fraction));
     assert!(!page.contains(":60"), "{page}");
 }
 
@@ -346,24 +347,19 @@ fn asking_whether_a_long_span_is_blocked_costs_what_the_rules_cost_not_the_days(
     // 30,000 listed ranges, one a day for 80 years: a day-by-day walk over each range was the cost.
     let mut rules = DateRules::new();
     for n in 0..30_000 {
-        let from = start + chrono::Duration::days(n);
-        rules = rules.disable_range(
-            from + chrono::Duration::days(1),
-            from + chrono::Duration::days(1),
-        );
+        let from = start.add_days(n).unwrap();
+        let next = from.add_days(1).unwrap();
+        rules = rules.disable_range(next, next);
     }
     let began = Instant::now();
-    let blocked = rules.blocks_span(
-        day(2026, 1, 1),
-        day(2026, 1, 1) + chrono::Duration::days(39_000),
-    );
+    let blocked = rules.blocks_span(day(2026, 1, 1), day(2026, 1, 1).add_days(39_000).unwrap());
     let took = began.elapsed();
     assert!(blocked);
     assert!(took.as_millis() < 250, "{took:?}");
     // A long span past the last of them is clear, and says so quickly.
     let began = Instant::now();
-    let after = start + chrono::Duration::days(30_005);
-    assert!(!rules.blocks_span(after, after + chrono::Duration::days(1000)));
+    let after = start.add_days(30_005).unwrap();
+    assert!(!rules.blocks_span(after, after.add_days(1000).unwrap()));
     assert!(began.elapsed().as_millis() < 250);
 }
 
@@ -379,7 +375,7 @@ fn a_span_is_blocked_by_what_blocks_it_and_nothing_else() {
     assert!(limited.blocks_span(day(2026, 3, 28), day(2026, 4, 2)));
     assert!(!limited.blocks_span(day(2026, 3, 1), day(2026, 3, 31)));
     // A weekday: any span of a week or more holds one, a shorter span only if it reaches it.
-    let weekends = DateRules::new().disable_weekdays([Weekday::Sat, Weekday::Sun]);
+    let weekends = DateRules::new().disable_weekdays([Weekday::Saturday, Weekday::Sunday]);
     assert!(weekends.blocks_span(day(2026, 11, 2), day(2026, 11, 9)));
     assert!(!weekends.blocks_span(day(2026, 11, 2), day(2026, 11, 6)));
     assert!(weekends.blocks_span(day(2026, 11, 6), day(2026, 11, 7)));
@@ -475,7 +471,7 @@ fn root_id(html: &str, prefix: &str) -> String {
 fn a_zone_is_still_resolved_the_same_for_ordinary_days() {
     let ny: Tz = "America/New_York".parse().unwrap();
     let (start, end) = DateRange::new(day(2026, 3, 8), day(2026, 3, 8)).utc_bounds(&ny);
-    assert_eq!((end - start).num_hours(), 23);
+    assert_eq!((end - start).as_hours(), 23);
     let (start, end) = DateRange::new(day(2026, 11, 1), day(2026, 11, 1)).utc_bounds(&ny);
-    assert_eq!((end - start).num_hours(), 25);
+    assert_eq!((end - start).as_hours(), 25);
 }

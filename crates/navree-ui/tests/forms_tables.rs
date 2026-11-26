@@ -41,7 +41,7 @@ struct NewDeal {
     stage: Stage,
     /// Expected close
     #[validate(skip)]
-    close_date: Option<chrono::NaiveDate>,
+    close_date: Option<navree_datetime::Date>,
     #[validate(email)]
     contact_email: Option<String>,
     #[validate(range(min = 0, max = 100))]

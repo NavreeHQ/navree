@@ -288,7 +288,7 @@ struct Deal {
     amount: navree_ui::Money,
     /// Closes
     #[validate(skip)]
-    closes: chrono::NaiveDate,
+    closes: navree_datetime::Date,
     /// Mode
     #[validate(skip)]
     mode: Mode,

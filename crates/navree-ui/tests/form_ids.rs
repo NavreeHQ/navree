@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{NaiveDate, NaiveTime};
+use navree_datetime::{Date, Time};
 use navree_ui::form::{ControlField, FieldControl, FieldErrors, Rejected, decode};
 use navree_ui::{Form, FormView, Money, Node, Options, Validate, View, el, render};
 use serde::Deserialize;
@@ -65,11 +65,11 @@ struct Entry {
     /// Due
     #[validate(skip)]
     #[form(widget = date_picker)]
-    due: NaiveDate,
+    due: Date,
     /// Opens at
     #[validate(skip)]
     #[form(widget = time_picker)]
-    opens: NaiveTime,
+    opens: Time,
     /// Mobile
     #[validate(skip)]
     #[form(widget = phone)]

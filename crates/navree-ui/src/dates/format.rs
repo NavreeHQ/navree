@@ -1,6 +1,6 @@
 //! Writing dates and times the way a locale writes them.
 
-use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
+use navree_datetime::{Date, Time};
 
 use super::locale::{Clock, DateLocale, DateOrder};
 
@@ -41,18 +41,18 @@ impl DateLocale {
     /// width for every date and cannot be misread.
     ///
     /// ```
+    /// use navree_datetime::Date;
     /// use navree_ui::dates::DateLocale;
-    /// use chrono::NaiveDate;
     ///
-    /// let day = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap();
+    /// let day = Date::new(2026, 11, 3).unwrap();
     /// assert_eq!(DateLocale::of("en").format_date(day), "11/03/2026");
     /// assert_eq!(DateLocale::of("de").format_date(day), "03.11.2026");
     /// assert_eq!(DateLocale::of("sv").format_date(day), "2026-11-03");
     /// ```
-    pub fn format_date(&self, date: NaiveDate) -> String {
+    pub fn format_date(&self, date: Date) -> String {
         let (year, month, day) = (
             format!("{:04}", date.year()),
-            format!("{:02}", date.month()),
+            format!("{:02}", date.month_number()),
             format!("{:02}", date.day()),
         );
         let parts: [&str; 3] = match self.order {
@@ -67,14 +67,15 @@ impl DateLocale {
 
     /// The date with its weekday and month name, as a screen reader should say it:
     /// `Tuesday, November 3, 2026`.
-    pub fn format_long(&self, date: NaiveDate) -> String {
+    pub fn format_long(&self, date: Date) -> String {
+        let month = u32::from(date.month_number());
         expand(
             &self.long_pattern,
             &[
                 ('w', self.weekday_name(date.weekday())),
-                ('M', self.month_in_date(date.month())),
+                ('M', self.month_in_date(month)),
                 ('d', &date.day().to_string()),
-                ('m', &date.month().to_string()),
+                ('m', &month.to_string()),
                 ('y', &date.year().to_string()),
             ],
         )
@@ -93,18 +94,19 @@ impl DateLocale {
     }
 
     /// A short date: `Nov 3`, or `Nov 3, 2026` with the year.
-    pub fn format_short(&self, date: NaiveDate, with_year: bool) -> String {
+    pub fn format_short(&self, date: Date, with_year: bool) -> String {
         let pattern = if with_year {
             &self.short_year_pattern
         } else {
             &self.short_pattern
         };
+        let month = u32::from(date.month_number());
         expand(
             pattern,
             &[
-                ('M', self.month_short(date.month())),
+                ('M', self.month_short(month)),
                 ('d', &date.day().to_string()),
-                ('m', &date.month().to_string()),
+                ('m', &month.to_string()),
                 ('y', &date.year().to_string()),
             ],
         )
@@ -112,13 +114,13 @@ impl DateLocale {
 
     /// A date to show in a hint: `11/03/2026` or the like, for a fixed day.
     pub fn example_date(&self) -> String {
-        self.format_date(NaiveDate::from_ymd_opt(2026, 11, 30).unwrap_or(NaiveDate::MIN))
+        self.format_date(Date::new(2026, 11, 30).ok().unwrap_or(Date::MIN))
     }
 
     /// A time to show in a hint, for 2:30 in the afternoon.
     pub fn example_time(&self) -> String {
         self.format_time(
-            NaiveTime::from_hms_opt(14, 30, 0).unwrap_or(NaiveTime::MIN),
+            Time::new(14, 30, 0).ok().unwrap_or(Time::MIDNIGHT),
             false,
         )
     }
@@ -126,15 +128,15 @@ impl DateLocale {
     /// The time as it is typed here: `14:30`, or `2:30 PM` on a 12 hour clock.
     ///
     /// ```
+    /// use navree_datetime::Time;
     /// use navree_ui::dates::DateLocale;
-    /// use chrono::NaiveTime;
     ///
-    /// let t = NaiveTime::from_hms_opt(0, 5, 0).unwrap();
+    /// let t = Time::new(0, 5, 0).unwrap();
     /// assert_eq!(DateLocale::of("en").format_time(t, false), "12:05 AM");
     /// assert_eq!(DateLocale::of("de").format_time(t, false), "00:05");
     /// assert_eq!(DateLocale::of("ja").format_time(t, true), "00:05:00");
     /// ```
-    pub fn format_time(&self, time: NaiveTime, seconds: bool) -> String {
+    pub fn format_time(&self, time: Time, seconds: bool) -> String {
         let (hour, minute, second) = (time.hour(), time.minute(), time.second());
         let tail = if seconds {
             format!("{minute:02}:{second:02}")
@@ -160,8 +162,8 @@ impl DateLocale {
 mod tests {
     use super::*;
 
-    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    fn day(y: i32, m: u8, d: u8) -> Date {
+        Date::new(y, m, d).unwrap()
     }
 
     #[test]
@@ -240,7 +242,7 @@ mod tests {
 
     #[test]
     fn times_follow_the_clock() {
-        let t = |h, m| NaiveTime::from_hms_opt(h, m, 0).unwrap();
+        let t = |h, m| Time::new(h, m, 0).unwrap();
         let en = DateLocale::of("en");
         assert_eq!(en.format_time(t(0, 0), false), "12:00 AM");
         assert_eq!(en.format_time(t(0, 5), false), "12:05 AM");

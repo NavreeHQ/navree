@@ -52,7 +52,7 @@ impl SitemapUrl {
     }
 
     /// When its content last changed: a date such as `2026-11-12`, or a
-    /// `chrono::NaiveDate`. Never a date in the future, and never the build's date for a
+    /// [`navree_datetime::Date`]. Never a date in the future, and never the build's date for a
     /// page that didn't change.
     pub fn lastmod(mut self, date: impl Display) -> Self {
         self.lastmod = Some(date.to_string());

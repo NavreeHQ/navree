@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use chrono::{NaiveDate, NaiveDateTime, Weekday};
+use navree_datetime::{Date, DateTime, Weekday};
 
 use super::axes::{Axis, Domain, Gridlines, Ticks};
 use super::downsample::{merge_ranges, rows_to_keep};
@@ -156,22 +156,22 @@ pub enum At {
     /// The row at this index.
     Index(usize),
     /// A time.
-    Time(NaiveDateTime),
+    Time(DateTime),
     /// A number.
     Number(f64),
     /// A category, by its name.
     Category(String),
 }
 
-impl From<NaiveDateTime> for At {
-    fn from(at: NaiveDateTime) -> Self {
+impl From<DateTime> for At {
+    fn from(at: DateTime) -> Self {
         Self::Time(at)
     }
 }
 
-impl From<NaiveDate> for At {
-    fn from(day: NaiveDate) -> Self {
-        Self::Time(day.and_time(chrono::NaiveTime::MIN))
+impl From<Date> for At {
+    fn from(day: Date) -> Self {
+        Self::Time(day.at(navree_datetime::Time::MIDNIGHT))
     }
 }
 
@@ -299,10 +299,10 @@ impl X {
 /// A chart of lines, areas or bars over one x: categories, times or numbers.
 ///
 /// ```
+/// use navree_datetime::Date;
 /// use navree_ui::charts::*;
-/// use chrono::NaiveDate;
 ///
-/// let days: Vec<NaiveDate> = (1..=7).map(|d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap()).collect();
+/// let days: Vec<Date> = (1..=7).map(|d| Date::new(2026, 11, d).unwrap()).collect();
 /// let chart = Chart::bar("Sent and opened")
 ///     .days(days)
 ///     .series(Series::new("Sent", [120, 140, 90, 160, 180, 40, 30]))
@@ -380,7 +380,7 @@ impl Chart {
             toggles: false,
             dots: Dots::End,
             active_dot: ActiveDot::Plain,
-            week_start: Weekday::Mon,
+            week_start: Weekday::Monday,
             rtl: false,
             drill: Vec::new(),
             x_axis: Axis::new(),
@@ -586,16 +586,16 @@ impl Chart {
     }
 
     /// Times along x, as wall-clock times in the zone the data was counted in.
-    pub fn times(mut self, times: impl IntoIterator<Item = NaiveDateTime>) -> Self {
+    pub fn times(mut self, times: impl IntoIterator<Item = DateTime>) -> Self {
         self.x = X::Times(times.into_iter().map(seconds_of).collect());
         self
     }
 
     /// Days along x.
-    pub fn days(mut self, days: impl IntoIterator<Item = NaiveDate>) -> Self {
+    pub fn days(mut self, days: impl IntoIterator<Item = Date>) -> Self {
         self.x = X::Times(
             days.into_iter()
-                .map(|day| seconds_of(day.and_time(chrono::NaiveTime::MIN)))
+                .map(|day| seconds_of(day.at(navree_datetime::Time::MIDNIGHT)))
                 .collect(),
         );
         self.grain.get_or_insert(Grain::Day);
@@ -2511,18 +2511,17 @@ impl Chart {
                             let at = times.get(row.start).copied().and_then(time_of);
                             match at {
                                 Some(t) => {
-                                    use chrono::Datelike;
                                     let first = last_year.is_none();
-                                    let with_year = (first || last_year != Some(t.year()))
+                                    let with_year = (first || last_year != Some(t.date().year()))
                                         && times
                                             .first()
                                             .and_then(|a| time_of(*a))
-                                            .map(|a| a.year())
+                                            .map(|a| a.date().year())
                                             != times
                                                 .last()
                                                 .and_then(|a| time_of(*a))
-                                                .map(|a| a.year());
-                                    last_year = Some(t.year());
+                                                .map(|a| a.date().year());
+                                    last_year = Some(t.date().year());
                                     time_label(t, grain, &self.common.dates, with_year)
                                 }
                                 None => row.name.clone(),

@@ -296,7 +296,7 @@ fn the_sitemap_and_robots_file_point_at_each_other() {
         .url(SitemapUrl::new(format!("{SITE}/")).lastmod("2026-11-12"))
         .url(
             SitemapUrl::new(format!("{SITE}/pricing/"))
-                .lastmod(chrono::NaiveDate::from_ymd_opt(2026, 11, 10).unwrap())
+                .lastmod(navree_datetime::Date::new(2026, 11, 10).unwrap())
                 .language("hi-IN", format!("{SITE}/hi/pricing/")),
         );
     let xml = sitemap.to_xml();

@@ -82,12 +82,12 @@ fn bind(kind: ValueKind, text: &str) -> Option<Value> {
             .filter(|value: &f64| value.is_finite())
             .map(Value::F64),
         ValueKind::Decimal => text.parse().ok().map(Value::Decimal),
-        ValueKind::Date => chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d")
+        ValueKind::Date => navree_datetime::Date::parse("%Y-%m-%d", text)
             .ok()
             .map(Value::Date),
         ValueKind::DateTime => {
-            let day = chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok()?;
-            Some(Value::Timestamp(day.and_hms_opt(0, 0, 0)?.and_utc()))
+            let day = navree_datetime::Date::parse("%Y-%m-%d", text).ok()?;
+            Some(Value::Timestamp(navree_datetime::Time::new(0, 0, 0).ok().map(|t| day.at(t))?.in_utc()))
         }
         ValueKind::Bool => matches!(text, "true" | "false").then(|| Value::Bool(text == "true")),
         ValueKind::Uuid => uuid::Uuid::parse_str(text).ok().map(Value::Uuid),
@@ -127,12 +127,12 @@ fn filter_of(
             if let Some(text) = max.as_deref() {
                 // The last day of an instant's range runs to its end.
                 if column.kind == ValueKind::DateTime {
-                    let next = chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d")
+                    let next = navree_datetime::Date::parse("%Y-%m-%d", text)
                         .ok()
-                        .and_then(|day| day.succ_opt())
-                        .and_then(|day| day.and_hms_opt(0, 0, 0));
+                        .and_then(|day| day.tomorrow())
+                        .and_then(|day| navree_datetime::Time::new(0, 0, 0).ok().map(|t| day.at(t)));
                     if let Some(next) = next {
-                        parts.push(source.lt(Value::Timestamp(next.and_utc())));
+                        parts.push(source.lt(Value::Timestamp(next.in_utc())));
                     }
                 } else if let Some(high) = bind(column.kind, text) {
                     parts.push(source.lte(high));
@@ -203,15 +203,15 @@ fn untag(tagged: &Json, kind: ValueKind, nullable: bool) -> Option<Value> {
         "e" => text()?.parse().ok().map(Value::Decimal),
         "s" => text().map(|text| Value::String(text.to_owned())),
         "u" => uuid::Uuid::parse_str(text()?).ok().map(Value::Uuid),
-        "d" => chrono::NaiveDate::parse_from_str(text()?, "%Y-%m-%d")
+        "d" => navree_datetime::Date::parse("%Y-%m-%d", text()?)
             .ok()
             .map(Value::Date),
-        "l" => chrono::NaiveDateTime::parse_from_str(text()?, "%Y-%m-%dT%H:%M:%S%.f")
+        "l" => navree_datetime::DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", text()?)
             .ok()
             .map(Value::DateTime),
-        "t" => chrono::DateTime::parse_from_rfc3339(text()?)
+        "t" => navree_datetime::Zoned::parse_rfc3339(text()?)
             .ok()
-            .map(|at| Value::Timestamp(at.to_utc())),
+            .map(|at| Value::Timestamp(at.timestamp())),
         _ => None,
     }
 }

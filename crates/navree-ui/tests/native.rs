@@ -214,7 +214,7 @@ struct OrderRow {
     #[col(sortable, numeric, hide_on_mobile)]
     total: i64,
     #[col(sortable, filter = date, label = "Placed")]
-    placed_on: chrono::NaiveDate,
+    placed_on: navree_datetime::Date,
 }
 
 fn order(id: i64, status: &str) -> OrderRow {
@@ -223,7 +223,7 @@ fn order(id: i64, status: &str) -> OrderRow {
         number: format!("CS-{}", 20_480 + id),
         status: status.to_owned(),
         total: 507 * id,
-        placed_on: chrono::NaiveDate::from_ymd_opt(2026, 11, 12).expect("a date"),
+        placed_on: navree_datetime::Date::new(2026, 11, 12).expect("a date"),
     }
 }
 

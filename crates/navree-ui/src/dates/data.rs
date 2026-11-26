@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 
-use chrono::Weekday;
+use navree_datetime::Weekday;
 
 use super::locale::{Clock, DateLabels, DateOrder, LocaleData};
 
@@ -95,7 +95,7 @@ pub(super) static EN: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{M} {d}"),
     short_year_pattern: Cow::Borrowed("{M} {d}, {y}"),
-    first_day: Weekday::Sun,
+    first_day: Weekday::Sunday,
     clock: Clock::H12,
     am: Cow::Borrowed(" AM"),
     pm: Cow::Borrowed(" PM"),
@@ -142,7 +142,7 @@ pub(super) static EN_GB: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" am"),
     pm: Cow::Borrowed(" pm"),
@@ -190,7 +190,7 @@ static DE: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d}. {M}"),
     short_year_pattern: Cow::Borrowed("{d}. {M} {y}"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" AM"),
     pm: Cow::Borrowed(" PM"),
@@ -272,7 +272,7 @@ static FR: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" AM"),
     pm: Cow::Borrowed(" PM"),
@@ -359,7 +359,7 @@ static ES: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" a. m."),
     pm: Cow::Borrowed(" p. m."),
@@ -446,7 +446,7 @@ static IT: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" AM"),
     pm: Cow::Borrowed(" PM"),
@@ -534,7 +534,7 @@ static PT: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Sun,
+    first_day: Weekday::Sunday,
     clock: Clock::H24,
     am: Cow::Borrowed(" AM"),
     pm: Cow::Borrowed(" PM"),
@@ -621,7 +621,7 @@ static NL: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" a.m."),
     pm: Cow::Borrowed(" p.m."),
@@ -703,7 +703,7 @@ static SV: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" fm"),
     pm: Cow::Borrowed(" em"),
@@ -803,7 +803,7 @@ static PL: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" AM"),
     pm: Cow::Borrowed(" PM"),
@@ -914,7 +914,7 @@ static RU: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y} г."),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" AM"),
     pm: Cow::Borrowed(" PM"),
@@ -991,7 +991,7 @@ static TR: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed(" ÖÖ"),
     pm: Cow::Borrowed(" ÖS"),
@@ -1067,7 +1067,7 @@ static JA: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{y}年{m}月"),
     short_pattern: Cow::Borrowed("{m}月{d}日"),
     short_year_pattern: Cow::Borrowed("{y}年{m}月{d}日"),
-    first_day: Weekday::Sun,
+    first_day: Weekday::Sunday,
     clock: Clock::H24,
     am: Cow::Borrowed("午前"),
     pm: Cow::Borrowed("午後"),
@@ -1154,7 +1154,7 @@ static ZH: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{y}年{m}月"),
     short_pattern: Cow::Borrowed("{m}月{d}日"),
     short_year_pattern: Cow::Borrowed("{y}年{m}月{d}日"),
-    first_day: Weekday::Mon,
+    first_day: Weekday::Monday,
     clock: Clock::H24,
     am: Cow::Borrowed("上午"),
     pm: Cow::Borrowed("下午"),
@@ -1230,7 +1230,7 @@ static KO: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{y}년 {m}월"),
     short_pattern: Cow::Borrowed("{m}월 {d}일"),
     short_year_pattern: Cow::Borrowed("{y}년 {m}월 {d}일"),
-    first_day: Weekday::Sun,
+    first_day: Weekday::Sunday,
     clock: Clock::H12,
     am: Cow::Borrowed("오전 "),
     pm: Cow::Borrowed("오후 "),
@@ -1328,7 +1328,7 @@ static AR: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Sat,
+    first_day: Weekday::Saturday,
     clock: Clock::H12,
     am: Cow::Borrowed(" ص"),
     pm: Cow::Borrowed(" م"),
@@ -1416,7 +1416,7 @@ static HE: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} ב{M}"),
     short_year_pattern: Cow::Borrowed("{d} ב{M} {y}"),
-    first_day: Weekday::Sun,
+    first_day: Weekday::Sunday,
     clock: Clock::H24,
     am: Cow::Borrowed(" לפנה״צ"),
     pm: Cow::Borrowed(" אחה״צ"),
@@ -1514,7 +1514,7 @@ static HI: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Sun,
+    first_day: Weekday::Sunday,
     clock: Clock::H12,
     am: Cow::Borrowed(" am"),
     pm: Cow::Borrowed(" pm"),
@@ -1595,7 +1595,7 @@ static ID: LocaleData = LocaleData {
     caption_pattern: Cow::Borrowed("{M} {y}"),
     short_pattern: Cow::Borrowed("{d} {M}"),
     short_year_pattern: Cow::Borrowed("{d} {M} {y}"),
-    first_day: Weekday::Sun,
+    first_day: Weekday::Sunday,
     clock: Clock::H24,
     am: Cow::Borrowed(" AM"),
     pm: Cow::Borrowed(" PM"),
@@ -1689,15 +1689,15 @@ pub(super) fn region_first_day(region: &str) -> Option<Weekday> {
         return None;
     }
     Some(match region {
-        "MV" => Weekday::Fri,
+        "MV" => Weekday::Friday,
         "AE" | "AF" | "BH" | "DJ" | "DZ" | "EG" | "IQ" | "IR" | "JO" | "KW" | "LY" | "OM"
-        | "QA" | "SD" | "SY" => Weekday::Sat,
+        | "QA" | "SD" | "SY" => Weekday::Saturday,
         "AG" | "AS" | "BD" | "BR" | "BS" | "BT" | "BW" | "BZ" | "CA" | "CO" | "DM" | "DO"
         | "ET" | "GT" | "GU" | "HK" | "HN" | "ID" | "IL" | "IN" | "JM" | "JP" | "KE" | "KH"
         | "KR" | "LA" | "MH" | "MM" | "MO" | "MT" | "MX" | "MZ" | "NI" | "NP" | "PA" | "PE"
         | "PH" | "PK" | "PR" | "PT" | "PY" | "SA" | "SG" | "SV" | "TH" | "TT" | "TW" | "UM"
-        | "US" | "VE" | "VI" | "WS" | "YE" | "ZA" | "ZW" => Weekday::Sun,
-        _ => Weekday::Mon,
+        | "US" | "VE" | "VI" | "WS" | "YE" | "ZA" | "ZW" => Weekday::Sunday,
+        _ => Weekday::Monday,
     })
 }
 

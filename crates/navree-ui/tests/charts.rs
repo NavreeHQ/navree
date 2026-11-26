@@ -1,13 +1,13 @@
 //! Charts: what each draws, what it ships, and that no data and no label can break
 //! one.
 
-use chrono::{Duration, NaiveDate, NaiveDateTime};
+use navree_datetime::{Date, DateTime, Span, Time, Zone};
 use navree_ui::charts::*;
 use navree_ui::dates::{DatePreset, DateRules, RangeRules};
 use navree_ui::{Node, Stat, Tone, Uses, View, assets, render};
 
-fn day(d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(2026, 11, d).unwrap()
+fn day(d: u8) -> Date {
+    Date::new(2026, 11, d).unwrap()
 }
 
 fn html(node: impl Into<Node>) -> String {
@@ -26,7 +26,7 @@ fn table_rows(html: &str) -> usize {
 
 #[test]
 fn every_chart_type_draws_a_figure_with_its_table() {
-    let week: Vec<NaiveDate> = (1..=7).map(day).collect();
+    let week: Vec<Date> = (1..=7).map(day).collect();
     let charts: Vec<(&str, Node, usize)> = vec![
         (
             "line",
@@ -198,7 +198,7 @@ fn the_charts_sheet_is_linked_where_a_chart_is_drawn_and_nowhere_else() {
         &limits,
         today,
         DatePreset::Last30Days,
-        &chrono::Utc,
+        &Zone::UTC,
     );
     let page = View::new("x").body(report.grain_links("/reports", "Grain"));
     assert!(page.to_html().contains(assets::CHARTS_STYLES_URL));
@@ -227,7 +227,7 @@ fn the_charts_sheet_is_at_most_3_kb_gzip_and_the_toolkits_holds_only_a_sparkline
 /// the first label stays.
 #[test]
 fn a_crowded_axis_marks_the_labels_a_very_narrow_chart_drops() {
-    let days: Vec<NaiveDate> = (0..30).map(|i| day(1) + Duration::days(i)).collect();
+    let days: Vec<Date> = (0..30).map(|i| day(1).add_days(i).unwrap()).collect();
     let out = html(
         Chart::bar("Orders")
             .days(days)
@@ -465,8 +465,8 @@ fn values_are_written_for_the_language() {
 
 #[test]
 fn time_axes_read_on_the_wall_clock() {
-    let hours: Vec<NaiveDateTime> = (0..24)
-        .map(|h| day(3).and_hms_opt(h, 0, 0).unwrap())
+    let hours: Vec<DateTime> = (0..24)
+        .map(|h| day(3).at(Time::new(h, 0, 0).unwrap()))
         .collect();
     let out = html(
         Chart::line("x")
@@ -478,8 +478,8 @@ fn time_axes_read_on_the_wall_clock() {
         out.contains("Nov 3, 2026, 2:00 PM"),
         "the table names the hour"
     );
-    let months: Vec<NaiveDate> = (1..=12)
-        .map(|m| NaiveDate::from_ymd_opt(2026, m, 1).unwrap())
+    let months: Vec<Date> = (1..=12)
+        .map(|m| Date::new(2026, m, 1).unwrap())
         .collect();
     let out = html(
         Chart::bar("x")
@@ -532,7 +532,7 @@ fn a_ninth_series_folds_into_other() {
 
 #[test]
 fn bars_past_the_most_merge_or_fold() {
-    let many: Vec<NaiveDate> = (0..1000).map(|i| day(1) - Duration::days(i)).collect();
+    let many: Vec<Date> = (0..1000).map(|i| day(1).add_days(-i).unwrap()).collect();
     let out = html(
         Chart::bar("x")
             .days(many)
@@ -703,13 +703,13 @@ fn no_data_breaks_a_chart() {
             1 => chart.numbers((0..rows).map(|_| seq.value())),
             2 => {
                 let base = match seq.below(3) {
-                    0 => NaiveDate::MIN,
-                    1 => NaiveDate::MAX - Duration::days(70),
+                    0 => Date::MIN,
+                    1 => Date::MAX.add_days(-70).unwrap(),
                     _ => day(1),
                 };
-                chart.times((0..rows).map(|i| {
-                    base.and_hms_opt(0, 0, 0).unwrap()
-                        + Duration::seconds((i as i64) * (1 + seq.below(100_000) as i64))
+                chart.times((0..rows).filter_map(|i| {
+                    base.at(Time::MIDNIGHT)
+                        .add(Span::seconds((i as i64) * (1 + seq.below(100_000) as i64)))
                 }))
             }
             _ => chart,
@@ -835,7 +835,6 @@ fn two_charts_titled_in_other_scripts_never_share_an_id() {
 
 #[test]
 fn the_hour_the_clocks_repeat_has_its_own_name() {
-    use chrono::Utc;
     let ny: navree_time::Tz = "America/New_York".parse().unwrap();
     let report = Report::new(
         navree_ui::dates::DateRange::single(day(1)),
@@ -862,7 +861,6 @@ fn the_hour_the_clocks_repeat_has_its_own_name() {
     heads.sort();
     heads.dedup();
     assert_eq!(heads.len(), 25, "every row its own name");
-    let _ = Utc;
 }
 
 #[test]
@@ -925,8 +923,8 @@ fn a_state_keeps_the_height_of_its_chart() {
 #[test]
 fn annotations_find_their_rows_after_the_rows_are_reduced() {
     // 1,000 days merged into 100 bars: an event on day 555 sits on the bar that holds it.
-    let days: Vec<NaiveDate> = (0..1000)
-        .map(|i| day(1) - Duration::days(999 - i))
+    let days: Vec<Date> = (0..1000)
+        .map(|i| day(1).add_days(-(999 - i)).unwrap())
         .collect();
     let out = html(
         Chart::bar("x")
@@ -959,11 +957,10 @@ fn annotations_find_their_rows_after_the_rows_are_reduced() {
 
 #[test]
 fn reports_draw_over_their_periods() {
-    use chrono::Utc;
     let report = Report::new(
         navree_ui::dates::DateRange::new(day(1), day(7)),
         Grain::Day,
-        &Utc,
+        &Zone::UTC,
     );
     let counts = report.count(report.buckets().iter().map(|b| b.start));
     assert_eq!(counts, vec![1; 7]);

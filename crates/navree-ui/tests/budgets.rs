@@ -195,7 +195,7 @@ fn a_page_with_a_chart_loads_the_charts_module_alone() {
 fn the_chart_grids_sheet_is_at_most_2_kb_gzip_and_a_grid_chart_links_it_with_the_charts_module() {
     use navree_ui::charts::{CalendarHeatmap, MatrixHeatmap, PointSeries, Relation, Scatter};
     assert!(size("chart-grids") <= 2 * 1024, "{}", size("chart-grids"));
-    let day = chrono::NaiveDate::from_ymd_opt(2026, 11, 12).unwrap();
+    let day = navree_datetime::Date::new(2026, 11, 12).unwrap();
     let pages = [
         View::new("x").body(CalendarHeatmap::new("Load").day(day, 5)),
         View::new("x").body(MatrixHeatmap::new("Links").metrics(["a", "b"]).relation(

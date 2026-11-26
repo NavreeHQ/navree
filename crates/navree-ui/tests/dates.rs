@@ -1,7 +1,7 @@
 //! The calendar family: what the server draws, what it accepts, and that nothing a
 //! person types or a page supplies can break out of its place.
 
-use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
+use navree_datetime::{Date, Time, Weekday};
 use navree_ui::dates::{
     Calendar, CalendarMode, CaptionLayout, Clock, DateLocale, DatePicker, DatePreset, DateRange,
     DateRangePicker, DateRules, DateTimePicker, PickerStyle, TimePicker, TimeRules,
@@ -11,15 +11,15 @@ use navree_ui::{Field, Form, FormView, Node, Uses, Validate, View, assets, el, r
 use serde::Deserialize;
 use serde_json::Value;
 
-fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+fn day(y: i32, m: u8, d: u8) -> Date {
+    Date::new(y, m, d).unwrap()
 }
 
-fn time(h: u32, m: u32) -> NaiveTime {
-    NaiveTime::from_hms_opt(h, m, 0).unwrap()
+fn time(h: u8, m: u8) -> Time {
+    Time::new(h, m, 0).unwrap()
 }
 
-fn today() -> NaiveDate {
+fn today() -> Date {
     day(2026, 11, 3)
 }
 
@@ -108,7 +108,7 @@ fn the_tab_stop_skips_days_that_cannot_be_chosen() {
 #[test]
 fn rules_mark_days_and_the_browser_gets_them_as_runs() {
     let rules = DateRules::new()
-        .disable_weekdays([Weekday::Sat, Weekday::Sun])
+        .disable_weekdays([Weekday::Saturday, Weekday::Sunday])
         .disable_dates([day(2026, 11, 11)])
         .disable_range(day(2026, 12, 24), day(2026, 12, 26))
         .disable_if(|d| d.day() == 13);
@@ -202,7 +202,7 @@ fn several_months_sit_side_by_side() {
 
 #[test]
 fn week_numbers_and_fixed_weeks() {
-    let page = html(calendar().week_start(Weekday::Mon).week_numbers());
+    let page = html(calendar().week_start(Weekday::Monday).week_numbers());
     // 1 November 2026 is a Sunday, so a week that starts on Monday needs six rows.
     assert_eq!(count(&page, r#"scope="row""#), 6);
     assert!(
@@ -215,7 +215,7 @@ fn week_numbers_and_fixed_weeks() {
         7,
         "six weeks and the head, in a four-week February"
     );
-    let hidden = html(calendar().week_start(Weekday::Mon).hide_outside_days());
+    let hidden = html(calendar().week_start(Weekday::Monday).hide_outside_days());
     assert!(!hidden.contains("data-outside"));
 }
 
@@ -485,7 +485,7 @@ fn a_range_picker_posts_two_dates_and_offers_presets_counted_from_today() {
     let page = html(
         DateRangePicker::new("from", "to")
             .today(today())
-            .week_start(Weekday::Mon)
+            .week_start(Weekday::Monday)
             .presets([
                 DatePreset::Today,
                 DatePreset::Last7Days,
@@ -625,7 +625,7 @@ fn a_time_picker_posts_hours_and_minutes() {
     let seconds = html(
         TimePicker::new("t")
             .seconds()
-            .value(NaiveTime::from_hms_opt(14, 30, 15).unwrap()),
+            .value(Time::new(14, 30, 15).unwrap()),
     );
     assert!(seconds.contains(r#"value="14:30:15""#));
     assert!(seconds.contains(r#"step="1""#));
@@ -636,7 +636,7 @@ fn a_time_picker_posts_hours_and_minutes() {
 
 #[test]
 fn a_date_time_picker_posts_one_field_and_its_halves_post_nothing() {
-    let at = day(2026, 11, 12).and_time(time(14, 30));
+    let at = day(2026, 11, 12).at(time(14, 30));
     let page = html(
         DateTimePicker::new("starts")
             .today(today())
@@ -706,12 +706,12 @@ fn a_date_time_picker_loads_the_calendar_the_date_box_and_the_time_module() {
 
 #[test]
 fn a_date_time_picker_reads_what_it_posts_and_nothing_else() {
-    let at = day(2026, 11, 12).and_time(time(14, 30));
+    let at = day(2026, 11, 12).at(time(14, 30));
     assert_eq!(DateTimePicker::read("2026-11-12T14:30"), Some(at));
     assert_eq!(DateTimePicker::read(" 2026-11-12T14:30 "), Some(at));
     assert_eq!(
         DateTimePicker::read("2026-11-12T14:30:15"),
-        day(2026, 11, 12).and_hms_opt(14, 30, 15)
+        { let __date = day(2026, 11, 12); Time::new(14, 30, 15).ok().map(|t| __date.at(t)) }
     );
     for refused in [
         "",
@@ -729,7 +729,7 @@ fn a_date_time_picker_reads_what_it_posts_and_nothing_else() {
     let page = html(
         DateTimePicker::new("t")
             .seconds()
-            .value(day(2026, 11, 12).and_hms_opt(14, 30, 15).unwrap()),
+            .value(day(2026, 11, 12).at(Time::new(14, 30, 15).unwrap())),
     );
     assert!(page.contains(r#"value="2026-11-12T14:30:15""#), "{page}");
     assert!(page.contains(r#"step="1""#));
@@ -795,20 +795,20 @@ struct Booking {
     /// Start date
     #[validate(custom(weekday))]
     #[form(widget = date_picker)]
-    start: NaiveDate,
+    start: Date,
     /// End date
     #[validate(skip)]
     #[form(widget = date_picker)]
-    end: Option<NaiveDate>,
+    end: Option<Date>,
     /// Arrives at
     #[validate(skip)]
     #[form(widget = time_picker)]
-    arrives: NaiveTime,
+    arrives: Time,
 }
 
-fn weekday(day: &NaiveDate) -> Result<(), String> {
+fn weekday(day: &Date) -> Result<(), String> {
     DateRules::new()
-        .disable_weekdays([Weekday::Sat, Weekday::Sun])
+        .disable_weekdays([Weekday::Saturday, Weekday::Sunday])
         .check(*day)
         .map_err(|error| error.message(&DateLocale::english()))
 }
@@ -847,7 +847,7 @@ fn the_form_derive_draws_pickers_and_the_server_checks_what_comes_back() {
     assert_eq!(ok.arrives, time(14, 30));
     // Seconds are fine too.
     let ok: Booking = decode(&pairs(&[("start", "2026-11-09"), ("arrives", "14:30:15")])).unwrap();
-    assert_eq!(ok.arrives, NaiveTime::from_hms_opt(14, 30, 15).unwrap());
+    assert_eq!(ok.arrives, Time::new(14, 30, 15).unwrap());
 
     // A Saturday fails the rule, in words.
     let wrong =
@@ -934,8 +934,8 @@ fn every_date_reads_back_as_the_locale_writes_it() {
         ];
         for _ in 0..600 {
             let year = 1 + i32::try_from(rng.next() % 9999).unwrap();
-            let month = 1 + u32::try_from(rng.next() % 12).unwrap();
-            let d = 1 + u32::try_from(rng.next() % 28).unwrap();
+            let month = 1 + u8::try_from(rng.next() % 12).unwrap();
+            let d = 1 + u8::try_from(rng.next() % 28).unwrap();
             days.push(day(year, month, d));
         }
         for d in days {
@@ -945,7 +945,7 @@ fn every_date_reads_back_as_the_locale_writes_it() {
             let named = format!(
                 "{} {} {:04}",
                 d.day(),
-                locale.month_name(d.month()),
+                locale.month_name(u32::from(d.month_number())),
                 d.year()
             );
             if let Ok(back) = locale.parse_date(&named, today()) {
@@ -959,12 +959,12 @@ fn every_date_reads_back_as_the_locale_writes_it() {
 fn every_time_reads_back_as_the_locale_writes_it() {
     for tag in TAGS {
         let locale = DateLocale::of(tag);
-        for minute in 0..1440 {
-            let t = time(minute / 60, minute % 60);
+        for minute in 0..1440_u16 {
+            let t = time((minute / 60) as u8, (minute % 60) as u8);
             let text = locale.format_time(t, false);
             assert_eq!(locale.parse_time(&text), Ok(t), "{tag}: {text}");
         }
-        let t = NaiveTime::from_hms_opt(23, 59, 58).unwrap();
+        let t = Time::new(23, 59, 58).unwrap();
         assert_eq!(
             locale.parse_time(&locale.format_time(t, true)),
             Ok(t),
@@ -1042,7 +1042,7 @@ fn very_large_rules_cost_a_bounded_page() {
     // most 1,000 runs, and the page stays the size of one without them, give or take.
     let start = day(2026, 1, 1);
     let many = DateRules::new()
-        .disable_dates((0..10_000).map(|n| start + chrono::Duration::days(n * 3)))
+        .disable_dates((0..10_000).map(|n| start.add_days(n * 3).unwrap()))
         .disable_if(|d| d.day() % 2 == 0);
     let big = html(Calendar::new("c").today(today()).rules(many.clone()));
     let plain = html(Calendar::new("c").today(today()));
@@ -1056,7 +1056,7 @@ fn very_large_rules_cost_a_bounded_page() {
     assert!(json["r"].as_array().unwrap().len() <= 1000);
     // The server's check still knows every one of them.
     assert!(
-        many.check(start + chrono::Duration::days(9_999 * 3))
+        many.check(start.add_days(9_999 * 3).unwrap())
             .is_err()
     );
 }
@@ -1110,7 +1110,7 @@ fn a_two_month_calendar_renders_in_well_under_a_millisecond() {
             Calendar::new("c")
                 .today(today())
                 .months(2)
-                .rules(DateRules::new().disable_weekdays([Weekday::Sat, Weekday::Sun]))
+                .rules(DateRules::new().disable_weekdays([Weekday::Saturday, Weekday::Sunday]))
                 .selected(day(2026, 11, 12)),
         )
         .len();

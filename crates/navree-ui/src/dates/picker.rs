@@ -7,7 +7,7 @@
 //! parse and check. The text box, the button and the calendar are drawn too, and
 //! hidden by CSS where scripting is off.
 
-use chrono::{NaiveDate, Utc, Weekday};
+use navree_datetime::{Date, Timestamp, Weekday};
 
 use super::calendar::{Calendar, CalendarMode, CaptionLayout};
 use super::locale::DateLocale;
@@ -59,7 +59,7 @@ impl PickerStyle {
 /// What the picker was given as its value.
 #[derive(Clone, Debug)]
 enum Given {
-    Date(NaiveDate),
+    Date(Date),
     Text(String),
 }
 
@@ -71,15 +71,15 @@ fn button_element(button: Button) -> Element {
 /// A date field with a calendar.
 ///
 /// It posts `name` as an ISO date (`2026-11-03`), or nothing when empty. A value
-/// that comes back is read with `NaiveDate`, and checked with the same
+/// that comes back is read with [`Date`], and checked with the same
 /// [`DateRules`] that drew the calendar.
 ///
 /// ```
 /// use navree_ui::dates::{DateLocale, DatePicker};
 /// use navree_ui::render;
-/// use chrono::NaiveDate;
+/// use navree_datetime::Date;
 ///
-/// let day = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap();
+/// let day = Date::new(2026, 11, 3).unwrap();
 /// let html = render(&DatePicker::new("due").value(day).locale(DateLocale::of("de")).today(day).into());
 /// assert!(html.contains(r#"type="date" name="due" value="2026-11-03""#));
 /// assert!(html.contains(r#"value="03.11.2026""#));
@@ -92,7 +92,7 @@ pub struct DatePicker {
     value: Option<Given>,
     rules: DateRules,
     locale: DateLocale,
-    today: NaiveDate,
+    today: Date,
     week_start: Option<Weekday>,
     style: PickerStyle,
     placeholder: Option<String>,
@@ -122,7 +122,7 @@ impl DatePicker {
             value: None,
             rules: DateRules::new(),
             locale: DateLocale::english(),
-            today: Utc::now().date_naive(),
+            today: Timestamp::now().date_time_utc().date(),
             week_start: None,
             style: PickerStyle::Input,
             placeholder: None,
@@ -156,13 +156,13 @@ impl DatePicker {
     }
 
     /// Sets the date.
-    pub fn value(mut self, day: NaiveDate) -> Self {
+    pub fn value(mut self, day: Date) -> Self {
         self.value = Some(Given::Date(day));
         self
     }
 
     /// Sets the date, or leaves the picker empty.
-    pub fn value_opt(mut self, day: Option<NaiveDate>) -> Self {
+    pub fn value_opt(mut self, day: Option<Date>) -> Self {
         self.value = day.map(Given::Date);
         self
     }
@@ -174,7 +174,7 @@ impl DatePicker {
         self.value = if text.is_empty() {
             None
         } else {
-            Some(match text.parse::<NaiveDate>() {
+            Some(match text.parse::<Date>() {
                 Ok(day) => Given::Date(day),
                 Err(_) => Given::Text(text.to_owned()),
             })
@@ -189,13 +189,13 @@ impl DatePicker {
     }
 
     /// The earliest day that can be chosen.
-    pub fn min(mut self, day: NaiveDate) -> Self {
+    pub fn min(mut self, day: Date) -> Self {
         self.rules = self.rules.min(day);
         self
     }
 
     /// The latest day that can be chosen.
-    pub fn max(mut self, day: NaiveDate) -> Self {
+    pub fn max(mut self, day: Date) -> Self {
         self.rules = self.rules.max(day);
         self
     }
@@ -207,7 +207,7 @@ impl DatePicker {
     }
 
     /// Today, as the page counts it. Without it, today is the day in UTC.
-    pub fn today(mut self, today: NaiveDate) -> Self {
+    pub fn today(mut self, today: Date) -> Self {
         self.today = today;
         self
     }
@@ -492,9 +492,9 @@ into_node!(DatePicker);
 /// ```
 /// use navree_ui::dates::{DatePreset, DateRange, DateRangePicker};
 /// use navree_ui::render;
-/// use chrono::NaiveDate;
+/// use navree_datetime::Date;
 ///
-/// let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
+/// let day = |d| Date::new(2026, 11, d).unwrap();
 /// let html = render(
 ///     &DateRangePicker::new("from", "to")
 ///         .today(day(3))
@@ -514,7 +514,7 @@ pub struct DateRangePicker {
     value: Option<DateRange>,
     rules: DateRules,
     locale: DateLocale,
-    today: NaiveDate,
+    today: Date,
     week_start: Option<Weekday>,
     presets: Vec<DatePreset>,
     preset_labels: Vec<(DatePreset, String)>,
@@ -543,7 +543,7 @@ impl DateRangePicker {
             value: None,
             rules: DateRules::new(),
             locale: DateLocale::english(),
-            today: Utc::now().date_naive(),
+            today: Timestamp::now().date_time_utc().date(),
             week_start: None,
             presets: vec![
                 DatePreset::Today,
@@ -606,13 +606,13 @@ impl DateRangePicker {
     }
 
     /// The earliest day that can be chosen.
-    pub fn min(mut self, day: NaiveDate) -> Self {
+    pub fn min(mut self, day: Date) -> Self {
         self.rules = self.rules.min(day);
         self
     }
 
     /// The latest day that can be chosen.
-    pub fn max(mut self, day: NaiveDate) -> Self {
+    pub fn max(mut self, day: Date) -> Self {
         self.rules = self.rules.max(day);
         self
     }
@@ -625,7 +625,7 @@ impl DateRangePicker {
 
     /// Today, as the page counts it: in the zone of the workspace or the person that
     /// the page's days are counted in. Every preset is counted from it.
-    pub fn today(mut self, today: NaiveDate) -> Self {
+    pub fn today(mut self, today: Date) -> Self {
         self.today = today;
         self
     }
@@ -762,8 +762,8 @@ impl DateRangePicker {
         let pop_id = format!("{root_id}-pop");
         let labels = self.locale.labels.clone();
         let start = self.week_start.unwrap_or(self.locale.first_day);
-        let date_text = |day: NaiveDate| day.to_string();
-        let native = |name: &str, which: &'static str, label: &str, value: Option<NaiveDate>| {
+        let date_text = |day: Date| day.to_string();
+        let native = |name: &str, which: &'static str, label: &str, value: Option<Date>| {
             el("label").slot("range-native-field").children((
                 el("span").child(label.to_owned()),
                 el("input")
@@ -960,7 +960,7 @@ impl DateRangePicker {
             .id(root_id)
             .attr("data-ui-dates", "range")
             .attr("data-today", self.today.to_string())
-            .attr("data-week-start", i64::from(start.num_days_from_sunday()))
+            .attr("data-week-start", i64::from(start.days_from_sunday()))
             .attr_opt("data-min-days", self.min_days.map(i64::from))
             .attr_opt("data-max-days", self.max_days.map(i64::from))
             .attr_opt("dir", self.locale.rtl.then_some("rtl"))

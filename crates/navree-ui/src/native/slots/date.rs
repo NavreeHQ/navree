@@ -117,7 +117,7 @@ fn rules(cx: &mut Cx, popup: &Element) -> Read<Off> {
         let day = |at: usize| {
             run.get(at)
                 .and_then(serde_json::Value::as_str)
-                .and_then(|text| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok())
+                .and_then(|text| navree_datetime::Date::parse("%Y-%m-%d", text).ok())
         };
         let (Some(from), Some(to)) = (day(0), day(1)) else {
             return fail("a calendar that switches off days it cannot name");
@@ -130,7 +130,7 @@ fn rules(cx: &mut Cx, popup: &Element) -> Read<Off> {
                 return Ok(off);
             }
             off.days.push(at.to_string());
-            let Some(next) = at.succ_opt() else { break };
+            let Some(next) = at.tomorrow() else { break };
             at = next;
         }
     }
@@ -209,7 +209,7 @@ fn named(element: &Element) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveDate;
+    use navree_datetime::{Date, Time};
     use navree_native::input as i;
 
     use super::super::testing::{misses, read, tamper};
@@ -217,8 +217,8 @@ mod tests {
     use crate::dates::{DatePicker, DateRangePicker, DateRules, TimePicker};
     use crate::node::Node;
 
-    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, d).unwrap_or_default()
+    fn day(y: i32, m: u8, d: u8) -> Date {
+        Date::new(y, m, d).unwrap()
     }
 
     fn date_of(node: N) -> (n::Field, i::DateInput) {
@@ -270,7 +270,7 @@ mod tests {
                     DateRules::new()
                         .disable_dates([day(2026, 11, 14), day(2026, 11, 16)])
                         .disable_range(day(2026, 11, 20), day(2026, 11, 22))
-                        .disable_weekdays([chrono::Weekday::Sun, chrono::Weekday::Sat]),
+                        .disable_weekdays([navree_datetime::Weekday::Sunday, navree_datetime::Weekday::Saturday]),
                 )
                 .today(day(2026, 11, 12)),
         ));
@@ -294,7 +294,7 @@ mod tests {
     fn a_range_has_the_same_days_off_on_both_ends() {
         let N::Field(field) = read(
             DateRangePicker::new("from", "to")
-                .rules(DateRules::new().disable_weekdays([chrono::Weekday::Sun])),
+                .rules(DateRules::new().disable_weekdays([navree_datetime::Weekday::Sunday])),
         ) else {
             panic!("not a field");
         };
@@ -320,7 +320,7 @@ mod tests {
     fn a_time_picker_is_a_time() {
         let (field, time) = date_of(read(
             TimePicker::new("at")
-                .value(chrono::NaiveTime::from_hms_opt(9, 30, 0).unwrap_or_default())
+                .value(Time::new(9, 30, 0).unwrap())
                 .label("Starts at"),
         ));
         assert_eq!(field.name, "at");
@@ -331,7 +331,7 @@ mod tests {
 
     #[test]
     fn a_date_and_time_picker_is_one_field_of_both() {
-        let at = day(2026, 11, 20).and_hms_opt(18, 45, 0).unwrap_or_default();
+        let at = day(2026, 11, 20).at(Time::new(18, 45, 0).unwrap());
         let (field, both) = date_of(read(
             crate::dates::DateTimePicker::new("when")
                 .value(at)

@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{NaiveTime, Timelike};
+use navree_datetime::Time;
 use serde_json::{Value, json};
 
 use super::locale::DateLocale;
@@ -12,9 +12,9 @@ use super::locale::DateLocale;
 #[non_exhaustive]
 pub enum TimeError {
     /// Before the earliest time.
-    TooEarly(NaiveTime),
+    TooEarly(Time),
     /// After the latest time.
-    TooLate(NaiveTime),
+    TooLate(Time),
     /// In a span that is turned off.
     Unavailable,
     /// Not on a multiple of the step, where the step is strict.
@@ -57,17 +57,17 @@ fn valid_step(minutes: u32) -> bool {
     (1..=720).contains(&minutes) && 1440 % minutes == 0
 }
 
-fn minute_of(time: NaiveTime) -> u32 {
-    time.hour() * 60 + time.minute()
+fn minute_of(time: Time) -> u32 {
+    u32::from(time.hour()) * 60 + u32::from(time.minute())
 }
 
 /// The times a picker lets a person choose, and the check that holds on the server.
 ///
 /// ```
+/// use navree_datetime::Time;
 /// use navree_ui::dates::TimeRules;
-/// use chrono::NaiveTime;
 ///
-/// let t = |h, m| NaiveTime::from_hms_opt(h, m, 0).unwrap();
+/// let t = |h, m| Time::new(h, m, 0).unwrap();
 /// let rules = TimeRules::new().min(t(9, 0)).max(t(17, 0)).unavailable(t(12, 0), t(12, 59));
 /// assert!(rules.check(t(9, 30)).is_ok());
 /// assert!(rules.check(t(12, 30)).is_err());
@@ -75,9 +75,9 @@ fn minute_of(time: NaiveTime) -> u32 {
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TimeRules {
-    min: Option<NaiveTime>,
-    max: Option<NaiveTime>,
-    unavailable: Vec<(NaiveTime, NaiveTime)>,
+    min: Option<Time>,
+    max: Option<Time>,
+    unavailable: Vec<(Time, Time)>,
     step: u32,
     strict: bool,
 }
@@ -102,14 +102,14 @@ impl TimeRules {
 
     /// The earliest time.
     #[must_use]
-    pub fn min(mut self, time: NaiveTime) -> Self {
+    pub fn min(mut self, time: Time) -> Self {
         self.min = Some(time);
         self
     }
 
     /// The latest time.
     #[must_use]
-    pub fn max(mut self, time: NaiveTime) -> Self {
+    pub fn max(mut self, time: Time) -> Self {
         self.max = Some(time);
         self
     }
@@ -117,7 +117,7 @@ impl TimeRules {
     /// Turns off a span of times, both ends included down to the minute: `12:00` to
     /// `12:59` turns off every time until `12:59:59`.
     #[must_use]
-    pub fn unavailable(mut self, from: NaiveTime, to: NaiveTime) -> Self {
+    pub fn unavailable(mut self, from: Time, to: Time) -> Self {
         self.unavailable.push((from.min(to), from.max(to)));
         self
     }
@@ -147,9 +147,8 @@ impl TimeRules {
     }
 
     /// Why `time` can't be chosen, or `Ok`.
-    pub fn check(&self, time: NaiveTime) -> Result<(), TimeError> {
-        // A picker posts whole seconds. A leap second or a fraction is refused whatever the
-        // limits say: chrono reads `16:59:60`, and it sorts before 17:00:00.
+    pub fn check(&self, time: Time) -> Result<(), TimeError> {
+        // A picker posts whole seconds: subsecond nanoseconds are refused whatever the limits say.
         if time.nanosecond() != 0 {
             return Err(TimeError::NotATime);
         }
@@ -178,15 +177,19 @@ impl TimeRules {
     }
 
     /// Whether `time` can be chosen.
-    pub fn allows(&self, time: NaiveTime) -> bool {
+    pub fn allows(&self, time: Time) -> bool {
         self.check(time).is_ok()
     }
 
     /// The times of the list: every multiple of the step in the day that can be chosen.
-    pub fn options(&self) -> Vec<NaiveTime> {
-        (0..1440)
+    pub fn options(&self) -> Vec<Time> {
+        (0..1440u32)
             .step_by(self.step as usize)
-            .filter_map(|minute| NaiveTime::from_hms_opt(minute / 60, minute % 60, 0))
+            .filter_map(|minute| {
+                let h = u8::try_from(minute / 60).ok()?;
+                let m = u8::try_from(minute % 60).ok()?;
+                Time::new(h, m, 0).ok()
+            })
             .filter(|time| self.allows(*time))
             .collect()
     }
@@ -197,9 +200,9 @@ impl TimeRules {
     /// with a least time (midnight when the rules have none). Whole seconds (when the
     /// picker takes them, a value has them, or a limit has them) need a step of one second.
     pub(crate) fn native_limits(&self, seconds: bool) -> NativeLimits {
-        let has_seconds = |time: Option<NaiveTime>| time.is_some_and(|t| t.second() != 0);
+        let has_seconds = |time: Option<Time>| time.is_some_and(|t| t.second() != 0);
         let whole = seconds || has_seconds(self.min) || has_seconds(self.max);
-        let text = |time: NaiveTime| {
+        let text = |time: Time| {
             time.format(if whole { "%H:%M:%S" } else { "%H:%M" })
                 .to_string()
         };
@@ -213,7 +216,10 @@ impl TimeRules {
         let min = match self.min {
             Some(min) if self.strict && !whole => {
                 let aligned = minute_of(min).div_ceil(self.step) * self.step;
-                NaiveTime::from_hms_opt(aligned / 60, aligned % 60, 0).map(text)
+                match (u8::try_from(aligned / 60).ok(), u8::try_from(aligned % 60).ok()) {
+                    (Some(h), Some(m)) => Time::new(h, m, 0).ok().map(text),
+                    _ => None,
+                }
             }
             Some(min) => Some(text(min)),
             None => None,
@@ -222,7 +228,7 @@ impl TimeRules {
         // 9:07 would refuse 9:15 and take 9:22. Whenever there is a step there is a least
         // time to count it from: midnight, where the server counts from, when the rules
         // give none or give one past the last step of the day.
-        let min = min.or_else(|| step.map(|_| text(NaiveTime::MIN)));
+        let min = min.or_else(|| step.map(|_| text(Time::MIDNIGHT)));
         NativeLimits {
             min,
             max: self.max.map(text),
@@ -232,7 +238,7 @@ impl TimeRules {
 
     /// What the browser needs.
     pub(crate) fn client(&self) -> Value {
-        let text = |time: NaiveTime| time.format("%H:%M:%S").to_string();
+        let text = |time: Time| time.format("%H:%M:%S").to_string();
         let mut out = json!({ "st": self.step });
         if let Some(min) = self.min {
             out["min"] = json!(text(min));
@@ -259,8 +265,8 @@ impl TimeRules {
 mod tests {
     use super::*;
 
-    fn t(h: u32, m: u32) -> NaiveTime {
-        NaiveTime::from_hms_opt(h, m, 0).unwrap()
+    fn t(h: u8, m: u8) -> Time {
+        Time::new(h, m, 0).unwrap()
     }
 
     #[test]
@@ -279,9 +285,9 @@ mod tests {
         assert_eq!(rules.check(t(17, 0)), Ok(()));
         // The end of an unavailable span runs to the end of its minute.
         let rules = TimeRules::new().unavailable(t(5, 30), t(7, 29));
-        assert!(!rules.allows(NaiveTime::from_hms_opt(7, 29, 45).unwrap()));
+        assert!(!rules.allows(Time::new(7, 29, 45).unwrap()));
         assert!(rules.allows(t(7, 30)));
-        assert!(rules.allows(NaiveTime::from_hms_opt(5, 29, 59).unwrap()));
+        assert!(rules.allows(Time::new(5, 29, 59).unwrap()));
     }
 
     #[test]

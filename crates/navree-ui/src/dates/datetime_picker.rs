@@ -1,6 +1,6 @@
 //! [`DateTimePicker`]: a date and a time of day in one control.
 
-use chrono::{NaiveDate, NaiveDateTime, Timelike, Utc, Weekday};
+use navree_datetime::{Date, DateTime, Timestamp, Weekday};
 
 use super::locale::{Clock, DateLocale};
 use super::picker::{DatePicker, id_from};
@@ -12,14 +12,17 @@ use crate::node::{AttrValue, Element, Node, Uses, el, into_node};
 /// What the picker was given as its value.
 #[derive(Clone, Debug)]
 enum Given {
-    At(NaiveDateTime),
+    At(DateTime),
     Text(String),
 }
 
 /// A date and a time without a leap second or a fraction: the picker takes and posts
 /// whole seconds.
-fn whole_seconds(at: NaiveDateTime) -> NaiveDateTime {
-    at.with_nanosecond(0).unwrap_or(at)
+fn whole_seconds(at: DateTime) -> DateTime {
+    at.time()
+        .with_nanos(0)
+        .map(|t| at.date().at(t))
+        .unwrap_or(at)
 }
 
 /// A date and a time of day together: a date box with its calendar and a time box with its
@@ -36,11 +39,11 @@ fn whole_seconds(at: NaiveDateTime) -> NaiveDateTime {
 /// and say which zone that is with [`zone_note`](Self::zone_note).
 ///
 /// ```
+/// use navree_datetime::{Date, Time};
 /// use navree_ui::dates::{DateLocale, DateTimePicker};
 /// use navree_ui::render;
-/// use chrono::NaiveDate;
 ///
-/// let at = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap().and_hms_opt(14, 30, 0).unwrap();
+/// let at = Date::new(2026, 11, 12).unwrap().at(Time::new(14, 30, 0).unwrap());
 /// let html = render(&DateTimePicker::new("starts").value(at).locale(DateLocale::of("en-IN")).into());
 /// assert!(html.contains(r#"type="datetime-local" name="starts" value="2026-11-12T14:30""#));
 /// assert!(html.contains(r#"value="12/11/2026""#));
@@ -55,7 +58,7 @@ pub struct DateTimePicker {
     date_rules: DateRules,
     time_rules: TimeRules,
     locale: DateLocale,
-    today: NaiveDate,
+    today: Date,
     week_start: Option<Weekday>,
     clock: Option<Clock>,
     seconds: bool,
@@ -79,7 +82,7 @@ impl DateTimePicker {
             date_rules: DateRules::new(),
             time_rules: TimeRules::new(),
             locale: DateLocale::english(),
-            today: Utc::now().date_naive(),
+            today: Timestamp::now().date_time_utc().date(),
             week_start: None,
             clock: None,
             seconds: false,
@@ -96,12 +99,12 @@ impl DateTimePicker {
 
     /// Reads what the picker posts: a date and a time, with or without seconds. Anything
     /// else is `None`.
-    pub fn read(text: &str) -> Option<NaiveDateTime> {
+    pub fn read(text: &str) -> Option<DateTime> {
         let text = text.trim();
-        NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S")
-            .or_else(|_| NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M"))
+        DateTime::parse("%Y-%m-%dT%H:%M:%S", text)
+            .or_else(|_| DateTime::parse("%Y-%m-%dT%H:%M", text))
             .ok()
-            .filter(|at| at.nanosecond() == 0)
+            .filter(|at| at.time().nanosecond() == 0)
     }
 
     /// Sets the id of the picker's own element. The control a label points at is the
@@ -112,13 +115,13 @@ impl DateTimePicker {
     }
 
     /// Sets the date and time.
-    pub fn value(mut self, at: NaiveDateTime) -> Self {
+    pub fn value(mut self, at: DateTime) -> Self {
         self.value = Some(Given::At(whole_seconds(at)));
         self
     }
 
     /// Sets the date and time, or leaves the picker empty.
-    pub fn value_opt(mut self, at: Option<NaiveDateTime>) -> Self {
+    pub fn value_opt(mut self, at: Option<DateTime>) -> Self {
         self.value = at.map(|at| Given::At(whole_seconds(at)));
         self
     }
@@ -161,7 +164,7 @@ impl DateTimePicker {
     }
 
     /// Today, as the page counts it. Without it, today is the day in UTC.
-    pub fn today(mut self, today: NaiveDate) -> Self {
+    pub fn today(mut self, today: Date) -> Self {
         self.today = today;
         self
     }
@@ -244,7 +247,7 @@ impl DateTimePicker {
             Some(Given::Text(text)) => (None, Some(text.clone())),
             None => (None, None),
         };
-        let with_seconds = self.seconds || at.is_some_and(|at| at.second() != 0);
+        let with_seconds = self.seconds || at.is_some_and(|at| at.time().second() != 0);
         // The joint field takes what the server takes and never less: the first and last
         // day, and the time's step (whole seconds when seconds are in play).
         let step = self.time_rules.native_limits(with_seconds).step;

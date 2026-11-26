@@ -1,13 +1,13 @@
 //! A window of whole days: the value of a range picker, the presets that fill it,
 //! and what a query needs from it.
 
-use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
+use navree_datetime::{Date, Time, Timestamp, Weekday};
 use serde::Deserialize;
 
 use super::grid::{self, add_months, days_in_month};
 use super::locale::DateLocale;
 use super::rules::{DateError, RangeRules};
-use super::zoned::{Resolved, resolve};
+use super::zoned::{Resolved, WallZone, resolve};
 
 /// From one day to another, both included. `from` is never after `to`.
 ///
@@ -16,10 +16,10 @@ use super::zoned::{Resolved, resolve};
 /// last day whole, and the 23-hour and 25-hour days of a clock change too.
 ///
 /// ```
+/// use navree_datetime::Date;
 /// use navree_ui::dates::DateRange;
-/// use chrono::NaiveDate;
 ///
-/// let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
+/// let day = |d| Date::new(2026, 11, d).unwrap();
 /// let range = DateRange::new(day(3), day(1));
 /// assert_eq!((range.from, range.to), (day(1), day(3)));
 /// assert_eq!(range.day_count(), 3);
@@ -27,14 +27,14 @@ use super::zoned::{Resolved, resolve};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DateRange {
     /// The first day.
-    pub from: NaiveDate,
+    pub from: Date,
     /// The last day.
-    pub to: NaiveDate,
+    pub to: Date,
 }
 
 impl DateRange {
     /// A range between two days, given in either order.
-    pub fn new(a: NaiveDate, b: NaiveDate) -> Self {
+    pub fn new(a: Date, b: Date) -> Self {
         Self {
             from: a.min(b),
             to: a.max(b),
@@ -42,17 +42,17 @@ impl DateRange {
     }
 
     /// A range of one day.
-    pub fn single(day: NaiveDate) -> Self {
+    pub fn single(day: Date) -> Self {
         Self::new(day, day)
     }
 
     /// How many days it holds.
     pub fn day_count(&self) -> i64 {
-        (self.to - self.from).num_days() + 1
+        self.from.days_until(self.to) + 1
     }
 
     /// Whether `day` is in it.
-    pub fn contains(&self, day: NaiveDate) -> bool {
+    pub fn contains(&self, day: Date) -> bool {
         self.from <= day && day <= self.to
     }
 
@@ -69,36 +69,36 @@ impl DateRange {
     /// the zone skipped starts when the clocks jump.
     ///
     /// ```
+    /// use navree_datetime::{Date, Zone};
     /// use navree_ui::dates::DateRange;
-    /// use chrono::{NaiveDate, Utc};
     ///
-    /// let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
-    /// let (start, end) = DateRange::new(day(1), day(3)).utc_bounds(&Utc);
-    /// assert_eq!((end - start).num_hours(), 72);
+    /// let day = |d| Date::new(2026, 11, d).unwrap();
+    /// let (start, end) = DateRange::new(day(1), day(3)).utc_bounds(&Zone::UTC);
+    /// assert_eq!((end - start).as_hours(), 72);
     /// ```
-    pub fn utc_bounds<Tz: TimeZone>(&self, zone: &Tz) -> (DateTime<Utc>, DateTime<Utc>) {
+    pub fn utc_bounds<Z: WallZone>(&self, zone: &Z) -> (Timestamp, Timestamp) {
         let start = start_of_day(self.from, zone);
-        // The last day chrono holds has no day after it: the range runs to the end of time.
+        // The last day `Date` holds has no day after it: the range runs to the end of time.
         let end = self
             .to
-            .succ_opt()
-            .map_or(DateTime::<Utc>::MAX_UTC, |after| start_of_day(after, zone));
+            .tomorrow()
+            .map_or(Timestamp::MAX, |after| start_of_day(after, zone));
         (start, end)
     }
 
     /// Every day in the range, in order.
-    pub fn days(&self) -> impl Iterator<Item = NaiveDate> + use<> {
+    pub fn days(&self) -> impl Iterator<Item = Date> + use<> {
         let to = self.to;
         std::iter::successors(Some(self.from), move |day| {
-            day.succ_opt().filter(|next| *next <= to)
+            day.tomorrow().filter(|next| *next <= to)
         })
     }
 }
 
 /// A day as a request writes it: `YYYY-MM-DD`, and in the years a calendar draws, 1 to
-/// 9999. Another year is no day here, though chrono could hold it.
-fn read_day(text: &str) -> Option<NaiveDate> {
-    let day: NaiveDate = text.trim().parse().ok()?;
+/// 9999. Another year is no day here, though `Date` could hold it.
+fn read_day(text: &str) -> Option<Date> {
+    let day: Date = text.trim().parse().ok()?;
     (grid::earliest()..=grid::latest())
         .contains(&day)
         .then_some(day)
@@ -109,15 +109,15 @@ fn read_day(text: &str) -> Option<NaiveDate> {
 /// counts once, and the days come back in order.
 ///
 /// ```
+/// use navree_datetime::Date;
 /// use navree_ui::dates::parse_list;
-/// use chrono::NaiveDate;
 ///
-/// let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
+/// let day = |d| Date::new(2026, 11, d).unwrap();
 /// assert_eq!(parse_list("2026-11-12,2026-11-03,2026-11-03", 10), Some(vec![day(3), day(12)]));
 /// assert_eq!(parse_list("2026-11-12,soon", 10), None);
 /// assert_eq!(parse_list("", 10), Some(vec![]));
 /// ```
-pub fn parse_list(text: &str, max: usize) -> Option<Vec<NaiveDate>> {
+pub fn parse_list(text: &str, max: usize) -> Option<Vec<Date>> {
     let text = text.trim();
     if text.is_empty() {
         return Some(Vec::new());
@@ -137,8 +137,8 @@ pub fn parse_list(text: &str, max: usize) -> Option<Vec<NaiveDate>> {
 }
 
 /// The first instant of a day on a zone's clocks.
-fn start_of_day<Tz: TimeZone>(day: NaiveDate, zone: &Tz) -> DateTime<Utc> {
-    match resolve(day, NaiveTime::MIN, zone) {
+fn start_of_day<Z: WallZone>(day: Date, zone: &Z) -> Timestamp {
+    match resolve(day, Time::MIDNIGHT, zone) {
         Resolved::Single(at) => at,
         Resolved::Ambiguous { first, .. } => first,
         Resolved::Gap { transition, .. } => transition,
@@ -359,9 +359,9 @@ impl DatePreset {
     /// `earliest` is where *all time* begins (`None` makes *all time* no range).
     pub fn range(
         self,
-        today: NaiveDate,
+        today: Date,
         week_start: Weekday,
-        earliest: Option<NaiveDate>,
+        earliest: Option<Date>,
     ) -> Option<DateRange> {
         self.counted(today, week_start, earliest)
             .filter(|range| range.from >= grid::earliest() && range.to <= grid::latest())
@@ -369,30 +369,32 @@ impl DatePreset {
 
     fn counted(
         self,
-        today: NaiveDate,
+        today: Date,
         week_start: Weekday,
-        earliest: Option<NaiveDate>,
+        earliest: Option<Date>,
     ) -> Option<DateRange> {
-        // Every step back is checked: a `today` at the edge of what chrono holds has no day
+        // Every step back is checked: a `today` at the edge of what `Date` holds has no day
         // a week before it, and then there is no range, not a panic.
-        let back = |day: NaiveDate, n: i64| day.checked_sub_signed(Duration::days(n));
+        let back = |day: Date, n: i64| day.add_days(-n);
         let days_ago = |n: i64| back(today, n);
-        let week_begin = |day: NaiveDate| {
+        let week_begin = |day: Date| {
             let since =
-                (day.weekday().num_days_from_sunday() + 7 - week_start.num_days_from_sunday()) % 7;
+                (day.weekday().days_from_sunday() + 7 - week_start.days_from_sunday()) % 7;
             back(day, i64::from(since))
         };
         let month_range = |year: i32, month: u32, months: u32| -> Option<DateRange> {
-            let from = NaiveDate::from_ymd_opt(year, month, 1)?;
+            let from = Date::new(year, u8::try_from(month).ok()?, 1).ok()?;
             let (last_year, last_month) = add_months(year, month, i32::try_from(months).ok()? - 1)?;
-            let to = NaiveDate::from_ymd_opt(
+            let to = Date::new(
                 last_year,
-                last_month,
-                days_in_month(last_year, last_month),
-            )?;
+                u8::try_from(last_month).ok()?,
+                u8::try_from(days_in_month(last_year, last_month)).ok()?,
+            )
+            .ok()?;
             Some(DateRange::new(from, to))
         };
         let quarter_first = |year: i32, month: u32| (year, (month - 1) / 3 * 3 + 1);
+        let today_month = u32::from(today.month_number());
         Some(match self {
             Self::Today => DateRange::single(today),
             Self::Yesterday => DateRange::single(days_ago(1)?),
@@ -404,25 +406,28 @@ impl DatePreset {
             Self::Last7Days => DateRange::new(days_ago(6)?, today),
             Self::Last14Days => DateRange::new(days_ago(13)?, today),
             Self::Last30Days => DateRange::new(days_ago(29)?, today),
-            Self::ThisMonth => DateRange::new(today.with_day(1)?, today),
+            Self::ThisMonth => DateRange::new(today.first_of_month(), today),
             Self::LastMonth => {
-                let (year, month) = add_months(today.year(), today.month(), -1)?;
+                let (year, month) = add_months(today.year(), today_month, -1)?;
                 month_range(year, month, 1)?
             }
             Self::ThisQuarter => {
-                let (year, month) = quarter_first(today.year(), today.month());
-                DateRange::new(NaiveDate::from_ymd_opt(year, month, 1)?, today)
+                let (year, month) = quarter_first(today.year(), today_month);
+                DateRange::new(Date::new(year, u8::try_from(month).ok()?, 1).ok()?, today)
             }
             Self::LastQuarter => {
-                let (year, month) = quarter_first(today.year(), today.month());
+                let (year, month) = quarter_first(today.year(), today_month);
                 let (year, month) = add_months(year, month, -3)?;
                 month_range(year, month, 3)?
             }
-            Self::ThisYear => DateRange::new(NaiveDate::from_ymd_opt(today.year(), 1, 1)?, today),
-            Self::LastYear => DateRange::new(
-                NaiveDate::from_ymd_opt(today.year() - 1, 1, 1)?,
-                NaiveDate::from_ymd_opt(today.year() - 1, 12, 31)?,
-            ),
+            Self::ThisYear => DateRange::new(Date::new(today.year(), 1, 1).ok()?, today),
+            Self::LastYear => {
+                let prev = today.year().checked_sub(1)?;
+                DateRange::new(
+                    Date::new(prev, 1, 1).ok()?,
+                    Date::new(prev, 12, 31).ok()?,
+                )
+            }
             Self::AllTime => DateRange::new(earliest?, today),
         })
     }
@@ -434,24 +439,26 @@ impl DateLocale {
     /// range stays inside it. One day reads as that day alone.
     ///
     /// ```
+    /// use navree_datetime::Date;
     /// use navree_ui::dates::{DateLocale, DateRange};
-    /// use chrono::NaiveDate;
     ///
-    /// let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap();
+    /// let day = |m, d| Date::new(2026, m, d).unwrap();
     /// let en = DateLocale::of("en");
     /// let today = day(11, 3);
     /// assert_eq!(en.format_range(&DateRange::new(day(11, 1), day(11, 3)), today), "Nov 1 – 3");
     /// assert_eq!(en.format_range(&DateRange::new(day(10, 28), day(11, 3)), today), "Oct 28 – Nov 3");
     /// ```
-    pub fn format_range(&self, range: &DateRange, today: NaiveDate) -> String {
+    pub fn format_range(&self, range: &DateRange, today: Date) -> String {
         let same_year = range.from.year() == range.to.year();
         let with_year = !same_year || range.from.year() != today.year();
         if range.from == range.to {
             return self.format_short(range.from, with_year);
         }
-        if range.from.year() == range.to.year() && range.from.month() == range.to.month() {
+        if range.from.year() == range.to.year()
+            && range.from.month_number() == range.to.month_number()
+        {
             let (first, last) = (range.from.day(), range.to.day());
-            let month = self.month_short(range.from.month());
+            let month = self.month_short(u32::from(range.from.month_number()));
             let year = range.from.year();
             match (
                 self.short_pattern.as_ref(),
@@ -479,12 +486,14 @@ impl DateLocale {
 
 #[cfg(test)]
 mod tests {
+    use navree_datetime::Zone;
+    #[cfg(feature = "time")]
     use navree_time::Tz;
 
     use super::*;
 
-    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    fn day(y: i32, m: u8, d: u8) -> Date {
+        Date::new(y, m, d).unwrap()
     }
 
     #[test]
@@ -514,7 +523,7 @@ mod tests {
         let huge = vec!["2026-11-03"; 100_000].join(",");
         assert_eq!(parse_list(&huge, 366), None);
         let many: Vec<String> = (0..100_000)
-            .map(|n| (day(1) + chrono::Duration::days(n)).to_string())
+            .map(|n| day(1).add_days(n).unwrap().to_string())
             .collect();
         assert_eq!(parse_list(&many.join(","), 366), None);
     }
@@ -550,108 +559,111 @@ mod tests {
 
     #[test]
     fn utc_bounds_count_the_last_day_whole() {
-        let (start, end) = DateRange::new(day(2026, 11, 1), day(2026, 11, 3)).utc_bounds(&Utc);
-        assert_eq!(start, Utc.with_ymd_and_hms(2026, 11, 1, 0, 0, 0).unwrap());
-        assert_eq!(end, Utc.with_ymd_and_hms(2026, 11, 4, 0, 0, 0).unwrap());
+        let (start, end) = DateRange::new(day(2026, 11, 1), day(2026, 11, 3)).utc_bounds(&Zone::UTC);
+        assert_eq!(start, Timestamp::utc(2026, 11, 1, 0, 0, 0).unwrap());
+        assert_eq!(end, Timestamp::utc(2026, 11, 4, 0, 0, 0).unwrap());
         // One day is one day.
-        let (start, end) = DateRange::single(day(2026, 11, 3)).utc_bounds(&Utc);
-        assert_eq!((end - start).num_hours(), 24);
+        let (start, end) = DateRange::single(day(2026, 11, 3)).utc_bounds(&Zone::UTC);
+        assert_eq!((end - start).as_hours(), 24);
     }
 
+    #[cfg(feature = "time")]
     #[test]
     fn a_23_hour_day_and_a_25_hour_day_are_counted_whole() {
         let ny: Tz = "America/New_York".parse().unwrap();
         let (start, end) = DateRange::single(day(2026, 3, 8)).utc_bounds(&ny);
-        assert_eq!((end - start).num_hours(), 23);
+        assert_eq!((end - start).as_hours(), 23);
         let (start, end) = DateRange::single(day(2026, 11, 1)).utc_bounds(&ny);
-        assert_eq!((end - start).num_hours(), 25);
+        assert_eq!((end - start).as_hours(), 25);
         // A range over both counts the 48 hours of ordinary days plus the odd ones.
         let (start, end) = DateRange::new(day(2026, 3, 7), day(2026, 3, 9)).utc_bounds(&ny);
-        assert_eq!((end - start).num_hours(), 24 + 23 + 24);
+        assert_eq!((end - start).as_hours(), 24 + 23 + 24);
     }
 
+    #[cfg(feature = "time")]
     #[test]
     fn unusual_offsets_still_start_at_local_midnight() {
         let kolkata: Tz = "Asia/Kolkata".parse().unwrap();
         let (start, end) = DateRange::single(day(2026, 11, 3)).utc_bounds(&kolkata);
-        assert_eq!(start, Utc.with_ymd_and_hms(2026, 11, 2, 18, 30, 0).unwrap());
-        assert_eq!(end, Utc.with_ymd_and_hms(2026, 11, 3, 18, 30, 0).unwrap());
+        assert_eq!(start, Timestamp::utc(2026, 11, 2, 18, 30, 0).unwrap());
+        assert_eq!(end, Timestamp::utc(2026, 11, 3, 18, 30, 0).unwrap());
         let kiritimati: Tz = "Pacific/Kiritimati".parse().unwrap();
         let (start, _) = DateRange::single(day(2026, 11, 3)).utc_bounds(&kiritimati);
-        assert_eq!(start, Utc.with_ymd_and_hms(2026, 11, 2, 10, 0, 0).unwrap());
+        assert_eq!(start, Timestamp::utc(2026, 11, 2, 10, 0, 0).unwrap());
         let baker: Tz = "Etc/GMT+12".parse().unwrap();
         let (start, _) = DateRange::single(day(2026, 11, 3)).utc_bounds(&baker);
-        assert_eq!(start, Utc.with_ymd_and_hms(2026, 11, 3, 12, 0, 0).unwrap());
+        assert_eq!(start, Timestamp::utc(2026, 11, 3, 12, 0, 0).unwrap());
     }
 
+    #[cfg(feature = "time")]
     #[test]
     fn a_zone_that_skips_midnight_starts_the_day_when_the_clocks_jump() {
         // Brazil's old summer time began at midnight: 2018-11-04 00:00 did not exist
         // in São Paulo; the day began at 01:00 (03:00 UTC).
         let sao_paulo: Tz = "America/Sao_Paulo".parse().unwrap();
         let (start, _) = DateRange::single(day(2018, 11, 4)).utc_bounds(&sao_paulo);
-        assert_eq!(start, Utc.with_ymd_and_hms(2018, 11, 4, 3, 0, 0).unwrap());
+        assert_eq!(start, Timestamp::utc(2018, 11, 4, 3, 0, 0).unwrap());
     }
 
     #[test]
     fn presets_count_from_the_day_given() {
         let today = day(2026, 11, 3); // a Tuesday
         let r = |p: DatePreset, ws| p.range(today, ws, None).unwrap();
-        assert_eq!(r(DatePreset::Today, Weekday::Mon), DateRange::single(today));
+        assert_eq!(r(DatePreset::Today, Weekday::Monday), DateRange::single(today));
         assert_eq!(
-            r(DatePreset::Yesterday, Weekday::Mon),
+            r(DatePreset::Yesterday, Weekday::Monday),
             DateRange::single(day(2026, 11, 2))
         );
         assert_eq!(
-            r(DatePreset::ThisWeek, Weekday::Mon),
+            r(DatePreset::ThisWeek, Weekday::Monday),
             DateRange::new(day(2026, 11, 2), today)
         );
         assert_eq!(
-            r(DatePreset::ThisWeek, Weekday::Sun),
+            r(DatePreset::ThisWeek, Weekday::Sunday),
             DateRange::new(day(2026, 11, 1), today)
         );
         assert_eq!(
-            r(DatePreset::ThisWeek, Weekday::Sat),
+            r(DatePreset::ThisWeek, Weekday::Saturday),
             DateRange::new(day(2026, 10, 31), today)
         );
         assert_eq!(
-            r(DatePreset::LastWeek, Weekday::Mon),
+            r(DatePreset::LastWeek, Weekday::Monday),
             DateRange::new(day(2026, 10, 26), day(2026, 11, 1))
         );
         assert_eq!(
-            r(DatePreset::Last7Days, Weekday::Mon),
+            r(DatePreset::Last7Days, Weekday::Monday),
             DateRange::new(day(2026, 10, 28), today)
         );
-        assert_eq!(r(DatePreset::Last7Days, Weekday::Mon).day_count(), 7);
-        assert_eq!(r(DatePreset::Last14Days, Weekday::Mon).day_count(), 14);
-        assert_eq!(r(DatePreset::Last30Days, Weekday::Mon).day_count(), 30);
+        assert_eq!(r(DatePreset::Last7Days, Weekday::Monday).day_count(), 7);
+        assert_eq!(r(DatePreset::Last14Days, Weekday::Monday).day_count(), 14);
+        assert_eq!(r(DatePreset::Last30Days, Weekday::Monday).day_count(), 30);
         assert_eq!(
-            r(DatePreset::ThisMonth, Weekday::Mon),
+            r(DatePreset::ThisMonth, Weekday::Monday),
             DateRange::new(day(2026, 11, 1), today)
         );
         assert_eq!(
-            r(DatePreset::LastMonth, Weekday::Mon),
+            r(DatePreset::LastMonth, Weekday::Monday),
             DateRange::new(day(2026, 10, 1), day(2026, 10, 31))
         );
         assert_eq!(
-            r(DatePreset::ThisQuarter, Weekday::Mon),
+            r(DatePreset::ThisQuarter, Weekday::Monday),
             DateRange::new(day(2026, 10, 1), today)
         );
         assert_eq!(
-            r(DatePreset::LastQuarter, Weekday::Mon),
+            r(DatePreset::LastQuarter, Weekday::Monday),
             DateRange::new(day(2026, 7, 1), day(2026, 9, 30))
         );
         assert_eq!(
-            r(DatePreset::ThisYear, Weekday::Mon),
+            r(DatePreset::ThisYear, Weekday::Monday),
             DateRange::new(day(2026, 1, 1), today)
         );
         assert_eq!(
-            r(DatePreset::LastYear, Weekday::Mon),
+            r(DatePreset::LastYear, Weekday::Monday),
             DateRange::new(day(2025, 1, 1), day(2025, 12, 31))
         );
-        assert_eq!(DatePreset::AllTime.range(today, Weekday::Mon, None), None);
+        assert_eq!(DatePreset::AllTime.range(today, Weekday::Monday, None), None);
         assert_eq!(
-            DatePreset::AllTime.range(today, Weekday::Mon, Some(day(2020, 5, 17))),
+            DatePreset::AllTime.range(today, Weekday::Monday, Some(day(2020, 5, 17))),
             Some(DateRange::new(day(2020, 5, 17), today))
         );
     }
@@ -661,33 +673,33 @@ mod tests {
         let jan = day(2026, 1, 15);
         assert_eq!(
             DatePreset::LastMonth
-                .range(jan, Weekday::Mon, None)
+                .range(jan, Weekday::Monday, None)
                 .unwrap(),
             DateRange::new(day(2025, 12, 1), day(2025, 12, 31))
         );
         assert_eq!(
             DatePreset::LastQuarter
-                .range(jan, Weekday::Mon, None)
+                .range(jan, Weekday::Monday, None)
                 .unwrap(),
             DateRange::new(day(2025, 10, 1), day(2025, 12, 31))
         );
         let mar = day(2024, 3, 10);
         assert_eq!(
             DatePreset::LastMonth
-                .range(mar, Weekday::Mon, None)
+                .range(mar, Weekday::Monday, None)
                 .unwrap(),
             DateRange::new(day(2024, 2, 1), day(2024, 2, 29))
         );
         assert_eq!(
             DatePreset::Last30Days
-                .range(mar, Weekday::Mon, None)
+                .range(mar, Weekday::Monday, None)
                 .unwrap()
                 .from,
             day(2024, 2, 10)
         );
         // The edge of the calendar returns nothing rather than overflow.
         assert_eq!(
-            DatePreset::LastYear.range(day(1, 6, 1), Weekday::Mon, None),
+            DatePreset::LastYear.range(day(1, 6, 1), Weekday::Monday, None),
             None
         );
     }
@@ -705,7 +717,7 @@ mod tests {
     fn chips_read_short() {
         let en = DateLocale::of("en");
         let today = day(2026, 11, 3);
-        let f = |a: NaiveDate, b: NaiveDate| en.format_range(&DateRange::new(a, b), today);
+        let f = |a: Date, b: Date| en.format_range(&DateRange::new(a, b), today);
         assert_eq!(f(day(2026, 11, 3), day(2026, 11, 3)), "Nov 3");
         assert_eq!(f(day(2026, 11, 1), day(2026, 11, 3)), "Nov 1 – 3");
         assert_eq!(f(day(2026, 10, 28), day(2026, 11, 3)), "Oct 28 – Nov 3");
