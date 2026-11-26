@@ -237,8 +237,8 @@ pub(crate) fn failed_listing(failed: &[FailedJob]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, Utc};
     use navree_contracts::JobOptions;
+    use navree_datetime::Timestamp;
     use serde_json::json;
 
     use super::*;
@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn failed_listing_shows_id_queue_type_attempts_time_and_first_error_line() {
-        let failed_at: DateTime<Utc> = "2026-10-25T12:00:30Z".parse().unwrap();
+        let failed_at: Timestamp = "2026-10-25T12:00:30Z".parse().unwrap();
         let job = FailedJob {
             id: "0199-abc".into(),
             queue: "emails".into(),

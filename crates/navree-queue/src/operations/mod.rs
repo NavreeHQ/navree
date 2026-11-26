@@ -9,8 +9,8 @@ mod sql;
 use std::fmt;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use navree_contracts::{BoxError, Broadcaster, Job, JobEnvelope, Principal, permitted};
+use navree_datetime::Timestamp;
 use navree_db::{Db, Executor, Statement, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_openapi::ToSchema;
@@ -191,15 +191,15 @@ pub struct OperationRecord {
     /// The batch doing its work.
     pub batch_id: Option<String>,
     /// When it was started.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When its work began.
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
     /// When its work last showed signs of life.
-    pub heartbeat_at: Option<DateTime<Utc>>,
+    pub heartbeat_at: Option<Timestamp>,
     /// When it finished.
-    pub finished_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<Timestamp>,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// Bumped on every change (the SSE stream's event id).
     #[serde(skip)]
     pub(crate) version: i64,

@@ -5783,12 +5783,12 @@ dependencies = [
 name = "navree-queue"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "hex",
  "http",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",

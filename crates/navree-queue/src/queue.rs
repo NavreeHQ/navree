@@ -232,7 +232,7 @@ impl Queue {
     /// whole table.
     pub async fn failed_summary(
         &self,
-        since: chrono::DateTime<chrono::Utc>,
+        since: navree_datetime::Timestamp,
         limit: usize,
     ) -> Result<FailedSummary, QueueError> {
         self.inner.store.failed_summary(since, limit).await
@@ -440,8 +440,8 @@ impl Queue {
     /// has one).
     pub(crate) fn now_ms(&self) -> i64 {
         match &self.inner.clock {
-            Some(clock) => clock.now().timestamp_millis(),
-            None => chrono::Utc::now().timestamp_millis(),
+            Some(clock) => clock.now().as_millis(),
+            None => navree_datetime::Timestamp::now().as_millis(),
         }
     }
 

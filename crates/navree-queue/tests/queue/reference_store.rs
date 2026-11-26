@@ -169,7 +169,7 @@ impl QueueStore for ReferenceStore {
                 options: job.options.clone(),
                 error: error.to_owned(),
                 attempts: job.attempts,
-                failed_at: chrono::DateTime::from_timestamp_millis(now).unwrap_or_default(),
+                failed_at: navree_datetime::Timestamp::from_millis(now).unwrap_or_default(),
             });
             Ok(true)
         })

@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use chrono::TimeDelta;
 use navree_contracts::{Dispatcher, Job};
+use navree_datetime::Span;
 use navree_db::{Db, Executor as _, Statement};
 use navree_queue::{
     Attempt, AttemptOutcome, PendingQuery, PendingState, QueueDriver, QueueError, QueueOptions,
@@ -190,7 +190,7 @@ pub async fn retry_with_backoff_then_fail_to_failed_jobs(driver: QueueDriver) {
     assert_eq!(job.payload, json!({ "label": "x" }));
     assert_eq!(job.attempts, 3);
     assert!(job.error.contains("boom on attempt 3"), "{}", job.error);
-    assert_eq!(job.failed_at, start() + TimeDelta::seconds(30));
+    assert_eq!(job.failed_at, start() + Span::seconds(30));
 }
 
 pub async fn timeout_counts_as_failure(driver: QueueDriver) {
@@ -642,7 +642,7 @@ pub async fn status_counts_waiting_delayed_and_running_jobs(driver: QueueDriver)
     assert_eq!(status.running, 1);
     assert_eq!(status.pending(), 4);
     assert_eq!(status.oldest_available_at, Some(start()));
-    assert_eq!(status.at, start() + TimeDelta::seconds(15));
+    assert_eq!(status.at, start() + Span::seconds(15));
     assert_eq!(status.oldest_wait(), Duration::from_secs(15));
     let high = h.queue.status("high").await.unwrap();
     assert_eq!((high.waiting, high.delayed, high.running), (1, 0, 0));
@@ -682,7 +682,7 @@ pub async fn pending_jobs_lists_and_finds_unfinished_jobs(driver: QueueDriver) {
     assert_eq!(all[0].created_at, start());
     assert_eq!(all[0].reserved_at, None);
     assert_eq!(all[2].state, PendingState::Delayed);
-    assert_eq!(all[2].available_at, start() + TimeDelta::seconds(62));
+    assert_eq!(all[2].available_at, start() + Span::seconds(62));
 
     let high = PendingQuery {
         queue: Some("high".into()),

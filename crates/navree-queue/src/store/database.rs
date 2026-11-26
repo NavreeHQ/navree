@@ -6,8 +6,8 @@
 //! with `FOR UPDATE SKIP LOCKED` in a short transaction instead); failed
 //! jobs are [`FailedJob`] models, written and read through navree-orm.
 
-use chrono::{DateTime, Utc};
 use navree_contracts::JobOptions;
+use navree_datetime::Timestamp;
 use navree_db::{Backend, Db, DbError, Executor, ExecutorExt as _, Row, Statement, Uow, Value};
 use navree_orm::{Model as _, Record};
 
@@ -196,7 +196,7 @@ impl DatabaseStore {
     /// without their payloads.
     pub(crate) async fn failed_summary(
         &self,
-        since: DateTime<Utc>,
+        since: Timestamp,
         limit: usize,
     ) -> Result<FailedSummary, QueueError> {
         let counts = self
@@ -207,7 +207,7 @@ impl DatabaseStore {
                      COALESCE(SUM(CASE WHEN failed_at >= ? THEN 1 ELSE 0 END), 0) AS since \
                      FROM {FAILED_JOBS_TABLE}"
                 ),
-                [since.timestamp_millis().into()],
+                [since.as_millis().into()],
             ))
             .await?;
         let rows = self

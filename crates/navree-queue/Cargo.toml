@@ -41,12 +41,12 @@ test-mysql = ["navree-db/mysql"]
 ui = ["dep:navree-ui"]
 
 [dependencies]
-chrono = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }

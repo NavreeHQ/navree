@@ -64,7 +64,7 @@ fn progress_of(done: u64, total: u64, note: String) -> OperationProgress {
 }
 
 pub(super) fn insert(record: &OperationRecord) -> Result<Statement, QueueError> {
-    let now = record.created_at.timestamp_millis();
+    let now = record.created_at.as_millis();
     Ok(Statement::portable(
         format!(
             "INSERT INTO {OPERATIONS_TABLE} (id, kind, status, owner_id, workspace_id, \

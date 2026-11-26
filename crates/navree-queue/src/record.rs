@@ -1,8 +1,8 @@
 //! The records a [`QueueStore`](crate::QueueStore) stores and returns:
 //! [`NewJob`], [`ReservedJob`] and [`FailedJob`].
 
-use chrono::{DateTime, Utc};
 use navree_contracts::JobOptions;
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -36,7 +36,7 @@ pub struct FailedJob {
     pub attempts: u32,
     /// When it failed.
     #[model(cast = "unix_timestamp_ms")]
-    pub failed_at: DateTime<Utc>,
+    pub failed_at: Timestamp,
 }
 
 /// A failed job without its payload, as an overview lists it.
@@ -55,7 +55,7 @@ pub struct FailedJobBrief {
     /// How many it could have.
     pub max_attempts: u32,
     /// When it failed.
-    pub failed_at: DateTime<Utc>,
+    pub failed_at: Timestamp,
 }
 
 impl From<&FailedJob> for FailedJobBrief {
@@ -86,7 +86,7 @@ pub struct FailedSummary {
 
 impl FailedSummary {
     /// The summary of `failed` (newest first).
-    pub(crate) fn of(failed: &[FailedJob], since: DateTime<Utc>, limit: usize) -> FailedSummary {
+    pub(crate) fn of(failed: &[FailedJob], since: Timestamp, limit: usize) -> FailedSummary {
         FailedSummary {
             total: failed.len() as u64,
             since: failed.iter().filter(|job| job.failed_at >= since).count() as u64,
@@ -128,11 +128,11 @@ pub struct PendingJob {
     /// Waiting, delayed or running.
     pub state: PendingState,
     /// When it is (or was) available to workers.
-    pub available_at: DateTime<Utc>,
+    pub available_at: Timestamp,
     /// When a worker reserved it, while it runs.
-    pub reserved_at: Option<DateTime<Utc>>,
+    pub reserved_at: Option<Timestamp>,
     /// When it was queued (or last retried from the failed jobs).
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// Which pending jobs [`Queue::pending_jobs`](crate::Queue::pending_jobs)
@@ -191,9 +191,9 @@ pub struct QueueStatus {
     /// Jobs reserved by a worker.
     pub running: u64,
     /// When the oldest waiting job became available (`None`: none waits).
-    pub oldest_available_at: Option<DateTime<Utc>>,
+    pub oldest_available_at: Option<Timestamp>,
     /// When the status was taken (the queue's clock).
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
 }
 
 impl QueueStatus {
@@ -205,7 +205,7 @@ impl QueueStatus {
     /// How long the oldest waiting job has waited (zero when none waits).
     pub fn oldest_wait(&self) -> std::time::Duration {
         self.oldest_available_at
-            .and_then(|since| (self.at - since).to_std().ok())
+            .and_then(|since| (self.at - since).to_std())
             .unwrap_or_default()
     }
 }
@@ -405,7 +405,7 @@ pub(crate) fn stale_after_ms(options: &JobOptions) -> i64 {
     i64::try_from(secs.saturating_mul(1000)).unwrap_or(i64::MAX)
 }
 
-/// Unix milliseconds → `DateTime<Utc>` (the epoch for out-of-range values).
-pub(crate) fn from_millis(ms: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp_millis(ms).unwrap_or_default()
+/// Unix milliseconds → `Timestamp` (the epoch for out-of-range values).
+pub(crate) fn from_millis(ms: i64) -> Timestamp {
+    Timestamp::from_millis(ms).unwrap_or_default()
 }

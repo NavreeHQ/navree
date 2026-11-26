@@ -6,11 +6,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use navree_contracts::{
     Backoff, BoxError, BoxFuture, Broadcaster, Clock, FixedClock, Job, JobContext, JobOptions,
     ModuleBuilderJobsExt, PermissionCheck, Principal,
 };
+use navree_datetime::Timestamp;
 use navree_db::DatabaseModule;
 use navree_kernel::{Factory, Module, ModuleBuilder};
 use navree_queue::{Operations, Queue, QueueDriver, QueueModule, QueueOptions, WorkOptions};
@@ -21,7 +21,7 @@ use tokio::sync::Notify;
 use uuid::Uuid;
 
 /// The fixed clock's starting time.
-pub fn start() -> DateTime<Utc> {
+pub fn start() -> Timestamp {
     "2026-10-25T12:00:00Z".parse().expect("valid time")
 }
 
