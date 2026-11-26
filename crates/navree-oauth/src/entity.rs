@@ -33,7 +33,7 @@ use crate::scope::parse_scope;
 
 /// `oauth_clients`: the apps that ask for tokens.
 pub mod client {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -69,17 +69,17 @@ pub mod client {
         /// The client's website.
         pub website: Option<String>,
         /// When it was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
         /// When it was revoked.
-        pub revoked_at: Option<DateTime<Utc>>,
+        pub revoked_at: Option<Timestamp>,
     }
 }
 
 /// `oauth_authorizations`: the scopes a user approved for a client.
 pub mod authorization {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -96,16 +96,16 @@ pub mod authorization {
         /// The approved scopes, space-separated.
         pub scopes: String,
         /// When the user first approved the client.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the approval last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
 /// `oauth_authorization_requests`: `GET /oauth/authorize` requests waiting
 /// for the user's decision.
 pub mod authorization_request {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -133,15 +133,15 @@ pub mod authorization_request {
         /// `pending`, `approved` or `denied`.
         pub status: String,
         /// When it expires.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// When it was made.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
 /// `oauth_codes`: authorization codes (single use).
 pub mod code {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -167,17 +167,17 @@ pub mod code {
         /// The OpenID Connect `nonce`.
         pub nonce: Option<String>,
         /// When it expires.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// When it was exchanged.
-        pub used_at: Option<DateTime<Utc>>,
+        pub used_at: Option<Timestamp>,
         /// When it was issued.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
 /// `oauth_access_tokens`: opaque `nva_` access tokens.
 pub mod access_token {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -206,18 +206,18 @@ pub mod access_token {
         /// The workspace it is limited to.
         pub workspace_id: Option<Uuid>,
         /// When it expires.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// When it was revoked.
-        pub revoked_at: Option<DateTime<Utc>>,
+        pub revoked_at: Option<Timestamp>,
         /// When it was issued.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
 /// `oauth_refresh_tokens`: opaque `nvr_` refresh tokens, single use and
 /// rotated; a family shares one grant.
 pub mod refresh_token {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -245,19 +245,19 @@ pub mod refresh_token {
         /// The workspace its tokens are limited to.
         pub workspace_id: Option<Uuid>,
         /// When it expires.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// When it was rotated.
-        pub used_at: Option<DateTime<Utc>>,
+        pub used_at: Option<Timestamp>,
         /// When it was revoked.
-        pub revoked_at: Option<DateTime<Utc>>,
+        pub revoked_at: Option<Timestamp>,
         /// When it was issued.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
 /// `oauth_device_codes`: device authorization requests.
 pub mod device_code {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -283,19 +283,19 @@ pub mod device_code {
         /// The polling interval, in seconds.
         pub interval_secs: i64,
         /// When the device last polled.
-        pub last_polled_at: Option<DateTime<Utc>>,
+        pub last_polled_at: Option<Timestamp>,
         /// When it expires.
-        pub expires_at: DateTime<Utc>,
+        pub expires_at: Timestamp,
         /// When the device received its tokens.
-        pub used_at: Option<DateTime<Utc>>,
+        pub used_at: Option<Timestamp>,
         /// When it was made.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 
 /// `personal_access_tokens`: `nvp_` tokens users create for scripts.
 pub mod personal_access_token {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::Serialize;
     use uuid::Uuid;
 
@@ -315,13 +315,13 @@ pub mod personal_access_token {
         /// Its scopes, space-separated.
         pub scopes: String,
         /// When it expires; `None` never.
-        pub expires_at: Option<DateTime<Utc>>,
+        pub expires_at: Option<Timestamp>,
         /// When it was last used (updated at most once a minute).
-        pub last_used_at: Option<DateTime<Utc>>,
+        pub last_used_at: Option<Timestamp>,
         /// When it was revoked.
-        pub revoked_at: Option<DateTime<Utc>>,
+        pub revoked_at: Option<Timestamp>,
         /// When it was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }
 

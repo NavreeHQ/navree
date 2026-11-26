@@ -4,8 +4,8 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::{AuditEntry, AuditKind};
+use navree_datetime::{Span, Timestamp};
 use navree_db::Uow;
 use navree_openapi::ToSchema;
 use navree_orm::Model as _;
@@ -58,11 +58,11 @@ pub struct PersonalAccessTokenResource {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
     /// When it expires; `null` never.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
     /// When it was last used.
-    pub last_used_at: Option<DateTime<Utc>>,
+    pub last_used_at: Option<Timestamp>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl From<&PersonalAccessToken> for PersonalAccessTokenResource {
@@ -190,9 +190,8 @@ impl PersonalAccessTokens {
         };
         let now = self.core.now();
         let expires_at = lifetime.map(|lifetime| {
-            let delta = TimeDelta::from_std(lifetime).unwrap_or(TimeDelta::MAX);
-            now.checked_add_signed(delta)
-                .unwrap_or(DateTime::<Utc>::MAX_UTC)
+            let delta = Span::try_from(lifetime).unwrap_or(Span::MAX);
+            now.checked_add(delta).unwrap_or(Timestamp::MAX)
         });
         let token = new_token(PERSONAL_ACCESS_TOKEN_PREFIX);
         let record = PersonalAccessToken {
@@ -282,7 +281,7 @@ mod tests {
             token: Some("nvpat_a1b2c3d4e5".to_owned()),
             expires_at: None,
             last_used_at: None,
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
         };
         let printed = format!("{resource:?}");
         assert!(!printed.contains("a1b2c3d4e5"), "{printed}");

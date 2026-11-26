@@ -6,12 +6,12 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
-use chrono::{DateTime, TimeZone, Utc};
 use http::Method;
 use navree_access::{AccessModule, AccessOptions, AccessService};
 use navree_auth::{AuthModule, AuthService, User};
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture, Clock, FixedClock};
 use navree_crypto::{CryptoModule, generate_key};
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, Db, Uow};
 use navree_http::{AppError, Controller, CurrentPrincipal, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{Injectable, KernelError, Module, ModuleBuilder, Resolver};
@@ -32,8 +32,8 @@ pub const DEVICE_URL: &str = "https://app.acme.test/device";
 pub const REDIRECT_URI: &str = "https://zapier.test/oauth/return";
 
 /// When every test app's clock starts.
-pub fn start() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap()
+pub fn start() -> Timestamp {
+    Timestamp::utc(2026, 10, 26, 9, 0, 0).unwrap()
 }
 
 /// The `deals` subject (no table: the probe routes only check access).

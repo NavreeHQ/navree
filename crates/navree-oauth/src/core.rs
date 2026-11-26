@@ -4,9 +4,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
 use navree_bounded::Cache;
 use navree_contracts::{AuditEntry, AuditSink, Clock, SystemClock};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
 use uuid::Uuid;
@@ -28,8 +28,8 @@ pub(crate) struct CachedToken {
     pub(crate) scopes: Vec<String>,
     pub(crate) grant: crate::Grant,
     pub(crate) workspace_id: Option<Uuid>,
-    pub(crate) expires_at: Option<DateTime<Utc>>,
-    pub(crate) last_used_at: Option<DateTime<Utc>>,
+    pub(crate) expires_at: Option<Timestamp>,
+    pub(crate) last_used_at: Option<Timestamp>,
 }
 
 /// The shared state of the OAuth services.
@@ -71,19 +71,17 @@ impl Core {
     }
 
     /// The current time.
-    pub(crate) fn now(&self) -> DateTime<Utc> {
+    pub(crate) fn now(&self) -> Timestamp {
         self.clock.now()
     }
 
     /// `now` plus `secs` seconds.
-    pub(crate) fn after(&self, secs: u64) -> DateTime<Utc> {
+    pub(crate) fn after(&self, secs: u64) -> Timestamp {
         let delta = i64::try_from(secs)
             .ok()
-            .and_then(TimeDelta::try_seconds)
-            .unwrap_or(TimeDelta::MAX);
-        self.now()
-            .checked_add_signed(delta)
-            .unwrap_or(DateTime::<Utc>::MAX_UTC)
+            .and_then(Span::try_seconds)
+            .unwrap_or(Span::MAX);
+        self.now().checked_add(delta).unwrap_or(Timestamp::MAX)
     }
 
     /// The absolute URL of protocol endpoint `name` (`token` →

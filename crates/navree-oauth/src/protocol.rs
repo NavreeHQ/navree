@@ -634,7 +634,7 @@ impl Controller for OAuthProtocolController {
                             let client = &created.client;
                             let mut body = json!({
                                 "client_id": client.id,
-                                "client_id_issued_at": client.created_at.timestamp(),
+                                "client_id_issued_at": client.created_at.as_secs(),
                                 "client_name": client.name,
                                 "redirect_uris": client.redirect_uri_list(),
                                 "grant_types": registered_grant_types(client),

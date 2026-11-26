@@ -286,7 +286,7 @@ impl Controller for ConsentController {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
 
     use super::*;
     use crate::requests::ClientSummary;
@@ -312,7 +312,7 @@ mod tests {
                 },
             ],
             already_approved: approved,
-            expires_at: Utc::now(),
+            expires_at: Timestamp::now(),
         }
     }
 

@@ -6,9 +6,9 @@
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use navree_auth::AuthService;
 use navree_contracts::{AuditEntry, AuditKind};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_openapi::ToSchema;
 use navree_orm::{Executor, Model as _, Record};
@@ -256,18 +256,18 @@ impl Grants {
         user_id: Uuid,
         scopes: &[String],
         nonce: Option<String>,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<String, OAuthError> {
         let mut claims = self.user_claims(user_id, scopes).await?;
         claims.insert("iss".into(), json!(self.core.issuer));
         claims.insert("aud".into(), json!(client.id));
-        claims.insert("iat".into(), json!(now.timestamp()));
+        claims.insert("iat".into(), json!(now.as_secs()));
         claims.insert(
             "exp".into(),
             json!(
                 self.core
                     .after(self.core.options.access_token_ttl_secs)
-                    .timestamp()
+                    .as_secs()
             ),
         );
         if let Some(nonce) = nonce {
@@ -360,7 +360,7 @@ impl Grants {
         &self,
         uow: &Uow,
         code_id: Uuid,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<(), OAuthError> {
         access_token::Model::query()
             .where_(access_token::Model::CODE_ID.eq(code_id))
@@ -453,7 +453,7 @@ impl Grants {
         let interval = row.interval_secs;
         let too_fast = row
             .last_polled_at
-            .is_some_and(|last| (now - last).num_seconds() < interval);
+            .is_some_and(|last| (now - last).as_seconds() < interval);
         // Only the polling columns change, in statements of their own: the
         // device code's digest never reaches a change event.
         let polled = device_code::Model::query().where_key(row.id);
@@ -603,7 +603,7 @@ impl Grants {
         &self,
         exec: &E,
         family_id: Uuid,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<(), OAuthError> {
         refresh_token::Model::query()
             .where_(refresh_token::Model::FAMILY_ID.eq(family_id))
@@ -734,11 +734,11 @@ impl Grants {
             "scope": scopes,
             "sub": user_id,
             "iss": self.core.issuer,
-            "iat": iat.timestamp(),
+            "iat": iat.as_secs(),
             "token_type": token_type,
         });
         if let Some(exp) = exp {
-            body["exp"] = json!(exp.timestamp());
+            body["exp"] = json!(exp.as_secs());
         }
         if let Some(client_id) = client_id {
             body["client_id"] = json!(client_id);
