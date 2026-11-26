@@ -2,8 +2,8 @@
 //! `failed_jobs`: typed payloads, options and failure times, queried like
 //! any model, and written by the driver through the ORM.
 
-use chrono::TimeDelta;
 use navree_contracts::Job;
+use navree_datetime::Span;
 use navree_db::Db;
 use navree_orm::Model as _;
 use navree_queue::{FAILED_JOBS_TABLE, FailedJob, QueueDriver, RetryTarget};
@@ -52,10 +52,10 @@ async fn failed_jobs_are_orm_models() {
         .expect("a failed job");
     assert_eq!(newest.id, slow);
     assert_eq!(newest.payload, json!({ "label": "slow" }));
-    assert_eq!(newest.failed_at, start() + TimeDelta::seconds(5));
+    assert_eq!(newest.failed_at, start() + Span::seconds(5));
     assert_eq!(
         FailedJob::query()
-            .where_(FailedJob::FAILED_AT.lt(start() + TimeDelta::seconds(1)))
+            .where_(FailedJob::FAILED_AT.lt(start() + Span::seconds(1)))
             .count(&db)
             .await
             .unwrap(),
@@ -80,7 +80,7 @@ async fn failed_jobs_stored_by_hand_are_listed_and_retried_by_the_queue() {
         options: Panics::options(),
         error: "failed elsewhere".to_owned(),
         attempts: 2,
-        failed_at: start() - TimeDelta::hours(1),
+        failed_at: start() - Span::hours(1),
     };
     FailedJob::insert(&db, [stored.clone()]).await.unwrap();
 

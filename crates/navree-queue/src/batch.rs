@@ -1,8 +1,8 @@
 //! Job batches: [`Batch`] (what to dispatch) and [`JobBatch`] (a dispatched
 //! batch's progress, as stored in `job_batches`).
 
-use chrono::{DateTime, Utc};
 use navree_contracts::{Job, JobEnvelope};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -248,11 +248,11 @@ pub struct JobBatch {
     /// The operation the batch does the work of.
     pub operation_id: Option<Uuid>,
     /// When it was dispatched.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it was cancelled (by a failure or on demand).
-    pub cancelled_at: Option<DateTime<Utc>>,
+    pub cancelled_at: Option<Timestamp>,
     /// When its last job finished.
-    pub finished_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<Timestamp>,
 }
 
 impl JobBatch {

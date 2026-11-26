@@ -10,8 +10,8 @@ use std::sync::Arc;
 pub(crate) use database::DatabaseStore;
 pub(crate) use memory::MemoryStore;
 
-use chrono::{DateTime, Utc};
 use navree_contracts::{BoxFuture, JobEnvelope};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 
 use crate::batch::{BatchRow, Finish, Finished};
@@ -103,7 +103,7 @@ pub trait QueueStore: Send + Sync + 'static {
     /// a store that can count without reading every job should.
     fn failed_summary(
         &self,
-        since: DateTime<Utc>,
+        since: Timestamp,
         limit: usize,
     ) -> BoxFuture<'_, Result<FailedSummary, QueueError>> {
         Box::pin(async move { Ok(FailedSummary::of(&self.failed().await?, since, limit)) })
@@ -234,7 +234,7 @@ impl Store {
 
     pub(crate) async fn failed_summary(
         &self,
-        since: DateTime<Utc>,
+        since: Timestamp,
         limit: usize,
     ) -> Result<FailedSummary, QueueError> {
         match self {
