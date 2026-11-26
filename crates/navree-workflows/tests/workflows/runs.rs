@@ -65,7 +65,7 @@ async fn sleeps_wait_for_the_clock_and_steps_are_not_run_again() {
     let workflows = h.workflows().await;
     let run = workflows.run(id).await.unwrap();
     assert_eq!(run.status, RunStatus::Sleeping);
-    assert_eq!(run.wake_at, Some(start() + chrono::TimeDelta::days(3)));
+    assert_eq!(run.wake_at, Some(start() + navree_datetime::Span::days(3)));
     assert_eq!(h.journal.calls(), ["welcome"]);
 
     // A day later nothing is due.
@@ -79,7 +79,7 @@ async fn sleeps_wait_for_the_clock_and_steps_are_not_run_again() {
     assert_eq!(h.journal.calls(), ["welcome", "nudge"]);
     assert_eq!(
         run.output,
-        Some(json!(start() + chrono::TimeDelta::days(3)))
+        Some(json!(start() + navree_datetime::Span::days(3)))
     );
     let steps = h.steps(id).await;
     assert_eq!(steps["$sleep"], "completed");
@@ -95,7 +95,7 @@ async fn a_failed_step_is_retried_after_its_backoff() {
     let workflows = h.workflows().await;
     let run = workflows.run(id).await.unwrap();
     assert_eq!(run.status, RunStatus::Sleeping);
-    assert_eq!(run.wake_at, Some(start() + chrono::TimeDelta::seconds(10)));
+    assert_eq!(run.wake_at, Some(start() + navree_datetime::Span::seconds(10)));
     let details = workflows.details(id).await.unwrap();
     assert_eq!(details.steps[0].status, StepStatus::Retrying);
     assert_eq!(details.steps[0].attempts, 1);
@@ -448,7 +448,7 @@ async fn prune_deletes_finished_runs_only() {
     let workflows = h.workflows().await;
     assert_eq!(workflows.prune(start()).await.unwrap(), 0);
     let pruned = workflows
-        .prune(start() + chrono::TimeDelta::hours(1))
+        .prune(start() + navree_datetime::Span::hours(1))
         .await
         .unwrap();
     assert_eq!(pruned, 1);

@@ -6427,12 +6427,12 @@ dependencies = [
 name = "navree-workflows"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "http",
  "navree-access",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-http",

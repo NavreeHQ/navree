@@ -20,7 +20,7 @@ async fn a_matching_event_resumes_a_waiting_run() {
     let workflows = h.workflows().await;
     let run = workflows.run(id).await.unwrap();
     assert_eq!(run.status, RunStatus::Waiting);
-    assert_eq!(run.wake_at, Some(start() + chrono::TimeDelta::days(14)));
+    assert_eq!(run.wake_at, Some(start() + navree_datetime::Span::days(14)));
     let wait = &workflows.details(id).await.unwrap().steps[0];
     assert_eq!(wait.key, "$wait:course.completed");
     assert_eq!(wait.status, StepStatus::Waiting);

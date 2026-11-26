@@ -1,6 +1,6 @@
 //! [`DatabaseWorkflowStore`]: runs in `workflow_runs` and `workflow_steps`.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{Db, Executor, Row, Statement, Transaction, TxOptions, Uow, Value as SqlValue};
 use navree_kernel::BoxFuture;
 use serde_json::Value;
@@ -67,16 +67,16 @@ pub(crate) fn statement(sql: &str, values: Vec<SqlValue>) -> Statement {
 }
 
 /// Unix milliseconds.
-pub(crate) fn millis(at: DateTime<Utc>) -> i64 {
-    at.timestamp_millis()
+pub(crate) fn millis(at: Timestamp) -> i64 {
+    at.as_millis()
 }
 
 /// The time at Unix milliseconds `ms`.
-pub(crate) fn from_millis(ms: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp_millis(ms).unwrap_or_default()
+pub(crate) fn from_millis(ms: i64) -> Timestamp {
+    Timestamp::from_millis(ms).ok().unwrap_or_default()
 }
 
-fn opt_millis(at: Option<DateTime<Utc>>) -> SqlValue {
+fn opt_millis(at: Option<Timestamp>) -> SqlValue {
     at.map(millis).into()
 }
 
@@ -120,11 +120,11 @@ fn number(row: &Row, column: &str) -> StoreResult<u32> {
     Ok(u32::try_from(value).unwrap_or(u32::MAX))
 }
 
-fn opt_time(row: &Row, column: &str) -> StoreResult<Option<DateTime<Utc>>> {
+fn opt_time(row: &Row, column: &str) -> StoreResult<Option<Timestamp>> {
     Ok(row.get::<Option<i64>>(column)?.map(from_millis))
 }
 
-fn time(row: &Row, column: &str) -> StoreResult<DateTime<Utc>> {
+fn time(row: &Row, column: &str) -> StoreResult<Timestamp> {
     Ok(from_millis(row.get(column)?))
 }
 
@@ -650,7 +650,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
         run_id: Uuid,
         key: &'a str,
         output: &'a Value,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> BoxFuture<'a, StoreResult<bool>> {
         Box::pin(async move {
             let now = millis(now);
@@ -704,7 +704,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
         &'a self,
         uow: Option<&'a Uow>,
         id: Uuid,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> BoxFuture<'a, StoreResult<bool>> {
         Box::pin(async move {
             let now = millis(now);
@@ -729,7 +729,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
         &'a self,
         uow: Option<&'a Uow>,
         id: Uuid,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> BoxFuture<'a, StoreResult<bool>> {
         Box::pin(async move {
             let retried = self
@@ -760,7 +760,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
         })
     }
 
-    fn prune(&self, before: DateTime<Utc>) -> BoxFuture<'_, StoreResult<u64>> {
+    fn prune(&self, before: Timestamp) -> BoxFuture<'_, StoreResult<u64>> {
         Box::pin(async move {
             let before = millis(before);
             self.executor()

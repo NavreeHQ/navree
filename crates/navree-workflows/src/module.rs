@@ -261,7 +261,7 @@ async fn prune_task(app: AppContext) -> Result<(), BoxError> {
         return Ok(());
     }
     let workflows = app.get::<Workflows>().await?;
-    let before = workflows.now() - chrono::TimeDelta::days(i64::from(options.prune_after_days));
+    let before = workflows.now() - navree_datetime::Span::days(i64::from(options.prune_after_days));
     let pruned = workflows.prune(before).await?;
     if pruned > 0 {
         tracing::info!(target: "navree::workflows", pruned, "pruned finished workflow runs");

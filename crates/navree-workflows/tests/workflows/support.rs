@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{Backoff, Clock, FixedClock};
 use navree_db::{DatabaseModule, Db};
 use navree_events::{Event, EventBus, EventsModule};
@@ -28,7 +28,7 @@ pub const DAY: Duration = Duration::from_secs(86_400);
 pub const HOUR: Duration = Duration::from_secs(3_600);
 
 /// 2026-10-26T08:00:00Z.
-pub fn start() -> DateTime<Utc> {
+pub fn start() -> Timestamp {
     "2026-10-26T08:00:00Z".parse().expect("valid time")
 }
 
@@ -165,9 +165,9 @@ pub struct Onboarding {
 
 impl Workflow for Onboarding {
     const NAME: &'static str = "onboarding";
-    type Output = DateTime<Utc>;
+    type Output = Timestamp;
 
-    async fn run(self, ctx: WorkflowCtx) -> Result<DateTime<Utc>, BoxError> {
+    async fn run(self, ctx: WorkflowCtx) -> Result<Timestamp, BoxError> {
         let j = journal(&ctx).await;
         let welcome = j.clone();
         ctx.step("welcome", || async move {

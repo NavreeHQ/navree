@@ -4,7 +4,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -132,9 +132,9 @@ pub struct Automation {
     /// The template it was made from.
     pub template: Option<String>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// A published, immutable definition. Enrollments run the version they
@@ -150,7 +150,7 @@ pub struct AutomationVersion {
     /// Who published it.
     pub published_by: Option<Uuid>,
     /// When.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// One enrollment as stored (`automation_enrollments`): which event put
@@ -170,7 +170,7 @@ pub struct EnrollmentRecord {
     /// The workflow run carrying it.
     pub run_id: Uuid,
     /// When it was enrolled.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// An enrollment with the status of its run (what the routes return).
@@ -195,9 +195,9 @@ pub struct Enrollment {
     /// The run's error, when it failed.
     pub error: Option<String>,
     /// When it was enrolled.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When its run finished.
-    pub finished_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<Timestamp>,
 }
 
 /// A filter over automations (the stores' `list` and `count`).
