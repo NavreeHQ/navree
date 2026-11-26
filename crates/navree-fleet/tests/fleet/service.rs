@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_fleet::{
     Balance, CompletedJob, FleetError, FleetStatus, LongWaitDetected, MetricKind, MetricSnapshot,
     MetricsPeriod, RECENT_FAILURES, REDACTED, THROUGHPUT_MINUTES,
@@ -173,7 +173,7 @@ async fn the_workload_counts_pending_jobs_runtimes_and_throughput() {
         attempt: 1,
         outcome: AttemptOutcome::Succeeded,
         runtime_ms: ms,
-        finished_at: h.fleet.now() - TimeDelta::seconds(ago),
+        finished_at: h.fleet.now() - Span::seconds(ago),
     };
     h.fleet
         .record(
@@ -225,7 +225,7 @@ async fn the_overview_groups_queues_by_supervisor_and_charts_the_last_half_hour(
     let (h, _clock) =
         Harness::with_clock(builder().config("fleet.supervisors", supervisors())).await;
     let snapshot = |kind, name: &str, processed, ago_secs: i64| MetricSnapshot {
-        at: h.fleet.now() - TimeDelta::seconds(ago_secs),
+        at: h.fleet.now() - Span::seconds(ago_secs),
         kind,
         name: name.into(),
         processed,
@@ -438,7 +438,7 @@ async fn pending_and_completed_jobs_are_listed_and_searched() {
         attempt: 1,
         outcome: AttemptOutcome::Succeeded,
         runtime_ms: 10,
-        finished_at: start() - TimeDelta::minutes(ago_minutes),
+        finished_at: start() - Span::minutes(ago_minutes),
     };
     h.fleet
         .record(
@@ -466,7 +466,7 @@ async fn pending_and_completed_jobs_are_listed_and_searched() {
 async fn metrics_are_charted_from_the_snapshots_of_every_master() {
     let (h, clock) = Harness::with_clock(builder()).await;
     let snap = |minutes_ago: i64, processed: u64| MetricSnapshot {
-        at: start() - TimeDelta::minutes(minutes_ago),
+        at: start() - Span::minutes(minutes_ago),
         kind: MetricKind::Queue,
         name: "mail".into(),
         processed,

@@ -1,6 +1,6 @@
 //! How the dashboard writes numbers, durations and times.
 
-use chrono::{DateTime, SecondsFormat, Utc};
+use navree_datetime::{Precision, Timestamp};
 use navree_ui::{Node, el};
 
 use crate::FleetStatus;
@@ -41,22 +41,22 @@ pub(super) fn millis(ms: u64) -> String {
 }
 
 /// `09:41`: the minute a chart's bar stands for.
-pub(super) fn minute(at: DateTime<Utc>) -> String {
+pub(super) fn minute(at: Timestamp) -> String {
     at.format("%H:%M").to_string()
 }
 
 /// A moment as a `<time>`: `2026-11-06 09:41:07 UTC`, with the exact instant
 /// in `datetime`.
-pub(super) fn when(at: DateTime<Utc>) -> Node {
+pub(super) fn when(at: Timestamp) -> Node {
     el("time")
-        .attr("datetime", at.to_rfc3339_opts(SecondsFormat::Secs, true))
+        .attr("datetime", at.to_rfc3339_with(Precision::Secs, true))
         .child(at.format("%Y-%m-%d %H:%M:%S UTC").to_string())
         .into()
 }
 
 /// `3 min ago`, from `now`; `just now` for a moment that is not yet past.
-pub(super) fn ago(now: DateTime<Utc>, at: DateTime<Utc>) -> String {
-    match u64::try_from((now - at).num_seconds()) {
+pub(super) fn ago(now: Timestamp, at: Timestamp) -> String {
+    match u64::try_from((now - at).as_seconds()) {
         Ok(secs) if secs > 0 => format!("{} ago", duration(secs)),
         _ => "just now".to_owned(),
     }

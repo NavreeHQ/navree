@@ -1,8 +1,8 @@
 //! The overview: the figures, the workload of each supervisor, the last half
 //! hour's jobs per minute and the newest failed jobs.
 
-use chrono::TimeDelta;
 use http::request::Parts;
+use navree_datetime::Span;
 use navree_http::AppError;
 use navree_ui::charts::{Chart, Series};
 use navree_ui::{
@@ -276,7 +276,7 @@ fn throughput(frame: &Frame, queue: Option<&str>) -> Card {
     let labels: Vec<String> = (0..minutes)
         .map(|at| {
             let ago = i64::try_from(minutes - 1 - at).unwrap_or(0);
-            minute(frame.now - TimeDelta::minutes(ago))
+            minute(frame.now - Span::minutes(ago))
         })
         .collect();
     let total: u64 = chosen.per_minute.iter().sum();

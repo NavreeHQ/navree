@@ -8,7 +8,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_events::EventBus;
 use navree_kernel::{AppContext, BoxError};
 use navree_queue::QueueDriver;
@@ -217,7 +217,7 @@ struct Proc {
     pid: Option<u32>,
     commands: mpsc::UnboundedSender<WorkerCommand>,
     started: Instant,
-    started_at: DateTime<Utc>,
+    started_at: Timestamp,
     jobs: u64,
     memory_mb: Option<u64>,
     stopping: bool,
@@ -243,7 +243,7 @@ struct SupervisorState {
 /// A running master.
 struct Run {
     master: Master,
-    started_at: DateTime<Utc>,
+    started_at: Timestamp,
     terminate_token: Option<String>,
     states: Vec<SupervisorState>,
     procs: BTreeMap<u64, Proc>,

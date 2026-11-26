@@ -8,11 +8,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::TimeDelta;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
 use navree_auth::{AuthModule, AuthPages, AuthService};
 use navree_browser::{Browser, Page, Target, TestServer, Viewport};
 use navree_crypto::{CryptoModule, generate_key};
+use navree_datetime::Span;
 use navree_db::Db;
 use navree_fleet::testing::FakeSpawner;
 use navree_fleet::{Master, MetricKind, MetricSnapshot};
@@ -171,7 +171,7 @@ async fn snapshot(h: &Harness, kind: MetricKind, name: &str, processed: u64, min
         .record_snapshots(
             Some("m1"),
             &[MetricSnapshot {
-                at: h.fleet.now() - TimeDelta::minutes(minutes_ago),
+                at: h.fleet.now() - Span::minutes(minutes_ago),
                 kind,
                 name: name.into(),
                 processed,

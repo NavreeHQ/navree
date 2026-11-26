@@ -6,10 +6,10 @@ use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Utc};
 use navree_contracts::{
     Backoff, BoxError, Clock, FixedClock, Job, JobContext, JobOptions, ModuleBuilderJobsExt,
 };
+use navree_datetime::Timestamp;
 use navree_db::DatabaseModule;
 use navree_fleet::{Fleet, FleetModule, MasterSettings};
 use navree_kernel::{Module, ModuleBuilder};
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// A fixed clock's starting time.
-pub fn start() -> DateTime<Utc> {
+pub fn start() -> Timestamp {
     "2026-10-26T09:00:00Z".parse().expect("valid time")
 }
 

@@ -112,14 +112,14 @@ impl TelemetrySink for JobRecorder {
 mod tests {
     use std::time::Duration;
 
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use navree_telemetry::{EventContext, JobFailed, JobProcessed};
 
     use super::*;
 
     fn record(event: TelemetryEvent) -> TelemetryRecord {
         TelemetryRecord {
-            at: Utc::now(),
+            at: Timestamp::now(),
             context: EventContext::default(),
             event,
         }

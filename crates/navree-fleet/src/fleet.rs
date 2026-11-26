@@ -5,8 +5,8 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::Clock;
+use navree_datetime::{Span, Timestamp};
 use navree_queue::{FailedJob, PendingJob, PendingQuery, Queue, QueueError, QueueStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -88,7 +88,7 @@ pub struct RecentFailure {
     /// The first line of the error, cut to 200 characters.
     pub error: String,
     /// When it failed.
-    pub failed_at: DateTime<Utc>,
+    pub failed_at: Timestamp,
 }
 
 /// The jobs one queue finished in each of the last
@@ -214,15 +214,15 @@ impl Fleet {
     }
 
     /// The current time (the app's `dyn Clock` when it has one).
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         match &self.clock {
             Some(clock) => clock.now(),
-            None => Utc::now(),
+            None => Timestamp::now(),
         }
     }
 
     fn now_ms(&self) -> i64 {
-        self.now().timestamp_millis()
+        self.now().as_millis()
     }
 
     /// Every supervised queue, in supervisor and priority order, once each.
@@ -317,8 +317,8 @@ impl Fleet {
 
     /// The masters that reported in the last 30 seconds, oldest first.
     pub async fn masters(&self) -> Result<Vec<MasterReport>, FleetError> {
-        let since = self.now() - TimeDelta::from_std(MASTER_TIMEOUT).unwrap_or_default();
-        self.store.masters(since.timestamp_millis()).await
+        let since = self.now() - Span::try_from(MASTER_TIMEOUT).unwrap_or_default();
+        self.store.masters(since.as_millis()).await
     }
 
     /// Running (a master reported in the last 30 seconds and not every
@@ -346,14 +346,14 @@ impl Fleet {
         masters: &[MasterReport],
     ) -> Result<Vec<QueueWorkload>, FleetError> {
         let now = self.now();
-        let window = TimeDelta::from_std(RUNTIME_WINDOW).unwrap_or_default();
+        let window = Span::try_from(RUNTIME_WINDOW).unwrap_or_default();
         let runtimes = self
             .store
-            .queue_runtimes((now - window).timestamp_millis())
+            .queue_runtimes((now - window).as_millis())
             .await?;
         let last_minute = self
             .store
-            .queue_runtimes((now - TimeDelta::minutes(1)).timestamp_millis())
+            .queue_runtimes((now - Span::minutes(1)).as_millis())
             .await?;
         let mut out = Vec::with_capacity(queues.len());
         for queue in queues {
@@ -433,7 +433,7 @@ impl Fleet {
         let now = self.now();
         let masters = self.masters().await?;
         let workload = self.workload_of(&self.queues(), &masters).await?;
-        let week_ago = now - TimeDelta::days(7);
+        let week_ago = now - Span::days(7);
         let failed = self.queue.failed_summary(week_ago, RECENT_FAILURES).await?;
         let longest_wait = workload
             .iter()
@@ -446,17 +446,17 @@ impl Fleet {
         let paused: BTreeSet<String> = self.paused().await?;
         let snapshots = self
             .store
-            .metrics((now - TimeDelta::minutes(THROUGHPUT_MINUTES as i64)).timestamp_millis())
+            .metrics((now - Span::minutes(THROUGHPUT_MINUTES as i64)).as_millis())
             .await?;
         Ok(Overview {
             status: status_of(&masters),
             jobs_per_minute: self
                 .store
-                .count_jobs((now - TimeDelta::minutes(1)).timestamp_millis())
+                .count_jobs((now - Span::minutes(1)).as_millis())
                 .await?,
             jobs_past_hour: self
                 .store
-                .count_jobs((now - TimeDelta::hours(1)).timestamp_millis())
+                .count_jobs((now - Span::hours(1)).as_millis())
                 .await?,
             failed_past_week: failed.since,
             longest_wait,
@@ -611,9 +611,9 @@ impl Fleet {
         search: Option<&str>,
     ) -> Result<Vec<CompletedJob>, FleetError> {
         let minutes = i64::try_from(self.options.trim.recent_minutes).unwrap_or(i64::MAX / 60_000);
-        let since = self.now() - TimeDelta::minutes(minutes);
+        let since = self.now() - Span::minutes(minutes);
         self.store
-            .jobs(since.timestamp_millis(), search, LIST_LIMIT)
+            .jobs(since.as_millis(), search, LIST_LIMIT)
             .await
     }
 
@@ -641,7 +641,7 @@ impl Fleet {
         let now = self.now();
         let rows = self
             .store
-            .metrics((now - period.span()).timestamp_millis())
+            .metrics((now - period.span()).as_millis())
             .await?;
         Ok(crate::snapshot::series(period, now, &rows))
     }
@@ -654,13 +654,13 @@ impl Fleet {
         let minutes = i64::try_from(self.options.trim.recent_minutes).unwrap_or(i64::MAX / 60_000);
         let days = i64::try_from(self.options.trim.metrics_days).unwrap_or(i64::MAX / 86_400_000);
         self.store
-            .delete_jobs_before((now - TimeDelta::minutes(minutes)).timestamp_millis())
+            .delete_jobs_before((now - Span::minutes(minutes)).as_millis())
             .await?;
         self.store
-            .delete_metrics_before((now - TimeDelta::days(days)).timestamp_millis())
+            .delete_metrics_before((now - Span::days(days)).as_millis())
             .await?;
         self.store
-            .delete_masters_before((now - TimeDelta::hours(1)).timestamp_millis())
+            .delete_masters_before((now - Span::hours(1)).as_millis())
             .await?;
         Ok(())
     }

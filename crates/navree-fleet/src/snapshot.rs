@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_queue::{AttemptOutcome, QueueStatus};
 
 use crate::record::{
@@ -14,7 +14,7 @@ use crate::record::{
 /// (with the queue's pending count and oldest wait from `statuses`) and
 /// one per queue or job type that ran since the previous snapshot.
 pub(crate) fn snapshots(
-    at: DateTime<Utc>,
+    at: Timestamp,
     jobs: &[CompletedJob],
     statuses: &[QueueStatus],
 ) -> Vec<MetricSnapshot> {
@@ -43,7 +43,7 @@ pub(crate) fn snapshots(
 }
 
 fn snapshot_of(
-    at: DateTime<Utc>,
+    at: Timestamp,
     kind: MetricKind,
     name: &str,
     jobs: &[&CompletedJob],
@@ -94,18 +94,19 @@ pub(crate) fn percentile(values: &mut [u64], p: u64) -> u64 {
 /// before `now`, oldest first: the snapshots of every master, summed per
 /// minute (a snapshot counts in the minute it was taken).
 pub(crate) fn per_minute(
-    now: DateTime<Utc>,
+    now: Timestamp,
     minutes: usize,
     snapshots: &[MetricSnapshot],
     queue: &str,
 ) -> Vec<u64> {
-    let start = now - chrono::TimeDelta::minutes(i64::try_from(minutes).unwrap_or(i64::MAX));
+    let span = Span::try_minutes(i64::try_from(minutes).unwrap_or(i64::MAX)).unwrap_or(Span::MAX);
+    let start = now.checked_sub(span).unwrap_or(Timestamp::MIN);
     let mut counts = vec![0u64; minutes];
     for s in snapshots
         .iter()
         .filter(|s| s.kind == MetricKind::Queue && s.name == queue && s.at >= start && s.at <= now)
     {
-        let index = usize::try_from((s.at - start).num_minutes()).unwrap_or(0);
+        let index = usize::try_from((s.at - start).as_minutes()).unwrap_or(0);
         if let Some(count) = counts.get_mut(index.min(minutes.saturating_sub(1))) {
             *count += s.processed;
         }
@@ -117,16 +118,16 @@ pub(crate) fn per_minute(
 /// master summed per bucket.
 pub(crate) fn series(
     period: MetricsPeriod,
-    now: DateTime<Utc>,
+    now: Timestamp,
     snapshots: &[MetricSnapshot],
 ) -> Vec<MetricSeries> {
     let start = now - period.span();
-    let bucket_ms = period.bucket().num_milliseconds().max(1);
+    let bucket_ms = period.bucket().as_millis().max(1);
     let minutes = bucket_ms as f64 / 60_000.0;
     // (kind, name) -> bucket index -> accumulated values.
     let mut acc: BTreeMap<(MetricKind, &str), BTreeMap<i64, Bucket>> = BTreeMap::new();
     for s in snapshots.iter().filter(|s| s.at >= start && s.at <= now) {
-        let index = (s.at - start).num_milliseconds() / bucket_ms;
+        let index = (s.at - start).as_millis() / bucket_ms;
         let bucket = acc
             .entry((s.kind, s.name.as_str()))
             .or_default()
@@ -147,7 +148,7 @@ pub(crate) fn series(
             points: buckets
                 .into_iter()
                 .map(|(index, b)| MetricPoint {
-                    at: start + chrono::TimeDelta::milliseconds(index * bucket_ms),
+                    at: start + Span::millis(index * bucket_ms),
                     processed: b.processed,
                     failed: b.failed,
                     throughput_per_minute: b.processed as f64 / minutes,
@@ -171,12 +172,10 @@ struct Bucket {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
-
     use super::*;
 
-    fn at(secs: i64) -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap() + chrono::TimeDelta::seconds(secs)
+    fn at(secs: i64) -> Timestamp {
+        Timestamp::utc(2026, 10, 26, 9, 0, 0).unwrap() + Span::seconds(secs)
     }
 
     fn job(queue: &str, job_type: &str, outcome: AttemptOutcome, ms: u64) -> CompletedJob {

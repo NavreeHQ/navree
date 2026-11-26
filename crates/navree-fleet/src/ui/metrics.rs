@@ -4,8 +4,8 @@
 
 use std::time::Duration;
 
-use chrono::NaiveDateTime;
 use http::request::Parts;
+use navree_datetime::DateTime;
 use navree_http::AppError;
 use navree_ui::charts::{Chart, NumberFormat, Series};
 use navree_ui::{AppPage, Card, Empty, Grid, Node, Region, Stack, icons};
@@ -124,8 +124,8 @@ fn series_card(kind: &str, at: usize, series: &MetricSeries, waits: bool) -> Car
 }
 
 /// The moments of `points`.
-fn times(points: &[MetricPoint]) -> Vec<NaiveDateTime> {
-    points.iter().map(|point| point.at.naive_utc()).collect()
+fn times(points: &[MetricPoint]) -> Vec<DateTime> {
+    points.iter().map(|point| point.at.date_time_utc()).collect()
 }
 
 /// Jobs finished per minute.

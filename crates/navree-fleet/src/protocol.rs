@@ -267,7 +267,7 @@ impl WorkerReport {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use navree_queue::AttemptOutcome;
 
     use super::*;
@@ -335,7 +335,7 @@ mod tests {
                     attempt: 1,
                     outcome: AttemptOutcome::Succeeded,
                     runtime_ms: 12,
-                    finished_at: Utc::now(),
+                    finished_at: Timestamp::now(),
                 }],
             },
             WorkerReport::Exiting {

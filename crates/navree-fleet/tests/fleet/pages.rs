@@ -255,7 +255,7 @@ async fn every_page_draws_with_the_data_behind_the_api() {
         .record_snapshots(
             Some("m1"),
             &[MetricSnapshot {
-                at: h.fleet.now() - chrono::TimeDelta::minutes(2),
+                at: h.fleet.now() - navree_datetime::Span::minutes(2),
                 kind: MetricKind::Queue,
                 name: "mail".into(),
                 processed: 30,

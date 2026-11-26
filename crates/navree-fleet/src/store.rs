@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{Backend, Db, Executor, Row, Statement, Value, prune_time_series};
 use navree_queue::AttemptOutcome;
 use uuid::Uuid;
@@ -84,8 +84,8 @@ impl FleetStore {
                 i64::from(master.pid).into(),
                 master.status.as_str().into(),
                 supervisors.into(),
-                master.started_at.timestamp_millis().into(),
-                master.heartbeat_at.timestamp_millis().into(),
+                master.started_at.as_millis().into(),
+                master.heartbeat_at.as_millis().into(),
             ],
         )
         .await?;
@@ -281,7 +281,7 @@ impl FleetStore {
                     i64::from(job.attempt).into(),
                     job.outcome.as_str().into(),
                     i64::try_from(job.runtime_ms).unwrap_or(i64::MAX).into(),
-                    job.finished_at.timestamp_millis().into(),
+                    job.finished_at.as_millis().into(),
                     master.map(str::to_owned).into(),
                 ]);
             }
@@ -411,7 +411,7 @@ impl FleetStore {
                 sql.push_str("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 values.extend([
                     Uuid::now_v7().to_string().into(),
-                    s.at.timestamp_millis().into(),
+                    s.at.as_millis().into(),
                     s.kind.as_str().into(),
                     s.name.as_str().into(),
                     to_i64(s.processed).into(),
@@ -522,10 +522,8 @@ pub(crate) fn needle(search: Option<&str>) -> Option<String> {
 }
 
 /// Unix milliseconds as a UTC time.
-pub(crate) fn from_millis(ms: i64) -> DateTime<Utc> {
-    Utc.timestamp_millis_opt(ms)
-        .single()
-        .unwrap_or(DateTime::<Utc>::MIN_UTC)
+pub(crate) fn from_millis(ms: i64) -> Timestamp {
+    Timestamp::from_millis(ms).unwrap_or(Timestamp::MIN)
 }
 
 fn to_u64(n: i64) -> u64 {

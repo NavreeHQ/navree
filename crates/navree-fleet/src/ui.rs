@@ -30,11 +30,11 @@ mod supervisors;
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use http::Method;
 use http::request::Parts;
 use navree_access::Subject;
 use navree_auth::{CurrentUser, SIGN_OUT_PATH};
+use navree_datetime::Timestamp;
 use navree_http::extract::FromRequestParts;
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, Form, Path, Query, RouteDef};
@@ -54,7 +54,7 @@ pub(crate) struct Frame {
     /// The session's CSRF token, which every form carries.
     pub(crate) csrf: Option<String>,
     /// Now, on Fleet's clock.
-    pub(crate) now: DateTime<Utc>,
+    pub(crate) now: Timestamp,
     /// The overview: the shell reads the status and the counts from it.
     pub(crate) overview: Overview,
     app: AppShell,

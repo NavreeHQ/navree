@@ -4,7 +4,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_queue::AttemptOutcome;
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +27,7 @@ pub struct CompletedJob {
     /// How long it ran, in milliseconds.
     pub runtime_ms: u64,
     /// When it finished.
-    pub finished_at: DateTime<Utc>,
+    pub finished_at: Timestamp,
 }
 
 /// Fleet as a whole: running, paused or inactive.
@@ -74,7 +74,7 @@ pub struct ProcessReport {
     /// Jobs it has run.
     pub jobs: u64,
     /// When it started.
-    pub started_at: DateTime<Utc>,
+    pub started_at: Timestamp,
 }
 
 /// One supervisor of a master.
@@ -108,9 +108,9 @@ pub struct MasterReport {
     /// Its supervisors.
     pub supervisors: Vec<SupervisorReport>,
     /// When it started.
-    pub started_at: DateTime<Utc>,
+    pub started_at: Timestamp,
     /// Its last heartbeat.
-    pub heartbeat_at: DateTime<Utc>,
+    pub heartbeat_at: Timestamp,
 }
 
 impl MasterReport {
@@ -154,7 +154,7 @@ impl MetricKind {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MetricSnapshot {
     /// When the snapshot was taken.
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
     /// Queue or job type.
     pub kind: MetricKind,
     /// The queue or job type.
@@ -190,20 +190,20 @@ pub enum MetricsPeriod {
 
 impl MetricsPeriod {
     /// How far back the period goes.
-    pub fn span(self) -> chrono::TimeDelta {
+    pub fn span(self) -> Span {
         match self {
-            MetricsPeriod::Hour => chrono::TimeDelta::hours(1),
-            MetricsPeriod::Day => chrono::TimeDelta::days(1),
-            MetricsPeriod::Week => chrono::TimeDelta::weeks(1),
+            MetricsPeriod::Hour => Span::hours(1),
+            MetricsPeriod::Day => Span::days(1),
+            MetricsPeriod::Week => Span::weeks(1),
         }
     }
 
     /// The width of one point.
-    pub fn bucket(self) -> chrono::TimeDelta {
+    pub fn bucket(self) -> Span {
         match self {
-            MetricsPeriod::Hour => chrono::TimeDelta::minutes(1),
-            MetricsPeriod::Day => chrono::TimeDelta::minutes(15),
-            MetricsPeriod::Week => chrono::TimeDelta::hours(1),
+            MetricsPeriod::Hour => Span::minutes(1),
+            MetricsPeriod::Day => Span::minutes(15),
+            MetricsPeriod::Week => Span::hours(1),
         }
     }
 }
@@ -212,7 +212,7 @@ impl MetricsPeriod {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MetricPoint {
     /// The start of the bucket.
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
     /// Attempts finished in the bucket (every master).
     pub processed: u64,
     /// Failed attempts in the bucket.
