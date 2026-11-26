@@ -6,7 +6,7 @@ description: "`#[derive(Model)]`: tables, keys, columns and timestamps, creating
 A model maps a table to a Rust struct. `#[derive(Model)]` reads the struct and writes everything the ORM needs: the table and key, a decoder for rows, the values to write, and one typed column constant per field. There is no reflection at runtime and no schema file: the struct is the source of truth.
 
 ```rust title="src/modules/deals/models/deal.rs"
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::orm::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
@@ -21,10 +21,10 @@ pub struct Deal {
     pub currency: String,
     #[model(cast = "string_enum")]
     pub stage: Stage,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub closed_at: Option<Timestamp>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 ```
 
@@ -57,7 +57,7 @@ pub struct Person {
     pub nickname: Option<String>, // a row without the column reads as `None`
     #[model(skip)]
     pub selected: bool,          // not a column: `Default` when read
-    pub inserted_at: DateTime<Utc>,
+    pub inserted_at: Timestamp,
 }
 ```
 
@@ -72,8 +72,8 @@ pub struct Person {
 | `String` | `string`, `text` |
 | `Vec<u8>` | `binary` |
 | `Uuid`, `Ulid` | `uuid`, `ulid` |
-| `NaiveDate`, `NaiveTime`, `NaiveDateTime` | `date`, `time`, `date_time` |
-| `DateTime<Utc>`, `DateTime<FixedOffset>` | `timestamp_tz` |
+| `Date`, `Time`, `DateTime` | `date`, `time`, `date_time` |
+| `Timestamp`, `Zoned` | `timestamp_tz` |
 | `serde_json::Value` | `json`, `jsonb` |
 | `url::Url` | `string` |
 | `Option<T>` of any of these | a nullable column; `NULL` is `None` |
@@ -86,7 +86,7 @@ The derive adds one constant per column, named after the field in capitals and t
 
 ```rust
 let title: Column<Deal, String> = Deal::TITLE;
-let closed: Column<Deal, Option<DateTime<Utc>>> = Deal::CLOSED_AT;
+let closed: Column<Deal, Option<Timestamp>> = Deal::CLOSED_AT;
 
 Deal::query()
     .where_(Deal::STAGE.eq(Stage::Won))      // through the cast: compares with 'won'
@@ -144,7 +144,7 @@ A `Uuid` field is stored as a native `UUID` on PostgreSQL and as its 16 bytes on
 
 With `timestamps`, the ORM sets `created_at` and `updated_at` on insert when they are empty, and `updated_at` on every update that changes something, unless you changed it yourself. Times come from the app's `dyn Clock`, so a test that [fixes the clock](/docs/testing/fakes/#the-clock) sees fixed timestamps. They are cut to the precision the database keeps (microseconds; milliseconds on MongoDB), so the stored and in-memory values agree.
 
-The columns may have other names, or be left out: `timestamps(created_at = "inserted_at", updated_at = false)`. A timestamp field is a `DateTime<Utc>`, a `DateTime<FixedOffset>`, a `NaiveDateTime`, an `i64` (Unix seconds) or an `Option` of one of them.
+The columns may have other names, or be left out: `timestamps(created_at = "inserted_at", updated_at = false)`. A timestamp field is a `Timestamp`, a `Zoned`, a `DateTime` (in UTC), an `i64` (Unix seconds) or an `Option` of one of them.
 
 ## Creating records
 
@@ -209,7 +209,7 @@ Change the fields, then save:
 ```rust
 let mut deal = Deal::find_or_fail(&uow, id).await?;
 deal.stage = Stage::Won;
-deal.closed_at = Some(Utc::now());
+deal.closed_at = Some(Timestamp::now());
 deal.save(&uow).await?; // UPDATE deals SET stage = .., closed_at = .., updated_at = .. WHERE id = ..
 ```
 
@@ -322,8 +322,8 @@ pub struct Deal {
     pub owner_id: Option<Uuid>,
     #[model(cast = "json")]
     pub meta: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 ```
 

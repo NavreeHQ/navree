@@ -1,0 +1,232 @@
+---
+title: "Dates and times"
+description: "Instants, calendar days, wall-clock times, IANA time zones, spans, formatting, wire forms across JSON, SQL, MongoDB and GraphQL, the app clock and upgrading existing code."
+---
+
+## Introduction
+
+`navree::datetime` is Navree's date and time library. It is always part of `navree` with no Cargo feature to enable (and `navree-datetime` at L0 when used on its own), has no third-party date or time crate underneath, and compiles the IANA time zone database (`Zone::tzdata_version()`) into the binary.
+
+Every value says whether it is an instant on the UTC timeline, a calendar date or wall-clock time without a zone, or an instant viewed in a time zone:
+
+| Type | What it holds | Example |
+|---|---|---|
+| `Timestamp` | An exact instant in UTC, to the nanosecond | `2026-11-25T09:30:00Z` |
+| `Date` | A proleptic Gregorian calendar day (`year`, `month`, `day`) with no zone | `2026-11-25` |
+| `Time` | A wall-clock time of day (`hour`, `minute`, `second`, `nanosecond`) | `14:30:00` |
+| `DateTime` | A `Date` and a `Time` together, with no zone | `2026-11-25T14:30:00` |
+| `Offset` | A fixed offset east or west of UTC in whole seconds (`±25:59:59`) | `+05:30` |
+| `Zone` | `Zone::UTC`, a fixed `Offset`, or a named IANA time zone | `Asia/Kolkata` |
+| `Zoned` | A `Timestamp` paired with a `Zone` | `2026-11-25T15:00:00+05:30` |
+| `Span` | A signed exact length of time in seconds and nanoseconds | `Span::minutes(30)` |
+| `Weekday` | `Monday` through `Sunday` | `Weekday::Wednesday` |
+| `Month` | `January` through `December` | `Month::November` |
+
+`Timestamp`, `Date`, `Time`, `DateTime`, `Offset`, `Zone`, `Zoned`, `Span`, `Weekday` and `Month` are all `Copy`.
+
+## Instants and exact spans
+
+`Timestamp` counts seconds and nanoseconds from `1970-01-01T00:00:00Z` (`Timestamp::UNIX_EPOCH`):
+
+```rust
+use navree::datetime::{Span, Timestamp};
+
+let now = Timestamp::now();
+let cutoff = now - Span::days(30);
+
+let opened = Timestamp::utc(2026, 11, 25, 9, 30, 0)?;
+let due = opened + Span::hours(48);
+assert_eq!(due - opened, Span::days(2));
+```
+
+| Constructor or method | Meaning |
+|---|---|
+| `Timestamp::now()` | Current wall-clock instant from the system clock (in services, prefer [`Clock`](#the-app-clock)) |
+| `Timestamp::utc(y, mo, d, h, mi, s)` | Checked UTC calendar components, returning `Result<Timestamp>` |
+| `Timestamp::from_secs(s)`, `from_millis(ms)`, `from_micros(us)`, `from_secs_nanos(s, ns)` | From Unix epoch units |
+| `Timestamp::UNIX_EPOCH`, `MIN`, `MAX` | `1970-01-01T00:00:00Z`, the range bounds, and `Timestamp::MAX` as a "never expires" sentinel |
+| `as_secs()`, `as_millis()`, `as_micros()`, `subsec_nanos()` | Read back Unix epoch units |
+| `trunc_micros()` | Truncate sub-microsecond nanoseconds so in-memory values match SQL microsecond columns |
+| `checked_add(span)`, `checked_sub(span)`, `duration_since(earlier)` | Checked span arithmetic |
+
+`Span` builds exact durations from `Span::weeks`, `days`, `hours`, `minutes`, `seconds`, `millis`, `micros` and `nanos` (plus `try_*` constructors when inputs are untrusted), where one `Span::days(1)` is always 86,400 exact seconds. Convert between `Span` and `std::time::Duration` with `TryFrom` (`Duration::try_from(span)` rejects negative spans).
+
+## Calendar dates, times and arithmetic
+
+A `Date` is a day on the calendar — an invoice's due date, a birthday, a public holiday — and never shifts with a time zone:
+
+```rust
+use navree::datetime::{Date, Month, Time, Weekday};
+
+let billing_day = Date::new(2026, 1, 31)?;
+assert_eq!(billing_day.month(), Month::January);
+assert_eq!(billing_day.weekday(), Weekday::Saturday);
+
+// Month and year steps clamp to the end of the target month.
+assert_eq!(billing_day.add_months(1), Date::new(2026, 2, 28).ok());
+assert_eq!(Date::new(2024, 2, 29)?.add_years(1), Date::new(2025, 2, 28).ok());
+
+let slot = billing_day.at(Time::new(14, 30, 0)?);
+assert_eq!(slot.to_string(), "2026-01-31T14:30:00");
+```
+
+`Date` does not implement `+ Span` or `- Span`, because a calendar step and an exact span are different operations:
+
+- `date.add_days(n)` (`Option<Date>`), `tomorrow()`, `yesterday()` and `date.days_until(other)` count whole calendar days.
+- `date.add_months(n)` and `date.add_years(n)` keep the day number when the target month has it and clamp to the month's last day (`last_of_month()`) when it does not.
+- `first_of_month()`, `last_of_month()`, `ordinal()`, `iso_week()` and `Date::nth_weekday_of_month(2026, 11, Weekday::Thursday, 4)` cover calendar layouts and recurring rules.
+- `Time::MIDNIGHT` is `00:00:00`; `Time::new(h, m, s)?.with_nanos(ns)?` sets fractional seconds.
+- `Weekday` names every day in full (`Monday` through `Sunday`), with `number_from_monday()` (`1..=7`), `days_from_monday()` (`0..=6`), `succ()` and `pred()`.
+
+## Time zones and clock changes
+
+`Zone::named` looks up an IANA zone without regard to case or surrounding whitespace and normalizes legacy aliases to their canonical names (`Asia/Calcutta` becomes `Asia/Kolkata`, `US/Eastern` becomes `America/New_York`, `Etc/UTC` becomes `UTC`):
+
+```rust
+use navree::datetime::{Span, Timestamp, Zone};
+
+let kolkata = Zone::named("Asia/Calcutta")?;
+assert_eq!(kolkata.name(), "Asia/Kolkata");
+
+let sent = Timestamp::utc(2026, 11, 25, 4, 0, 0)?.in_zone(kolkata);
+assert_eq!(sent.to_string(), "2026-11-25T09:30:00+05:30");
+```
+
+`Zone::UTC` is Coordinated Universal Time, and `Zone::fixed(Offset::east(5 * 3600 + 30 * 60)?)` builds a fixed-offset zone. `Zone::for_country("IN")` returns a country's primary zone, `Zone::in_country("US")` lists all of its zones, and `Zone::all()` iterates every canonical zone in the compiled database.
+
+On a `Zoned` value, calendar methods and `Span` operators express the two ways to move through time:
+
+- `zoned.add_days(1)?` and `zoned.add_months(1)?` step the calendar date and keep the wall-clock time in that zone, so `09:00` before a spring-forward night becomes `09:00` the next morning (23 hours later).
+- `zoned + Span::days(1)` adds 24 exact hours on the UTC timeline and projects the resulting instant back into the same zone.
+
+### Disambiguating gaps and folds
+
+When clocks spring forward or fall back, a wall-clock `DateTime` can fall in a skipped gap or occur twice. `zone.to_timestamp(local, how)` takes a `Disambiguation` policy:
+
+| Policy | Repeated time (fall-back fold) | Skipped time (spring-forward gap) |
+|---|---|---|
+| `Disambiguation::Compatible` | Earlier occurrence | Pushed forward by the gap length (`02:30` becomes `03:30`) |
+| `Disambiguation::Earlier` | Earlier occurrence | Pulled back before the gap |
+| `Disambiguation::Later` | Later occurrence | Pushed forward by the gap length |
+| `Disambiguation::Reject` | `Err` (`ErrorKind::Ambiguous`) | `Err` (`ErrorKind::Gap`) |
+
+```rust
+use navree::datetime::{Date, Disambiguation, ErrorKind, Time, Zone};
+
+let ny = Zone::named("America/New_York")?;
+let gap = Date::new(2026, 3, 8)?.at(Time::new(2, 30, 0)?);
+
+assert_eq!(
+    ny.to_timestamp(gap, Disambiguation::Reject).unwrap_err().kind(),
+    ErrorKind::Gap,
+);
+let shifted = ny.to_timestamp(gap, Disambiguation::Compatible)?.in_zone(ny);
+assert_eq!(shifted.time(), Time::new(3, 30, 0)?);
+```
+
+`date.start_of_day(zone)?` and `zoned.start_of_day()` use `Disambiguation::Compatible`: they return `00:00` when midnight exists on that day, or the first valid instant after the gap in zones whose clocks jump at midnight (such as `America/Havana`, where spring-forward Sunday starts at `01:00`).
+
+For resolving the current user's, workspace's or organization's zone on HTTP requests, counting whole local report windows, skipping public holidays, and writing `AT TIME ZONE` SQL, see [Time zones](/docs/digging-deeper/time-zones/).
+
+## Formatting and parsing
+
+Every type's `Display` implementation writes its canonical ISO 8601 / RFC 3339 representation, independent of locale. For localized human-facing strings such as `25 Nov 2026` or `25 नव॰ 2026`, pass `Date`, `DateTime`, `Timestamp` or `Zoned` to `Locale::format_date` or `t!` in [Localization](/docs/packages/localization/).
+
+### RFC 3339 and RFC 2822
+
+```rust
+use navree::datetime::{Precision, Timestamp, Zoned};
+
+let ts = Timestamp::parse_rfc3339("2026-11-25T15:00:00.125+05:30")?;
+assert_eq!(ts.to_rfc3339(), "2026-11-25T09:30:00.125Z");
+assert_eq!(ts.to_rfc3339_with(Precision::Secs, false), "2026-11-25T09:30:00+00:00");
+
+let zoned = Zoned::parse_rfc3339("2026-11-25T15:00:00+05:30")?;
+assert_eq!(zoned.to_rfc2822(), "Wed, 25 Nov 2026 15:00:00 +0530");
+```
+
+`Precision` chooses fractional-second digits (`Auto`, `Secs`, `Millis`, `Micros`, `Nanos`), and `use_z: bool` chooses between `Z` and `+00:00` when the offset is zero. `Timestamp::parse_rfc2822` and `to_rfc2822` handle mail and HTTP headers.
+
+When an input string carries a leap second (`23:59:60`), `parse_rfc3339`, `parse_rfc2822` and `parse` accept `60` and fold it to `.999_999_999` of second `59`. Output never writes `:60`.
+
+### Patterns
+
+`format(pattern)` formats a value with `strftime`-style directives, and `parse(pattern, text)` reads one back (note the argument order: pattern first, input text second):
+
+```rust
+use navree::datetime::{Date, pattern};
+
+pattern::check("%d/%m/%Y")?;
+let invoice_date = Date::parse("%d/%m/%Y", "25/11/2026")?;
+assert_eq!(invoice_date.format("%d %b %Y").to_string(), "25 Nov 2026");
+```
+
+| Specifier | Meaning |
+|---|---|
+| `%Y`, `%m`, `%d`, `%e`, `%j` | Four-digit year, `01..=12` month, `01..=31` day, space-padded day, `001..=366` day of year |
+| `%b`, `%B`, `%a`, `%A` | Short and full English month and weekday names (`Nov`, `November`, `Wed`, `Wednesday`) |
+| `%u`, `%w`, `%G`, `%V` | Weekday (`1..=7` from Monday, `0..=6` from Sunday), ISO week year and `01..=53` ISO week |
+| `%H`, `%I`, `%P`, `%p`, `%M`, `%S` | 24-hour, 12-hour, `am`/`pm`, `AM`/`PM`, minute, second |
+| `%f`, `%.f`, `%.3f`, `%.6f`, `%.9f` | Nanoseconds or dot-prefixed fractional seconds |
+| `%s`, `%z`, `%:z`, `%Z` | Unix seconds, `+0530`, `+05:30`, zone abbreviation or name (`IST`, `UTC`) |
+| `%F`, `%T`, `%R`, `%%` | `%Y-%m-%d`, `%H:%M:%S`, `%H:%M`, literal `%` |
+
+`format` returns a `Formatted` value that implements `Display`; call `.to_text()` when the pattern comes from configuration and you want a `Result<String, PatternError>`, or validate once at startup with `pattern::check(pattern)`.
+
+## Across the framework
+
+`navree::datetime` types speak the wire formats of every store and protocol in Navree directly:
+
+- **JSON (`serde`) and OpenAPI (`ToSchema`):** `Timestamp`, `Zoned`, `Date`, `Time`, `DateTime` and `Offset` serialize as ISO 8601 / RFC 3339 strings, `Zone` as its canonical IANA name, and `Span` as `(seconds, nanoseconds)`. All of them implement `ToSchema` with the matching OpenAPI `format` (`date-time`, `date`, `time`).
+- **SQL (`navree::db` and `navree::orm`):** `Timestamp` and `Zoned` map to `TIMESTAMPTZ` on PostgreSQL, `TIMESTAMP(6)` / `DATETIME(6)` on MySQL and ISO text on SQLite; `Date`, `Time` and `DateTime` map to `DATE`, `TIME` and `TIMESTAMP` / `DATETIME`. On ORM models, `#[model(timestamps)]` fills `HasTimestamps` fields (`Timestamp`, `Zoned`, `DateTime`, `i64` Unix seconds, or `Option` of any of those).
+- **MongoDB (`navree::mongo`):** `Timestamp` and `Zoned` convert to and from `bson::DateTime` (`From<Timestamp>` and `TryFrom<bson::DateTime>`). When a struct serializes directly to MongoDB Extended JSON, annotate a `Timestamp` field with `#[serde(with = "navree::datetime::bson::extended")]`.
+- **GraphQL (`navree::graphql`):** `Timestamp` and `Zoned` implement `async-graphql`'s `DateTime` scalar, `Date`, `Time` and `DateTime` implement `NaiveDate`, `NaiveTime` and `NaiveDateTime`, and `Zone` implements `TimeZone`. Your `Cargo.toml` does not enable `"chrono"` on `async-graphql`.
+
+## The app clock
+
+Calling `Timestamp::now()` directly makes time-sensitive logic hard to pin in tests. Inject `Arc<dyn Clock>` from `navree::contracts` instead:
+
+```rust title="src/modules/billing/trials.rs"
+use navree::contracts::Clock;
+use navree::datetime::{Span, Timestamp};
+use navree::prelude::*;
+
+#[injectable]
+pub struct Trials {
+    clock: Arc<dyn Clock>,
+}
+
+impl Trials {
+    pub fn expires_at(&self) -> Timestamp {
+        self.clock.now() + Span::days(14)
+    }
+}
+```
+
+In production, register `SystemClock` once in a global module; in tests, pass `FixedClock::new(Timestamp::utc(2026, 11, 25, 9, 0, 0).unwrap())` and move time forward with `clock.advance(Span::days(14))` or `clock.set(instant)`. Every Navree module — authentication, sessions, queues, the scheduler, ORM timestamps, storage URLs and notifications — reads `dyn Clock` when one is registered. See [Fakes](/docs/testing/fakes/#the-clock).
+
+## Upgrading existing code
+
+If you are bringing an older Navree app or plugin that used `chrono` onto `navree::datetime`, run the CLI upgrader from the crate or workspace root:
+
+```sh
+navree upgrade --check   # preview files and follow-up notes without writing
+navree upgrade           # rewrite Cargo.toml and .rs files in place
+```
+
+`navree upgrade` removes `chrono` from `Cargo.toml` (and `"chrono"` from `async-graphql` features), rewrites imports, type names, constructors, `Weekday` variants and `navree_orm::Timestamp` bounds (`HasTimestamps`), and adds `navree::datetime` imports where needed. Where an expression needs your decision — such as `date + Duration::days(n)` (`date.add_days(n)`) or converting an instant into a local zone (`at.in_zone(zone)`) — it leaves a `// navree upgrade:` comment on that line so `rg "navree upgrade:"` lists every spot to finish.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/time-zones/" title="Time zones">
+    `CurrentZone`, local days, send windows, holidays and local-time SQL.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Task scheduling">
+    Cron expressions and schedules in UTC, a named zone or per workspace.
+  </LinkCard>
+  <LinkCard href="/docs/ui/dates/" title="Dates and times in Navree UI">
+    Date, time and range pickers, form fields and wall-clock resolution.
+  </LinkCard>
+  <LinkCard href="/docs/testing/fakes/" title="Fakes">
+    Pinning `dyn Clock` in tests with `FixedClock`.
+  </LinkCard>
+</LinkCards>

@@ -148,7 +148,7 @@ Outside a request, nothing creates a unit of work for you. Create one from `Db`.
 `db.uow(actor, request_id)` opens a unit of work. Run your code in its `scope`, so `&Db` executors join it too, then commit or roll back yourself. Here is a command that closes stale deals:
 
 ```rust title="src/modules/deals/commands.rs"
-use chrono::{Duration, Utc};
+use navree::datetime::{Span, Timestamp};
 use navree::db::Db;
 use navree::kernel::CommandSpec;
 use navree::prelude::*;
@@ -166,7 +166,7 @@ async fn close_stale(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError
     let uow = db.uow(None, None).await;
     let result: navree::orm::Result<usize> = uow
         .scope(async {
-            let cutoff = Utc::now() - Duration::days(90);
+            let cutoff = Timestamp::now() - Span::days(90);
             let stale = Deal::query()
                 .where_(Deal::STAGE.eq(Stage::Lead))
                 .where_(Deal::UPDATED_AT.lt(cutoff))

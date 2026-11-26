@@ -184,8 +184,8 @@ Returning a database model as JSON ties your API to your table: a renamed column
 The CRM gives every model a `*Resource` struct that implements `Resource<Model>`, builds it from a record with `to_resource::<R>()`, and returns it from every route of that model:
 
 ```rust title="src/companies/resource.rs"
-use chrono::{DateTime, Utc};
 use navree::api::ApiResource;
+use navree::datetime::Timestamp;
 use navree::openapi::ToSchema;
 use navree::orm::attributes::Resource;
 use navree::orm::Record;
@@ -204,7 +204,7 @@ pub struct CompanyResource {
     pub name: String,
     pub domain: Option<String>,
     pub owner_id: Uuid,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl ApiResource for CompanyResource {

@@ -158,9 +158,9 @@ The `cookie` scheme names the session cookie as the browser sees it: `session.co
 Request and response types describe themselves with the `ToSchema` derive (`navree::openapi::ToSchema`, also in the prelude). Derive it next to serde: the schema follows the type's serde attributes, doc comments become descriptions, and `#[schema(as = Name)]` sets the component name the document uses:
 
 ```rust title="src/modules/notes/resource.rs"
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use navree::datetime::Timestamp;
 use navree::openapi::ToSchema;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// A note on a deal.
@@ -174,7 +174,7 @@ pub struct NoteResource {
     pub id: Uuid,
     /// The text.
     pub body: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// What `POST /api/v1/notes` takes.
@@ -210,7 +210,7 @@ impl NotesController {
             resource_type: "Note",
             id: Uuid::now_v7(),
             body: input.body,
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
         };
         Ok(Created(format!("/api/v1/notes/{}", note.id), note))
     }
@@ -250,7 +250,7 @@ What the derive reads:
 | `#[schema(minimum = 0, maximum = 100)]` | field | The numeric limits. |
 | `#[schema(schema_with = function)]` | field | The schema a `fn() -> Schema` returns. |
 
-Any other `#[schema(..)]` option is a compile error. `Option<T>` is `T` or `null`, and never required; `Vec<T>`, the sets, the maps, `Box<T>`, `Arc<T>`, `Cow<T>`, `String`, the number types, `bool`, `Uuid`, chrono's dates and times and `serde_json::Value` have schemas of their own. A type can write its schema by hand with `impl ToSchema for Zone { fn schema() -> Schema { .. } }`.
+Any other `#[schema(..)]` option is a compile error. `Option<T>` is `T` or `null`, and never required; `Vec<T>`, the sets, the maps, `Box<T>`, `Arc<T>`, `Cow<T>`, `String`, the number types, `bool`, `Uuid`, `navree::datetime`'s dates and times and `serde_json::Value` have schemas of their own. A type can write its schema by hand with `impl ToSchema for Zone { fn schema() -> Schema { .. } }`.
 
 `m.api_schema::<T>()` (from the `ModuleBuilderApiExt` trait, in the prelude) adds any type to the components, with the schemas it refers to. Use it for a type that a route's document refers to only through a generic argument, such as the `Note` in a `Page<Note>` response:
 

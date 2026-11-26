@@ -20,11 +20,11 @@ pub struct Deal {
     #[model(cast = "decimal(2)")]
     pub amount: Decimal,                  // 1234.57
     #[model(cast = "datetime_format(\"%Y-%m-%d %H:%M\")")]
-    pub follow_up_at: Option<DateTime<Utc>>, // '2026-11-02 09:30'
+    pub follow_up_at: Option<Timestamp>, // '2026-11-02 09:30'
     #[model(cast = "unix_timestamp")]
-    pub synced_at: Option<DateTime<Utc>>, // 1793102400
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub synced_at: Option<Timestamp>, // 1793102400
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 ```
 
@@ -38,8 +38,8 @@ A cast on an `Option<T>` field casts the inner value, and `NULL` stays `None`. F
 | `"int_enum"` | a `Copy` enum with `Into<i64>` and `TryFrom<i64>` (a `#[repr]` enum) | an integer |
 | `"json"` | any `Serialize + DeserializeOwned` type: structs, `Vec`, maps, sets of enums | JSON |
 | `"decimal(N)"` | `Decimal` | a decimal, rounded half away from zero to `N` places (at most 28) when written |
-| `"datetime_format(\"..\")"` | `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime`, `NaiveDate`, `NaiveTime` | text in that format (checked when the model compiles), and serialized in it too |
-| `"unix_timestamp"`, `"unix_timestamp_ms"` | `DateTime<Utc>`, `NaiveDateTime` | integer seconds or milliseconds |
+| `"datetime_format(\"..\")"` | `Timestamp`, `Zoned`, `DateTime`, `Date`, `Time` | text in that format (checked when the model compiles), and serialized in it too |
+| `"unix_timestamp"`, `"unix_timestamp_ms"` | `Timestamp`, `DateTime` | integer seconds or milliseconds |
 | `"encrypted"` | `String`, `Vec<u8>` | an encrypted payload |
 | `"encrypted_json"` | any serde type | encrypted JSON |
 | `"hashed"` | `String` | an Argon2id hash |

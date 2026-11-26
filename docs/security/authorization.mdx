@@ -59,6 +59,7 @@ Abilities serialise to the JSON rule format of [CASL](https://casl.js.org), so t
 Make each model you want to check a subject, and register it with `AccessModule::for_feature` in its module. A [navree-orm model](/docs/orm/workspaces-and-access/#access-control) is a subject through its `#[model(..)]` attribute:
 
 ```rust title="src/modules/posts/model.rs"
+use navree::datetime::Timestamp;
 use navree::prelude::*;
 
 /// Rules name it `Post`; permissions are `posts.<action>`.
@@ -69,8 +70,8 @@ pub struct Post {
     pub author_id: Uuid,
     pub title: String,
     pub body: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 ```
 
@@ -192,7 +193,7 @@ rules.can(READ, "Invoice").when(field("archived_at").eq(None::<&str>));
 
 - Conditions combine with `.and(..)`, and several `.when(..)` calls on one rule combine the same way. There is no `$or`: write two rules.
 - Only top-level columns work. Nested fields (`author.id`), `$exists`, `$regex` and the other MongoDB operators are rejected.
-- Values can be booleans, integers, floats, strings, `Uuid`s, `DateTime<Utc>`s, `serde_json::Value`s and `Option`s, where `None` is `null`. Integers must be safe in JavaScript (at most 2^53 − 1); pass larger ones as strings.
+- Values can be booleans, integers, floats, strings, `Uuid`s, `Timestamp`s, `serde_json::Value`s and `Option`s, where `None` is `null`. Integers must be safe in JavaScript (at most 2^53 − 1); pass larger ones as strings.
 - Types are never converted: `7` doesn't equal `"7"`. UUIDs compare as hyphenated lower-case strings, and timestamps as RFC 3339 UTC strings with microseconds, so text order is time order.
 - `eq(None)` matches null. `ne(value)` matches null columns too, like SQL's `IS DISTINCT FROM`. `is_in` and `not_in` match null only through, or unless, a `null` in the list. Range operators never match null.
 

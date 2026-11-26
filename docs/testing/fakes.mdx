@@ -150,7 +150,7 @@ A `Message` has public fields to check: `from`, `to`, `cc`, `bcc`, `reply_to`, `
 
 ## The clock
 
-Code that reads the time with `Utc::now()` can't be tested at a chosen moment. Read it from the app's clock instead: inject `Arc<dyn Clock>` and call `clock.now()`. Navree registers no clock by default, so register the system clock once, in a global module (the CRM does this in its platform module):
+Code that reads the time with `Timestamp::now()` can't be tested at a chosen moment. Read it from the app's clock instead: inject `Arc<dyn Clock>` and call `clock.now()`. Navree registers no clock by default, so register the system clock once, in a global module (the CRM does this in its platform module):
 
 ```rust title="src/platform.rs"
 use navree::contracts::{Clock, SystemClock};
@@ -169,8 +169,8 @@ impl Module for PlatformModule {
 ```
 
 ```rust title="src/modules/billing/trials.rs"
-use chrono::{DateTime, Utc};
 use navree::contracts::Clock;
+use navree::datetime::{Span, Timestamp};
 use navree::prelude::*;
 
 /// Free trials last 14 days.
@@ -181,8 +181,8 @@ pub struct Trials {
 
 impl Trials {
     /// Whether a trial started at `started` is over.
-    pub fn is_over(&self, started: DateTime<Utc>) -> bool {
-        self.clock.now() >= started + chrono::Duration::days(14)
+    pub fn is_over(&self, started: Timestamp) -> bool {
+        self.clock.now() >= started + Span::days(14)
     }
 }
 ```
@@ -193,13 +193,13 @@ In a test, replace it with a `FixedClock` (`navree::testing::FixedClock`), which
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
 use navree::contracts::Clock;
+use navree::datetime::Timestamp;
 use navree::testing::{FixedClock, TestApp};
 
 #[tokio::test]
 async fn trials_end_after_fourteen_days() {
-    let start = Utc.with_ymd_and_hms(2026, 10, 26, 10, 0, 0).unwrap();
+    let start = Timestamp::utc(2026, 10, 26, 10, 0, 0).unwrap();
     let clock = Arc::new(FixedClock::new(start));
     let app = TestApp::builder()
         .module(PlatformModule)
@@ -217,7 +217,7 @@ async fn trials_end_after_fourteen_days() {
 
 `clock.set(time)` moves it to a given time and `clock.advance(duration)` moves it forward.
 
-Navree's own modules use the app's `dyn Clock` when there is one, so a fixed clock also controls them: navree-auth (token expiry, login throttle windows, two-factor codes), the audit log's timestamps, the queue's delays and due times, the scheduler, notifications, sessions, signed URLs and storage's temporary URLs. It doesn't affect `Utc::now()` in your own code, Tokio's timers or cache expiry. The login throttle keeps its counters in the cache, so moving the clock alone doesn't end a lockout.
+Navree's own modules use the app's `dyn Clock` when there is one, so a fixed clock also controls them: navree-auth (token expiry, login throttle windows, two-factor codes), the audit log's timestamps, the queue's delays and due times, the scheduler, notifications, sessions, signed URLs and storage's temporary URLs. It doesn't affect `Timestamp::now()` in your own code, Tokio's timers or cache expiry. The login throttle keeps its counters in the cache, so moving the clock alone doesn't end a lockout.
 
 ## Outgoing HTTP
 

@@ -31,7 +31,7 @@ Use a line for change over time. A line says that what lies between two points i
 
 ## A time axis
 
-`.days(...)` takes `NaiveDate` values and `.times(...)` takes `NaiveDateTime` values, as wall-clock times in the zone the data was counted in. `.numbers(...)` and `.categories(...)` take the other two kinds of x.
+`.days(...)` takes `Date` values and `.times(...)` takes `DateTime` values, as wall-clock times in the zone the data was counted in. `.numbers(...)` and `.categories(...)` take the other two kinds of x.
 
 <UiPreview example="line-chart/hours" />
 
@@ -49,7 +49,7 @@ Leave out a reading that was never taken. Writing it as zero draws a drop that d
 
 ## Targets, events and bands
 
-`Annotation::target(value, label)` draws a dashed level across the chart. `Annotation::event(at, label)` draws a line up the chart at one place, and `Annotation::band(from, to, label)` shades a stretch. A place on the x axis can be a `NaiveDate` or `NaiveDateTime`, a number, a category name or `At::Index(n)`, the row at that index in your data (after times or numbers are put in order). It finds its place when the drawing keeps fewer points or merges bars: an event on day 555 of 1,000 sits on the bar that holds that day. A target also widens the value axis to hold it.
+`Annotation::target(value, label)` draws a dashed level across the chart. `Annotation::event(at, label)` draws a line up the chart at one place, and `Annotation::band(from, to, label)` shades a stretch. A place on the x axis can be a `Date` or `DateTime`, a number, a category name or `At::Index(n)`, the row at that index in your data (after times or numbers are put in order). It finds its place when the drawing keeps fewer points or merges bars: an event on day 555 of 1,000 sits on the bar that holds that day. A target also widens the value axis to hold it.
 
 <UiPreview example="line-chart/annotations" />
 

@@ -5,7 +5,7 @@ description: "Zones for users, workspaces and organizations: the request's zone,
 
 ## Introduction
 
-<Badge feature="time" /> Navree stores every timestamp in UTC. People don't live in UTC: a report for "yesterday" means yesterday in the workspace's zone, a reminder should arrive at 09:00 where the reader is, and a public holiday is a day on a country's calendar. `TimeModule` gives every request and every job the zone it belongs to, and turns local days and local times into the UTC instants your queries filter on.
+<Badge feature="time" /> Navree stores every timestamp in UTC as a [`Timestamp`](/docs/digging-deeper/dates-and-times/). People don't live in UTC: a report for "yesterday" means yesterday in the workspace's zone, a reminder should arrive at 09:00 where the recipient is, and a public holiday is a day on a country's calendar. `TimeModule` gives every request and every job the zone it belongs to, and turns local days and local times into the UTC instants your queries filter on.
 
 - `Zone` is a checked IANA time zone. It reads names in any case and replaces legacy aliases with their current names, so every PostgreSQL server accepts what you store.
 - `CurrentZone` is the request's zone: the signed-in user's, else the workspace's, else the organization's, else the app's default zone.
@@ -79,7 +79,7 @@ A `Zone` is `Copy`, serializes as its name and deserializes through `Zone::parse
 | `Zone::for_country("IN")` | the country's primary zone, `Asia/Kolkata` |
 | `Zone::in_country("US")` | every zone of the country, primary first |
 | `zone.countries()` | the countries using it: `["IN"]` |
-| `zone.local(at)` | an instant on the zone's clock (`DateTime<Tz>`) |
+| `zone.local(at)` | an instant on the zone's clock (`Zoned`) |
 | `zone.offset_at(at)`, `zone.offset_label(at)` | the UTC offset in force: `+05:30` |
 | `zone.today(now)` | the local day `now` falls on |
 | `zone.to_utc(local)` | the instant a wall-clock time stands for |
@@ -184,10 +184,12 @@ let yesterday = DayRange::single(zone.today(zones.now()).pred());
 A report for "October" means October in the workspace's zone. `DayRange` is a range of whole local days, both ends included, and turns into the UTC span to filter on:
 
 ```rust
+use navree::datetime::Timestamp;
+
 #[derive(Serialize)]
 struct SignupReport {
-    from: DateTime<Utc>,
-    to: DateTime<Utc>,
+    from: Timestamp,
+    to: Timestamp,
     signups: u64,
 }
 
@@ -276,7 +278,7 @@ Inside the window `next_slot` returns now and `delay` zero. After 17:00 on a Fri
 |---|---|
 | `SendWindow::weekdays()` | Monday to Friday, all day |
 | `SendWindow::working_days_in("SA")` | the days that are not the country's weekend: Sunday to Thursday in Saudi Arabia, Monday to Saturday in India |
-| `SendWindow::on(&[Weekday::Sat])` | the given days |
+| `SendWindow::on(&[Weekday::Saturday])` | the given days |
 | `SendWindow::always()`, `every_day()` | every day |
 | `.between("09:00", "17:00")` | from the first time, until (not including) the second; `"24:00"` means midnight |
 | `.except(holidays)` | not on the days of a `Holidays` |
@@ -429,6 +431,9 @@ async fn the_report_uses_the_users_zone() {
 Override `dyn Clock` with a `FixedClock` to pin `zone.today()`, `Zones::now()` and the scheduler. `ZonesFake::new(level).header("X-Workspace")` reads the workspace id from that header; register one fake per level.
 
 <LinkCards>
+  <LinkCard href="/docs/digging-deeper/dates-and-times/" title="Dates and times">
+    `Timestamp`, `Date`, `Time`, `Zoned`, `Span` and formatting.
+  </LinkCard>
   <LinkCard href="/docs/digging-deeper/scheduling/" title="Task scheduling">
     Local-time and per-workspace schedules.
   </LinkCard>

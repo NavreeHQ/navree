@@ -19,7 +19,7 @@ A table is a Rust struct with `#[derive(Model)]`. Reading it gives you `Record<M
 Here is a deal. The struct is the source of truth: there is no schema file, and the [migration](/docs/database/migrations/) that creates the table is written beside it.
 
 ```rust title="src/modules/deals/models/deal.rs"
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -37,8 +37,8 @@ pub struct Deal {
     pub stage: Stage,
     pub company_id: Uuid,
     pub owner_id: Uuid,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// The pipeline stage, stored and sent as a lower-case string.

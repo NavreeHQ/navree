@@ -6,6 +6,7 @@ description: "Run the ORM's models on MongoDB: `MongoModule`, ObjectId keys, que
 <Badge feature="mongo" /> MongoDB is supported as a document database under the same model API: models declare `driver = "mongodb"`, and every builder method compiles to a filter document or an aggregation pipeline instead of SQL. Records keep their dirty tracking, timestamps, soft deletes, scopes, events, relations and pagination.
 
 ```rust
+use navree::datetime::Timestamp;
 use navree::mongo::{MongoDb, ObjectId};
 
 /// Embedded in each deal.
@@ -26,9 +27,9 @@ pub struct Deal {
     pub terms: Option<Terms>,   // an embedded document
     #[model(cast = "json")]
     pub tags: Vec<String>,      // an array
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 let titles: Vec<String> = Deal::query()

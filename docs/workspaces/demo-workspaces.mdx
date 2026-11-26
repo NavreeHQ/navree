@@ -38,8 +38,8 @@ The workspace table gains one column for this, `kind` (`live` or `demo`, default
 A seeder has a name, the tables it fills and a `seed` method. It receives a `DemoSeed`: the demo workspace, a unit of work already scoped to it, the time, and the fixtures.
 
 ```rust title="src/crm/demo.rs"
-use chrono::{DateTime, Utc};
 use navree::BoxFuture;
+use navree::datetime::Timestamp;
 use navree::prelude::*;
 use navree::workspace::{DemoSeed, DemoSeeder};
 use serde::Deserialize;
@@ -51,7 +51,7 @@ use super::model::Company;
 struct CompanyFixture {
     name: String,
     stage: String,
-    last_contacted_at: DateTime<Utc>,
+    last_contacted_at: Timestamp,
 }
 
 /// Fills a demo workspace with the CRM's sample companies.

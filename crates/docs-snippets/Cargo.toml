@@ -15,7 +15,6 @@ unsafe_code = "forbid"
 # What the pages' compiled blocks use, as an app would depend on it: the facade with the
 # features they name, and the libraries they import. A block that needs more adds it here.
 [dependencies]
-chrono = { workspace = true }
 http = { workspace = true }
 navree = { workspace = true, features = ["full", "sqlite", "ui-native-preview", "ui-image", "ui-extension-files"] }
 serde = { workspace = true }

@@ -105,7 +105,9 @@ The callback gets a `Collection` per page and returns `ControlFlow::Break(())` t
 When the callback changes the rows it reads, page by key, so pages stay correct:
 
 ```rust
-let cutoff = Utc::now() - Duration::days(90);
+use navree::datetime::{Span, Timestamp};
+
+let cutoff = Timestamp::now() - Span::days(90);
 let db2 = db.clone();
 Deal::query()
     .where_(Deal::STAGE.eq(Stage::Lead))

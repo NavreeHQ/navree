@@ -62,7 +62,7 @@ No report has more than 400 periods, whatever made its grain. A grain that would
 
 ## Periods in a time zone
 
-Periods are wall-clock periods in the zone you pass: a day is a day, a week starts on a Monday and a month is a month. A chart reports what a person in that zone saw. The zone can be any `chrono` time zone, such as the `Tz` of [`CurrentZone`](/docs/digging-deeper/time-zones/#the-requests-zone).
+Periods are wall-clock periods in the zone you pass: a day is a day, a week starts on a Monday and a month is a month. A chart reports what a person in that zone saw. The zone can be a `navree::datetime::Zone`, an `Offset`, or [`CurrentZone`](/docs/digging-deeper/time-zones/#the-requests-zone) (`navree::time::Zone` or `Tz`).
 
 - **Clock changes.** In New York, 7 to 9 March 2026 counted by the day is three periods of 24, 23 and 24 hours, and 1 November 2026 counted by the hour is 25 periods, with the 01:00 hour twice. Nothing is merged or split. A window's end is the start of the day after its last day, so the last day is counted whole.
 - **Half-hour zones.** Hours are real hours counted from the window's first instant, so a zone like Asia/Kolkata keeps its periods on its own hours.
@@ -72,7 +72,7 @@ Periods are wall-clock periods in the zone you pass: a day is a day, a week star
 - **Zones that kept their own time.** Before standard time, some zones were off UTC by minutes and seconds (Kolkata by 5:21:10 until 1906). Their midnights fall on those seconds, and their periods do too.
 - **The repeated hour.** On the day the clocks go back, the second of the two hours with the same name is called, in the table and the tooltip, `Nov 1, 2026, 1:00 AM, second time`.
 
-`report.zone()` is the zone's name in the IANA database, taken from the zone you passed: `Asia/Kolkata` for a `navree::time::Tz`, `UTC` for `Utc`, and none for a fixed offset other than zero. That name is what TimescaleDB is given (see below), so it can never differ from the zone the periods were cut in. `report.buckets()` lists the periods, each with its `start`, its `end` and its name on the zone's clock. `report.bounds()` is the whole window as two instants, `[start, end)`, which is what a query filters on. No instant is earlier than 0001-01-01 or later than the end of 9999-12-31, in UTC: a window that ends on 9999-12-31 in a zone behind UTC stops there.
+`report.zone()` is the zone's name in the IANA database, taken from the zone you passed: `Asia/Kolkata` for `Asia/Kolkata`, `UTC` for `Zone::UTC`, and none for a fixed offset other than zero. That name is what TimescaleDB is given (see below), so it can never differ from the zone the periods were cut in. `report.buckets()` lists the periods, each with its `start`, its `end` and its name on the zone's clock. `report.bounds()` is the whole window as two instants, `[start, end)`, which is what a query filters on. No instant is earlier than 0001-01-01 or later than the end of 9999-12-31, in UTC: a window that ends on 9999-12-31 in a zone behind UTC stops there.
 
 ## Counting rows
 
@@ -85,7 +85,7 @@ let placed: Vec<u64> = report.count(orders.iter().map(|order| order.placed_at));
 let revenue: Vec<f64> = report.sum(orders.iter().map(|order| (order.paid_at, order.amount)));
 ```
 
-`count` takes instants as `DateTime<Utc>` and `sum` takes an instant and a value. An instant outside the window is ignored, and so is a value that is NaN or infinite. `report.bucket_of(instant)` finds the period of one instant. `report.series(name, &counts)` makes a series from counts.
+`count` takes instants as `Timestamp` and `sum` takes an instant and a value. An instant outside the window is ignored, and so is a value that is NaN or infinite. `report.bucket_of(instant)` finds the period of one instant. `report.series(name, &counts)` makes a series from counts.
 
 ### Through the ORM
 
@@ -150,7 +150,7 @@ let chart = ["Won", "Lost", "Open", "Other"].into_iter().zip(by_stage).fold(
 The handler reads the query, builds the report, counts, and draws the form, the grain links and the charts. The form is a `GET` form, so the whole report lives in the address.
 
 ```rust title="src/deals/report.rs"
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::http::extract::Query;
 use navree::prelude::{Result, Uow};
 use navree::time::CurrentZone;
@@ -159,7 +159,7 @@ use navree::ui::dates::{DatePreset, DateRules, RangeRules};
 use navree::ui::*;
 
 /// No day after today, and at most two years.
-fn limits(today: NaiveDate) -> RangeRules {
+fn limits(today: Date) -> RangeRules {
     RangeRules::new(DateRules::new().max(today)).max_days(730)
 }
 

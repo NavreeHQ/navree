@@ -244,7 +244,7 @@ These fail the boot, naming `m.search_engine` and the module that registered the
 Derive `Searchable` next to `Model` on a [navree-orm model](/docs/orm/models/) and mark the fields that go into the index. This is the CRM's contact, with search added:
 
 ```rust title="crates/crm-core/src/models/contact.rs"
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::prelude::*;
 use navree::search::Searchable;
 use serde::Serialize;
@@ -275,9 +275,9 @@ pub struct Contact {
     #[searchable(filter)]
     pub owner_id: Uuid,
     #[searchable(sort)]
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 ```
 
@@ -515,7 +515,7 @@ let deals = search
 | `filter_by(filter)` | Any combination of `Filter::eq`, `ne`, `is_in`, `range` and `null` under `Filter::All`, `Any` and `Not` |
 | `sort_asc(field)`, `sort_desc(field)` | Sort by the field, records without a value last; relevance breaks ties. Without a sort, results are by relevance. |
 
-Values compare by JSON type: a number never equals a string. Dates and timestamps are stored in the index as Unix milliseconds, so ranges and sorts on them work on every engine; pass dates (`NaiveDate`, `DateTime<Utc>`) or their ISO strings.
+Values compare by JSON type: a number never equals a string. Dates and timestamps are stored in the index as Unix milliseconds, so ranges and sorts on them work on every engine; pass dates (`Date`, `Timestamp`) or their ISO strings.
 
 An empty query text matches every document, so a filtered empty query is a fast list: `search.query::<Deal>("").filter("owner_id", me).sort_desc("expected_close_date")`. `ids(limit)` returns the first matches' primary keys and `count()` the number of matches.
 

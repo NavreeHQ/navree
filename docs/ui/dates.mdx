@@ -9,7 +9,7 @@ Five components choose dates and times: [Calendar](/docs/components/calendar/), 
 
 ## A day is a day
 
-A day is a year, a month and a day: `NaiveDate` in Rust, `2026-11-03` on the wire. Nowhere in the toolkit, on the server or in the browser, does a day pass through a time zone. The browser module counts days from 1970-01-01 with whole-number arithmetic and never builds a `Date`, so the browser's zone and its clock can't move a day by one. This is the usual way a date picker goes wrong: a day chosen at local midnight, read back in another zone, is yesterday.
+A day is a year, a month and a day: `Date` (`navree::datetime::Date`) in Rust, `2026-11-03` on the wire. Nowhere in the toolkit, on the server or in the browser, does a day pass through a time zone. The browser module counts days from 1970-01-01 with whole-number arithmetic and never builds a JavaScript `Date`, so the browser's zone and its clock can't move a day by one. This is the usual way a date picker goes wrong: a day chosen at local midnight, read back in another zone, is yesterday.
 
 "Today" is a date the page says: `.today(date)`, in the zone the page counts its days in. A calendar never asks the clock. A page is the same wherever it is read, and a test can name its own today.
 
@@ -17,7 +17,7 @@ A day is a year, a month and a day: `NaiveDate` in Rust, `2026-11-03` on the wir
 
 The browser only helps a person get to a value. What comes back is parsed and checked on the server:
 
-- A date is read with `chrono` as `YYYY-MM-DD`. A value that isn't a day, such as `2026-02-30`, is refused.
+- A date is read on the server as `YYYY-MM-DD`. A value that isn't a day, such as `2026-02-30`, is refused.
 - `DateRules` holds the limits, the weekdays, the lists and the function that the calendar was drawn with. `rules.check(day)` is the same question the calendar asked, so the page and the server can't disagree. A day outside the years 1 to 9999 is refused.
 - `TimeRules` does the same for a time.
 - In a form, `#[form(widget = date_picker)]` and `#[form(widget = time_picker)]` draw the pickers, the field's type reads the value, and `#[validate(custom(...))]` runs your rule. Add `date_rules = path` or `time_rules = path`, the function that gives the rules, and the picker is drawn with them and the server holds the posted value to them, with no `custom` rule needed. A message sits under the field.
@@ -30,8 +30,8 @@ What a person types is never posted. The browser reads it by the locale's rules 
 
 | You choose | It holds | Store |
 |---|---|---|
-| A day | `NaiveDate` | A `date` column. |
-| A time of day | `NaiveTime`, on a wall, no zone | A `time` column, with the zone's name beside it if the zone matters. |
+| A day | `Date` | A `date` column. |
+| A time of day | `Time`, on a wall, no zone | A `time` column, with the zone's name beside it if the zone matters. |
 | A window of days | `DateRange { from, to }`, both days included | Two `date` columns, or two instants from `utc_bounds`. |
 | When something happens | A date, a time and a zone, resolved | A UTC instant (`timestamptz`), and the zone's name if the wall time matters later. |
 
@@ -51,7 +51,7 @@ A time on a wall has two kinds of trouble, twice a year, in many zones. `dates::
 | `Gap` | 02:30 on 8 March: the clocks jump from 02:00 to 03:00, so the time never happens. |
 | `Ambiguous` | 01:30 on 1 November: the clocks go back from 02:00 to 01:00, so it happens twice. |
 
-It handles zones that change by half an hour, such as Lord Howe Island, zones with no change, such as India, far zones, and Samoa, which skipped the whole of 30 December 2011. It works with any `chrono` time zone, so it adds no data of its own. What to tell the person is your page's decision; the toolkit gives you the facts.
+It handles zones that change by half an hour, such as Lord Howe Island, zones with no change, such as India, far zones, and Samoa, which skipped the whole of 30 December 2011. It works with `navree::datetime::Zone`, `Offset` and `navree::time::Zone`. What to tell the person is your page's decision; the toolkit gives you the facts.
 
 ## Languages
 

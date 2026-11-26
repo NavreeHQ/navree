@@ -230,7 +230,7 @@ See [the audit log](/docs/security/audit-log/) for the filters and the entry fie
 
 ## Time
 
-Rows store timestamps, and a test that compares them with `Utc::now()` is fragile. Inject the app's `dyn Clock` in your services and give the test app a `FixedClock`; then `created_at` is exactly the time you set, and `clock.advance(..)` moves it. See [the clock](/docs/testing/fakes/#the-clock).
+Rows store timestamps, and a test that compares them with `Timestamp::now()` is fragile. Inject the app's `dyn Clock` in your services and give the test app a `FixedClock`; then `created_at` is exactly the time you set, and `clock.advance(..)` moves it. See [the clock](/docs/testing/fakes/#the-clock).
 
 ## Commands and migrations
 

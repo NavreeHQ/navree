@@ -104,9 +104,9 @@ A soft-deleting model keeps deleted records in its table, marked with the time t
 pub struct Note {
     pub id: i64,
     pub body: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 ```
 
@@ -162,7 +162,7 @@ pub struct Note { /* .. */ }
 impl Prunable for Note {
     /// Trashed notes are gone for good after 30 days.
     fn prunable(query: Builder<Self>) -> Builder<Self> {
-        query.only_trashed().where_(Note::DELETED_AT.lt(Utc::now() - Duration::days(30)))
+        query.only_trashed().where_(Note::DELETED_AT.lt(Timestamp::now() - Span::days(30)))
     }
 
     async fn pruning(&self, _ctx: &ExecContext) -> Result<()> {
@@ -185,7 +185,7 @@ impl MassPrunable for LoginAttempt {
     const CHUNK_SIZE: Option<u64> = Some(5_000);
 
     fn prunable(query: Builder<Self>) -> Builder<Self> {
-        query.where_(LoginAttempt::CREATED_AT.lt(Utc::now() - Duration::days(90)))
+        query.where_(LoginAttempt::CREATED_AT.lt(Timestamp::now() - Span::days(90)))
     }
 }
 ```

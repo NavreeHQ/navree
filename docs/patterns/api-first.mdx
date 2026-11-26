@@ -78,8 +78,8 @@ pub struct DealResource {
     pub company: CompanyRef,
     pub owner_id: Uuid,
     pub owner: OwnerRef,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
     // ... position, expected_close_date, closed_at, lost_reason, contact
 }
 ```

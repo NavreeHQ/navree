@@ -188,7 +188,7 @@ Arguments format with the locale's conventions:
 
 - **Numbers** get the locale's separators: `{ $count }` is `1,234` in `en` and `1 234` in `fr`. `NUMBER()` takes `style` (`decimal`, `percent`, or `currency` with a literal `currency: "EUR"`), `useGrouping`, `minimumIntegerDigits`, `minimumFractionDigits` and `maximumFractionDigits`; a year is `{ NUMBER($year, useGrouping: "false") }`.
 - **Amounts** are `Money` arguments: `t!("deal-amount", amount = Money::new(4_200_000, "EUR"))` reads `€42,000.00` in `en` and `42 000,00 €` in `fr`. Fluent's named arguments are literals, so a currency that varies travels inside the `Money` value.
-- **Dates** are chrono values (`NaiveDate`, `NaiveDateTime`, `DateTime`): `Oct 26, 2026` in `en`, `26 oct. 2026` in `fr`. `DATETIME()` takes `dateStyle` (`short`, `medium`, `long`, `full`) and `timeStyle` (`short`, `medium`), which adds the time.
+- **Dates** are `navree::datetime` values (`Date`, `DateTime`, `Timestamp`, `Zoned`): `Oct 26, 2026` in `en`, `26 oct. 2026` in `fr`. `DATETIME()` takes `dateStyle` (`short`, `medium`, `long`, `full`) and `timeStyle` (`short`, `medium`), which adds the time.
 
 A message missing from `fr-CA` falls back to `fr`, then to `default_locale`. Region-specific files only need the messages that differ. A message's attributes are looked up as `id.attribute`: `t!("login.title")`.
 
@@ -196,7 +196,7 @@ A message missing from `fr-CA` falls back to `fr`, then to `default_locale`. Reg
 
 ### The t! macro
 
-`t!` looks a message up in the current locale. Arguments are `name = value`; numbers, strings, `bool`s, `Money`, chrono dates and `Option`s of those work:
+`t!` looks a message up in the current locale. Arguments are `name = value`; numbers, strings, `bool`s, `Money`, `navree::datetime` dates and times and `Option`s of those work:
 
 ```rust title="src/modules/deals/service.rs"
 use navree::i18n::t;
@@ -258,8 +258,8 @@ async fn summary(&self, locale: Locale, uow: Uow) -> Result<Json<serde_json::Val
     Ok(Json(serde_json::json!({
         "locale": locale.tag(),                              // "fr"
         "headline": t!("deal-created", count = open),
-        "total": locale.format_money(4_200_000, "EUR"),       // "42 000,00 €"
-        "updated": locale.format_date(chrono::Utc::now()),   // "26 oct. 2026"
+        "total": locale.format_money(4_200_000, "EUR"),             // "42 000,00 €"
+        "updated": locale.format_date(navree::datetime::Timestamp::now()), // "26 oct. 2026"
     })))
 }
 ```

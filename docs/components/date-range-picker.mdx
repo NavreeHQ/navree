@@ -13,7 +13,7 @@ use navree::ui::*;
 
 DateRangePicker::new("from", "to")
     .today(today)
-    .week_start(Weekday::Mon)
+    .week_start(Weekday::Monday)
     .title("Created")
 ```
 
@@ -63,7 +63,7 @@ Write the limits once, as a `RangeRules`, and give the same value to the picker 
 
 ```rust
 fn window_limits() -> RangeRules {
-    RangeRules::new(DateRules::new().min(day(2020, 1, 1)).max(today).disable_weekdays([Weekday::Sun]))
+    RangeRules::new(DateRules::new().min(day(2020, 1, 1)).max(today).disable_weekdays([Weekday::Sunday]))
         .min_days(2)
         .max_days(90)
 }

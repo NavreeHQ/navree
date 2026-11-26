@@ -377,8 +377,8 @@ Test your jobs as you always do, with [`QueueFake`](/docs/testing/fakes/) or a r
 ```rust title="tests/long_waits.rs"
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
 use navree::contracts::Clock;
+use navree::datetime::Timestamp;
 use navree::fleet::Fleet;
 use navree::prelude::*;
 use navree::queue::Queue;
@@ -387,7 +387,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn a_mail_waiting_two_minutes_is_a_long_wait() {
-    let clock = Arc::new(FixedClock::new(Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap()));
+    let clock = Arc::new(FixedClock::new(Timestamp::utc(2026, 10, 26, 9, 0, 0).unwrap()));
     let app = TestApp::builder()
         .temp_database()
         .config("fleet.long_wait.mail", 60)

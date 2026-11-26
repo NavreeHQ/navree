@@ -16,8 +16,8 @@ pub struct User {
     pub password_hash: String,
     #[model(cast = "encrypted")]
     pub two_factor_secret: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 #[accessors]
@@ -64,7 +64,7 @@ pub struct ApiKey {
     pub id: Uuid,
     pub name: String,
     pub token_hash: String,
-    pub last_used_at: Option<DateTime<Utc>>,
+    pub last_used_at: Option<Timestamp>,
 }
 ```
 
@@ -95,9 +95,11 @@ user.without_appends();
 Every date-time serializes as RFC 3339 in UTC with microseconds, whatever the database returned, so responses don't change with the database. A field with a [`datetime_format` cast](/docs/orm/casts-and-accessors/#built-in-casts) keeps its own format. To format a model's dates another way, name a function:
 
 ```rust
+use navree::datetime::{Timestamp, Zoned};
+
 /// Dates as Unix seconds.
-fn unix_seconds(at: &DateTime<FixedOffset>) -> serde_json::Value {
-    serde_json::json!(at.timestamp())
+fn unix_seconds(at: &Zoned) -> serde_json::Value {
+    serde_json::json!(at.timestamp().as_secs())
 }
 
 #[derive(Model, Clone, Debug, Default, Serialize)]
@@ -105,8 +107,8 @@ fn unix_seconds(at: &DateTime<FixedOffset>) -> serde_json::Value {
 pub struct Event {
     pub id: Uuid,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 ```
 
