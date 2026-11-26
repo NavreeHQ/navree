@@ -6,12 +6,12 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use chrono::Utc;
 use futures_util::StreamExt;
 use http::Uri;
 use navree_access::{AbilityFactory, PrincipalAccess};
 use navree_auth::AuthService;
 use navree_contracts::{Clock, SystemClock};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_http::{AppError, UrlSigner};
 use navree_kernel::AppContext;
@@ -182,7 +182,13 @@ impl Core {
         signed: &str,
     ) -> Result<String, AppError> {
         let user = user_of(access)?;
-        let claim = read_context(&self.signer, &self.config.path, signed, user, Utc::now())?;
+        let claim = read_context(
+            &self.signer,
+            &self.config.path,
+            signed,
+            user,
+            Timestamp::now(),
+        )?;
         let Some(resolver) = self.config.contexts.get(&claim.kind) else {
             return Err(AppError::forbidden()
                 .with_detail("The page's context is not one the assistant reads."));
@@ -545,7 +551,7 @@ impl Core {
                 let (body, buttons) = view.into_parts();
                 let mut frame =
                     SurfaceFrame::new(key, title, body).labels(self.config.frame_labels.clone());
-                let now = Utc::now();
+                let now = Timestamp::now();
                 for button in &buttons {
                     let claim = ActionClaim {
                         conversation,
@@ -783,7 +789,7 @@ impl<A: Agent> Assistant<A> {
                 &self.core.config.path,
                 signed,
                 user,
-                Utc::now(),
+                Timestamp::now(),
             )?;
         }
         // The conversation is committed before its run starts, which reads and writes
@@ -1142,7 +1148,12 @@ impl<A: Agent> Assistant<A> {
         confirmed: bool,
     ) -> Result<(Uuid, Acted), AppError> {
         let user = user_of(&access)?;
-        let claim = read_action(&self.core.signer, &self.core.config.path, uri, Utc::now())?;
+        let claim = read_action(
+            &self.core.signer,
+            &self.core.config.path,
+            uri,
+            Timestamp::now(),
+        )?;
         if claim.user != user {
             return Err(AppError::forbidden().with_detail("This button is someone else's."));
         }
@@ -1224,7 +1235,7 @@ impl<A: Agent> Assistant<A> {
             user,
             kind,
             key,
-            Utc::now(),
+            Timestamp::now(),
         )
     }
 

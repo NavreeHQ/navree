@@ -17,7 +17,7 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::navree_schema::{
     Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
 };
@@ -127,7 +127,7 @@ navree_db::record! {
         pub(crate) state: Option<String>,
         /// Notes for the assistant's next run, as a JSON list.
         pub(crate) notes: Option<String>,
-        pub(crate) updated_at: DateTime<Utc>,
+        pub(crate) updated_at: Timestamp,
     }
 }
 
@@ -143,8 +143,8 @@ navree_db::record! {
         /// What the kind holds, as JSON.
         pub(crate) content: String,
         pub(crate) revision: i64,
-        pub(crate) created_at: DateTime<Utc>,
-        pub(crate) updated_at: DateTime<Utc>,
+        pub(crate) created_at: Timestamp,
+        pub(crate) updated_at: Timestamp,
     }
 }
 
@@ -155,7 +155,7 @@ navree_db::record! {
         pub(crate) nonce: String,
         pub(crate) item_id: Uuid,
         pub(crate) user_id: Uuid,
-        pub(crate) created_at: DateTime<Utc>,
+        pub(crate) created_at: Timestamp,
     }
 }
 
@@ -278,7 +278,7 @@ impl Store {
         let changed = uow
             .execute(&Statement::portable(
                 "UPDATE ai_runs SET revision = revision + 1, updated_at = ? WHERE conversation_id = ?",
-                [Value::from(Utc::now()), Value::from(conversation)],
+                [Value::from(Timestamp::now()), Value::from(conversation)],
             ))
             .await
             .map_err(db_error)?;
@@ -310,7 +310,7 @@ impl Store {
             cancel: 0,
             state: None,
             notes: None,
-            updated_at: Utc::now(),
+            updated_at: Timestamp::now(),
         };
         let uow = self.uow(user).await;
         match record::insert(&uow, &row).await {
@@ -366,7 +366,7 @@ impl Store {
             let _ = uow.rollback().await;
             return Err(no_conversation());
         }
-        let stale = Utc::now() - ChronoDuration::minutes(STALE_AFTER_MINUTES);
+        let stale = Timestamp::now() - Span::minutes(STALE_AFTER_MINUTES);
         if row.status == RUNNING && row.updated_at > stale && row.run_id.is_some() {
             // The bump moved `updated_at`; what decides is the time before it.
             let _ = uow.rollback().await;
@@ -446,7 +446,7 @@ impl Store {
         content: Json,
         revision: i64,
     ) -> Result<Uuid, AppError> {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let row = ItemRow {
             id: Uuid::now_v7(),
             conversation_id: conversation,
@@ -512,7 +512,7 @@ impl Store {
         )
         .set("status", status)
         .set("revision", revision)
-        .set("updated_at", Utc::now());
+        .set("updated_at", Timestamp::now());
         if let Some(content) = content {
             update = update.set("content", content.to_string());
         }
@@ -647,7 +647,7 @@ impl Store {
             nonce: nonce.to_owned(),
             item_id: item,
             user_id: user,
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
         };
         match record::insert(uow, &row).await {
             Ok(()) => Ok(()),

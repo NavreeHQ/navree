@@ -62,7 +62,7 @@ impl Agent for NotesAssistant {
         format!(
             "You keep notes for {}. Today is {}.",
             run.user().name,
-            run.now().date_naive()
+            run.now().date_time_utc().date()
         )
     }
 

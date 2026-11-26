@@ -39,7 +39,7 @@ pub struct FollowUpEmail {
     pub body: String,
     /// The day to send it, when the activity suggests one.
     #[validate(skip)]
-    pub send_on: Option<chrono::NaiveDate>,
+    pub send_on: Option<navree_datetime::Date>,
 }
 
 /// How a customer email reads.

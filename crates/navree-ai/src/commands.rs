@@ -1,6 +1,7 @@
 //! The `ai:prune` command.
 
-use chrono::Utc;
+use navree_contracts::Clock;
+use navree_datetime::Timestamp;
 use navree_kernel::{AppContext, BoxError, CommandSpec};
 
 use crate::{AiOptions, Conversations};
@@ -19,7 +20,11 @@ async fn prune(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     let options = ctx.get::<AiOptions>().await?;
     let days = parse_days(&args)?.unwrap_or(options.memory.retention_days);
     let conversations = ctx.get::<Conversations>().await?;
-    let deleted = conversations.prune(days, Utc::now()).await?;
+    let now = match ctx.try_get::<dyn Clock>().await {
+        Some(clock) => clock.now(),
+        None => Timestamp::now(),
+    };
+    let deleted = conversations.prune(days, now).await?;
     println!("Deleted {deleted} conversation(s) untouched for {days} day(s).");
     Ok(())
 }

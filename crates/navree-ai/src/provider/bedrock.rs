@@ -7,10 +7,10 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use chrono::Utc;
 use futures_util::StreamExt;
 use navree_contracts::Secret;
 use navree_crypto::sigv4::{self, Credentials, Signer};
+use navree_datetime::Timestamp;
 use navree_http_client::{HttpClient, RequestBuilder};
 use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
@@ -112,7 +112,7 @@ impl Bedrock {
             return Ok(credentials.clone());
         }
         self.role
-            .get(Utc::now())
+            .get(Timestamp::now())
             .await?
             .ok_or_else(|| ProviderError::Auth {
                 message: "no AWS credentials: set access_key_id and secret_access_key, \
@@ -151,7 +151,7 @@ impl Bedrock {
             &url,
             &[("content-type", "application/json")],
             &bytes,
-            Utc::now(),
+            Timestamp::now(),
         );
         let mut request = self
             .http
