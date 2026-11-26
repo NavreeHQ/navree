@@ -92,10 +92,9 @@ impl SharedKey {
         }
         let writes = matches!(request.method, Method::PUT | Method::POST | Method::PATCH);
         if (writes || !request.body.is_empty()) && !request.headers.contains_key(CONTENT_LENGTH) {
-            request.headers.insert(
-                CONTENT_LENGTH,
-                HeaderValue::from(request.body.len() as u64),
-            );
+            request
+                .headers
+                .insert(CONTENT_LENGTH, HeaderValue::from(request.body.len() as u64));
         }
         let header_value = self.authorization(&request);
         request.secret("authorization", &header_value)

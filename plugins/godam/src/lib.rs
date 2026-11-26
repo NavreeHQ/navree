@@ -1,5 +1,5 @@
 //! The `navree-plugin-godam` community plugin for Navree: registers the
-//! `godam` storage disk driver over `object_store`.
+//! `godam` storage disk driver over [`navree::storage::store::Store`].
 
 use navree::plugin::prelude::*;
 use navree::prelude::*;

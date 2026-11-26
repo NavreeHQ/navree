@@ -40,8 +40,6 @@ use chrono::{DateTime, Utc};
 use futures_util::stream::BoxStream;
 use navree_kernel::{BoxError, BoxFuture};
 
-#[cfg(feature = "__cloud")]
-pub(crate) mod cloud;
 mod local;
 mod memory;
 mod prefixed;

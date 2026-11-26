@@ -28,7 +28,7 @@ driver = "godam"
 prefix = "ludhiana/"
 ```
 
-`GodamDisk::new` wraps an in-memory `object_store` under `PrefixStore`; pass another `object_store` implementation to `GodamDisk::from_store` or `GodamDisk::with_store` to serve a disk from a remote store.
+`GodamDisk::new` wraps a `MemoryStore` under `PrefixedStore` (`navree::storage::store`); pass another `Store` implementation to `GodamDisk::from_store` or `GodamDisk::with_store` to serve a disk from a remote store.
 
 ## License
 

@@ -25,18 +25,14 @@ workspace = true
 
 [features]
 ## S3 and S3-compatible disks: AWS, MinIO, Cloudflare R2, DigitalOcean Spaces.
-s3 = ["object_store/aws-base", "__cloud"]
+s3 = ["__cloud"]
 ## Google Cloud Storage disks.
-gcs = ["object_store/gcp-base", "__cloud", "dep:base64", "dep:ring"]
+gcs = ["__cloud", "dep:base64", "dep:ring"]
 ## Azure Blob Storage disks.
-azure = ["object_store/azure-base", "__cloud", "dep:base64"]
-# Shared by the cloud drivers: HTTPS on reqwest with rustls and ring (never
-# object_store's `aws`, `gcp` or `azure` features, which turn on aws-lc), and
+azure = ["__cloud", "dep:base64"]
+# Shared by the cloud drivers: HTTPS on reqwest with rustls and ring, and
 # the core in `src/cloud`: the client, retries, keys, credentials and XML.
 __cloud = [
-    "dep:object_store",
-    "object_store/ring",
-    "object_store/reqwest",
     "dep:hyper",
     "dep:quick-xml",
     "dep:rand",
@@ -61,7 +57,6 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }
 mime_guess = { workspace = true }
-object_store = { workspace = true, optional = true }
 percent-encoding = { workspace = true }
 # The cloud core: the XML answers of S3 and Azure, and the jitter of a retry.
 quick-xml = { workspace = true, optional = true }

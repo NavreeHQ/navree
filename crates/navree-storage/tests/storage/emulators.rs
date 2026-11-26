@@ -24,6 +24,8 @@ mod gcs {
     use futures_util::TryStreamExt;
     use navree_storage::{Disk, GcsConfig, Storage, StorageError};
     use serde_json::json;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::support::{SIGNING_KEY, service_url, single_disk};
 
@@ -35,11 +37,12 @@ mod gcs {
         endpoint: String,
         name: String,
         prefix: String,
+        token_server: MockServer,
     }
 
     impl Bucket {
         /// `None` (after a notice) when `NAVREE_TEST_GCS_URL` is not set.
-        fn open(test: &str) -> Option<Bucket> {
+        async fn open(test: &str) -> Option<Bucket> {
             let url = service_url("NAVREE_TEST_GCS_URL", test)?;
             let url = reqwest::Url::parse(&url).expect("NAVREE_TEST_GCS_URL is a URL");
             let name = url.path().trim_matches('/').to_owned();
@@ -47,6 +50,16 @@ mod gcs {
                 !name.is_empty(),
                 "NAVREE_TEST_GCS_URL names the bucket in its path"
             );
+            let token_server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                    "access_token": "fake-gcs-emulator-token",
+                    "expires_in": 3600,
+                    "token_type": "Bearer",
+                })))
+                .mount(&token_server)
+                .await;
             Some(Bucket {
                 endpoint: format!(
                     "{}://{}:{}",
@@ -56,6 +69,7 @@ mod gcs {
                 ),
                 name,
                 prefix: format!("navree-test-{}", navree_crypto::random_token(12)),
+                token_server,
             })
         }
 
@@ -64,6 +78,7 @@ mod gcs {
                 "private_key": PRIVATE_KEY,
                 "private_key_id": "test-key",
                 "client_email": EMAIL,
+                "token_uri": format!("{}/token", self.token_server.uri()),
             });
             let config = GcsConfig {
                 service_account_key: Some(key.to_string().into()),
@@ -101,7 +116,8 @@ mod gcs {
 
     #[tokio::test]
     async fn the_driver_reads_and_counts_what_the_bucket_holds() {
-        let Some(bucket) = Bucket::open("the_driver_reads_and_counts_what_the_bucket_holds") else {
+        let Some(bucket) = Bucket::open("the_driver_reads_and_counts_what_the_bucket_holds").await
+        else {
             return;
         };
         let disk = bucket.disk();
@@ -143,7 +159,7 @@ mod gcs {
 
     #[tokio::test]
     async fn the_driver_lists_by_directory_and_under_its_prefix() {
-        let Some(bucket) = Bucket::open("the_driver_lists_by_directory_and_under_its_prefix")
+        let Some(bucket) = Bucket::open("the_driver_lists_by_directory_and_under_its_prefix").await
         else {
             return;
         };
@@ -160,12 +176,21 @@ mod gcs {
             bucket.seed(path, "x").await;
         }
         // Another prefix of the same bucket is not part of this disk.
-        let stranger = Bucket {
-            endpoint: bucket.endpoint.clone(),
-            name: bucket.name.clone(),
-            prefix: format!("{}-other", bucket.prefix),
-        };
-        stranger.seed("docs/c.txt", "x").await;
+        let other_prefix = format!("{}-other", bucket.prefix);
+        let other_name = format!("{other_prefix}/docs/c.txt");
+        let seed_url = reqwest::Url::parse_with_params(
+            &format!("{}/upload/storage/v1/b/{}/o", bucket.endpoint, bucket.name),
+            [("uploadType", "media"), ("name", other_name.as_str())],
+        )
+        .unwrap();
+        let reply = reqwest::Client::new()
+            .post(seed_url)
+            .header("content-type", "text/plain")
+            .body("x")
+            .send()
+            .await
+            .unwrap();
+        assert!(reply.status().is_success());
 
         assert_eq!(
             disk.list("docs").await.unwrap(),
@@ -202,7 +227,7 @@ mod gcs {
     #[tokio::test]
     async fn deleting_removes_the_file_and_a_missing_file_is_not_an_error() {
         let Some(bucket) =
-            Bucket::open("deleting_removes_the_file_and_a_missing_file_is_not_an_error")
+            Bucket::open("deleting_removes_the_file_and_a_missing_file_is_not_an_error").await
         else {
             return;
         };
@@ -219,7 +244,7 @@ mod gcs {
 
     #[tokio::test]
     async fn a_signed_download_link_reaches_the_object() {
-        let Some(bucket) = Bucket::open("a_signed_download_link_reaches_the_object") else {
+        let Some(bucket) = Bucket::open("a_signed_download_link_reaches_the_object").await else {
             return;
         };
         let disk = bucket.disk();
@@ -248,7 +273,8 @@ mod gcs {
 
     #[tokio::test]
     async fn a_signed_upload_link_puts_the_file_in_the_bucket() {
-        let Some(bucket) = Bucket::open("a_signed_upload_link_puts_the_file_in_the_bucket") else {
+        let Some(bucket) = Bucket::open("a_signed_upload_link_puts_the_file_in_the_bucket").await
+        else {
             return;
         };
         let disk = bucket.disk();

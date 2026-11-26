@@ -217,7 +217,7 @@ impl Module for SandukDiskModule {
 }
 ```
 
-For a complete storage plugin built on `object_store` and checked against the disk conformance suite (range clamping, folder boundaries, aborted uploads, and prefix checks), read `plugins/godam` in the repository:
+For a complete storage plugin built on `navree::storage::store::Store` (`MemoryStore` and `PrefixedStore`) and checked against the disk conformance suite (range clamping, folder boundaries, aborted uploads, fault-injecting store wrappers, and prefix checks), read `plugins/godam` in the repository:
 
 ```rust title="plugins/godam/src/lib.rs"
 // plugins/godam/src/lib.rs

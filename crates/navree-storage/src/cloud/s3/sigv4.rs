@@ -14,8 +14,8 @@
 
 use std::time::Duration;
 
-use ::http::header::{HeaderName, HeaderValue};
 use ::http::Method;
+use ::http::header::{HeaderName, HeaderValue};
 use chrono::{DateTime, Utc};
 use navree_crypto::sha256_hex;
 use navree_crypto::sigv4::{
@@ -84,7 +84,10 @@ pub fn sign_request(
     signed_pairs.push(("host", &host));
     for (name, value) in &request.headers {
         let key = name.as_str();
-        if matches!(key, "authorization" | "content-length" | "host" | "user-agent") {
+        if matches!(
+            key,
+            "authorization" | "content-length" | "host" | "user-agent"
+        ) {
             continue;
         }
         let text = value.to_str().map_err(|_| {

@@ -275,11 +275,7 @@ async fn a_presigned_get_matches_the_documented_example() {
     ));
     assert!(matches!(
         store
-            .signed_url(
-                "test.txt",
-                Method::GET,
-                Duration::from_secs(7 * 86_400 + 1)
-            )
+            .signed_url("test.txt", Method::GET, Duration::from_secs(7 * 86_400 + 1))
             .await,
         Err(StoreError::Failed(_))
     ));
@@ -413,7 +409,10 @@ async fn the_credential_chain_order_is_todays() {
             "AWS_WEB_IDENTITY_TOKEN_FILE",
             web_token_path.to_str().unwrap(),
         ),
-        ("AWS_ROLE_ARN", "arn:aws:iam::111122223333:role/agra-uploads"),
+        (
+            "AWS_ROLE_ARN",
+            "arn:aws:iam::111122223333:role/agra-uploads",
+        ),
         ("AWS_ROLE_SESSION_NAME", "jaipur-worker"),
         ("AWS_ENDPOINT_URL_STS", &sts.uri()),
         ("AWS_CONTAINER_CREDENTIALS_FULL_URI", &container_uri),
@@ -446,11 +445,13 @@ async fn the_credential_chain_order_is_todays() {
     vars.remove("AWS_SESSION_TOKEN");
     let hands = Hands::at(1_795_000_000);
     let clock = hands.clone();
-    let store =
-        S3Store::with_env_and_clock(&bare_cfg, &vars, move || clock.now()).unwrap();
+    let store = S3Store::with_env_and_clock(&bare_cfg, &vars, move || clock.now()).unwrap();
     assert_eq!(
         signed_identity(&store).await,
-        ("STSKEY_FIRST".to_owned(), Some("sts-token-value".to_owned()))
+        (
+            "STSKEY_FIRST".to_owned(),
+            Some("sts-token-value".to_owned())
+        )
     );
     // Rotate the file and step past the expiry so STS is called again.
     std::fs::write(&web_token_path, "eyJhbGciOiJSUzI1NiJ9.amritsar-v2\n").unwrap();
@@ -529,10 +530,11 @@ impl FakeImds {
                     .get("x-aws-ec2-metadata-token-ttl-seconds")
                     .and_then(|v| v.to_str().ok())
                     .map(str::to_owned);
-                recorded
-                    .lock()
-                    .unwrap()
-                    .push((method_str.clone(), path_str.clone(), token_hdr.clone()));
+                recorded.lock().unwrap().push((
+                    method_str.clone(),
+                    path_str.clone(),
+                    token_hdr.clone(),
+                ));
 
                 match (method_str.as_str(), path_str.as_str()) {
                     ("PUT", "/latest/api/token") => {
@@ -551,10 +553,7 @@ impl FakeImds {
                         }
                         (StatusCode::OK, "amritsar-app-role").into_response()
                     }
-                    (
-                        "GET",
-                        "/latest/meta-data/iam/security-credentials/amritsar-app-role",
-                    ) => {
+                    ("GET", "/latest/meta-data/iam/security-credentials/amritsar-app-role") => {
                         if token_status == StatusCode::OK
                             && token_hdr.as_deref() != Some("imdsv2-agra-token")
                         {
@@ -568,11 +567,7 @@ impl FakeImds {
                             "Expiration": "2099-01-01T00:00:00Z"
                         })
                         .to_string();
-                        (
-                            StatusCode::OK,
-                            [("content-type", "application/json")],
-                            body,
-                        )
+                        (StatusCode::OK, [("content-type", "application/json")], body)
                             .into_response()
                     }
                     _ => StatusCode::NOT_FOUND.into_response(),
@@ -600,12 +595,9 @@ async fn imdsv2_token_is_asked_before_credentials_and_v1_only_when_allowed() {
 
     // 1. IMDSv2 works: PUT /latest/api/token comes first, then both GETs carry the token.
     let v2 = FakeImds::start(StatusCode::OK).await;
-    let store = S3Store::with_env(
-        &cfg,
-        &env_map(&[("AWS_METADATA_ENDPOINT", &v2.endpoint)]),
-    )
-    .unwrap()
-    .with_retry_policy(quick_retry());
+    let store = S3Store::with_env(&cfg, &env_map(&[("AWS_METADATA_ENDPOINT", &v2.endpoint)]))
+        .unwrap()
+        .with_retry_policy(quick_retry());
     assert_eq!(
         signed_identity(&store).await,
         (
@@ -716,8 +708,7 @@ async fn an_expired_session_is_refreshed_between_parts() {
                 }
                 ("GET", "/latest/meta-data/iam/security-credentials/jaipur-uploader") => {
                     let n = imds_fetches.fetch_add(1, Ordering::SeqCst) + 1;
-                    let exp: DateTime<Utc> =
-                        (imds_hands.now() + Duration::from_secs(3600)).into();
+                    let exp: DateTime<Utc> = (imds_hands.now() + Duration::from_secs(3600)).into();
                     let body = json!({
                         "AccessKeyId": format!("ASIAJAIPUR{n}"),
                         "SecretAccessKey": format!("jaipur-secret-{n}"),
@@ -760,7 +751,9 @@ async fn an_expired_session_is_refreshed_between_parts() {
             let (parts, body) = req.into_parts();
             let raw_path = parts.uri.path().to_owned();
             let raw_query = parts.uri.query().unwrap_or("").to_owned();
-            let body = navree_http::body::to_bytes(body, 1024 * 1024).await.unwrap();
+            let body = navree_http::body::to_bytes(body, 1024 * 1024)
+                .await
+                .unwrap();
 
             // Verify SigV4 header signature for whichever session signed it.
             let auth = parts.headers["authorization"].to_str().unwrap();
@@ -787,9 +780,10 @@ async fn an_expired_session_is_refreshed_between_parts() {
                 .unwrap();
             let provided_sig = auth.rsplit_once("Signature=").unwrap().1;
             let host_str = format!("{s3_addr}");
-            let query_pairs: Vec<(String, String)> = url::form_urlencoded::parse(raw_query.as_bytes())
-                .map(|(k, v)| (k.into_owned(), v.into_owned()))
-                .collect();
+            let query_pairs: Vec<(String, String)> =
+                url::form_urlencoded::parse(raw_query.as_bytes())
+                    .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                    .collect();
             let header_pairs: Vec<(&str, &str)> = signed_list
                 .split(';')
                 .map(|name| {
@@ -804,9 +798,7 @@ async fn an_expired_session_is_refreshed_between_parts() {
             let canonical = sigv4::canonical_request(
                 parts.method.as_str(),
                 &raw_path,
-                &sigv4::canonical_query(
-                    query_pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())),
-                ),
+                &sigv4::canonical_query(query_pairs.iter().map(|(k, v)| (k.as_str(), v.as_str()))),
                 &header_pairs,
                 content_sha,
             );
