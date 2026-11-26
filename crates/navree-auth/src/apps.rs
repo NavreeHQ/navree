@@ -565,6 +565,7 @@ impl AppsOptions {
     /// have several, none is named, and each client comes back on the scheme
     /// it was built with (a client refuses a callback that is not on its own
     /// scheme, so naming one app's to another would keep it from signing in).
+    #[cfg(feature = "ui")]
     pub(crate) fn shell_callback(&self, platform: &str) -> Option<String> {
         match platform {
             "apple" => self.apple.values().find_map(|app| app.callback.clone()),
