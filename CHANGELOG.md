@@ -7,6 +7,39 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Upgrading
+
+- Every Navree crate now uses `navree::datetime` (`navree-datetime`) in place of `chrono`, and `chrono`, `humantime` and `object_store` are gone from the dependency tree. Nothing stored or sent on the wire changes: PostgreSQL binary values, MySQL `DATETIME` / `DATE` / `TIME`, SQLite text, BSON milliseconds and Extended JSON, serde JSON strings, GraphQL scalar names, OpenAPI schemas, cookies and signed URLs keep their exact 1.6.0 bytes. Run `navree upgrade` in your app's root (or `navree upgrade --check` first to preview) to rewrite imports, types, constructors and method calls in place (`chrono::DateTime<Utc>` -> `navree::datetime::Timestamp`, `NaiveDate` -> `Date`, `NaiveTime` -> `Time`, `NaiveDateTime` -> `DateTime`, `DateTime<FixedOffset>` and `DateTime<Tz>` -> `Zoned`, `TimeDelta` / `chrono::Duration` -> `Span`, `Utc::now()` -> `Timestamp::now()`, `NaiveDate::from_ymd_opt(y, m, d)` -> `Date::new(y, m, d).ok()`, `Utc.with_ymd_and_hms(..).unwrap()` -> `Timestamp::utc(..).unwrap()`, `.timestamp()` -> `.as_secs()`, `.timestamp_millis()` -> `.as_millis()`, `.num_seconds()` -> `.as_seconds()`), and remove `chrono` from your `Cargo.toml` if nothing else in your app uses it. Where `navree upgrade` leaves a `// navree upgrade:` comment (for example, choosing between `zoned.add_days(1)`, which keeps the wall clock across a daylight-saving change, and `zoned + Span::days(1)`, which adds 24 exact hours), pick the one you meant.
+- In `navree-orm`, the `Timestamp` model trait is renamed `HasTimestamps` (`use navree::orm::HasTimestamps;`), so `navree::datetime::Timestamp` never collides with it. `navree upgrade` rewrites the import and impls.
+- Cloud storage settings and sign-in ways for `s3`, `gcs` and `azure` disks are unchanged (`storage.disks.*` and every `AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS` and `AZURE_*` environment variable work as in 1.6.0). If you wrote a custom storage driver or fault wrapper of your own, implement `navree::storage::store::Store` (`Meta`, `Object`, `Upload`, `StoreError`, `MemoryStore`, `PrefixedStore`), as `plugins/godam` now does.
+- `rust_xlsxwriter` is updated to 0.104 (`XlsxError` is `#[non_exhaustive]`), and `navree-sheets` counts Excel's 31-unit sheet-name limit and 32,767-unit cell-text limit in UTF-16 code units rather than Unicode scalar values, so text with emoji or supplementary-plane characters never exceeds Excel's limit while splitting only on character boundaries.
+
+### Added
+
+- `navree-datetime`, re-exported unconditionally as `navree::datetime`: Navree's own date, time and time-zone foundation crate (`#![forbid(unsafe_code)]`, years -262,144 to 262,143), providing `Timestamp`, `Date`, `Time`, `DateTime`, `Offset`, `Zone`, `Zoned`, `Span`, `Weekday`, `Month`, `Disambiguation` (`Compatible`, `Earlier`, `Later`, `Reject`), `Precision` and `UseZ`. It carries the compiled IANA time-zone tables and standing rules moved down from `navree-time`, ISO `Display`, RFC 3339 and RFC 2822 formatting and parsing, chrono-compatible `strftime` formatting/parsing and compile-time `pattern::check`, leap-second `:60` input handling, serde serialization, and feature-gated glue for SQLx (`sqlx-postgres`, `sqlx-mysql`, `sqlx-sqlite`), `async-graphql` and `bson`, verified byte for byte against golden suites recorded from 1.6.0, with a new guide at `/docs/digging-deeper/dates-and-times/`.
+- `navree upgrade [--check] [PATH]` in `navree-cli`: a `syn` span-preserving codemod that moves an app's Rust files onto `navree::datetime` and `HasTimestamps` while keeping comments and formatting intact, flagging places that need a human choice between calendar and exact arithmetic.
+- Public storage driver traits and in-house cloud drivers in `navree-storage` (`navree::storage::store` and `cloud::{s3, gcs, azure}`), built on the workspace's `reqwest` (`rustls` + `ring`), `hmac`, `sha2`, `ring`, `quick-xml`, `base64` and `percent-encoding`:
+  - **S3 and S3-compatible stores** (`feature = "s3"`): Signature Version 4 header and presigned URL signing, static keys and session tokens, `AssumeRoleWithWebIdentity` (`AWS_WEB_IDENTITY_TOKEN_FILE` + `AWS_ROLE_ARN`), ECS/EKS container credentials, and IMDSv2 (with IMDSv1 only when `AWS_IMDSV1_FALLBACK` is set), multipart uploads with token refresh between parts, and `ListObjectsV2` continuation.
+  - **Google Cloud Storage** (`feature = "gcs"`): service-account JSON keys (RS256 JWT assertions signed with `ring`), `GOOGLE_APPLICATION_CREDENTIALS` (service account or authorized user), Compute Engine metadata server tokens, V4 signed URLs (local key or IAM `signBlob`), and resumable multipart uploads.
+  - **Azure Blob Storage** (`feature = "azure"`): Shared Key HMAC-SHA256 signing, Entra ID service principal (`AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET`), workload identity (`AZURE_FEDERATED_TOKEN_FILE`), IMDS and App Service managed identity, `Put Block` / `Put Block List` multipart uploads, and account-key or user-delegation SAS URLs.
+  - Shared conformance and signing vector suites across S3 (MinIO and RustFS), GCS (`fake-gcs-server`) and Azure (Azurite), with `plugins/godam` moved onto `navree::storage::store`.
+
+### Changed
+
+- `navree-contracts::Clock::now()` returns `navree_datetime::Timestamp`, and `FixedClock::advance` accepts both `Span` and `std::time::Duration`. Direct wall-clock reads across module services move onto injected `Clock` handles where available.
+- `navree-time` delegates its compiled IANA zone tables and transition rules to `navree-datetime` while keeping `TimeModule`, `CurrentZone`, `LocalDay`, `DayRange`, `SendWindow` and holiday calendars, and all five civil-calendar implementations across the workspace consolidate onto `navree_datetime::civil`.
+- Starter kit templates (`navree new` and `navree make:*`), `docs/` and all agent skills under `skills/` generate and teach `navree::datetime` directly, with no `chrono` dependency in newly generated apps.
+- `docs/prologue/versioning-and-support.mdx` and `SECURITY.md` record the 1.7.0 date/time migration and state the minor-release compatibility rule from 1.7.0 onwards.
+
+### Removed
+
+- `chrono` (`RUSTSEC-2026-0543`), `humantime` (`RUSTSEC-2026-0542`) and `object_store` are removed from both `Cargo.lock` and `fuzz/Cargo.lock`, banned in `deny.toml`, and their temporary advisory exceptions in `deny.toml`, `osv-scanner.toml` and `fuzz/osv-scanner.toml` are dropped.
+
+### Security
+
+- In `navree-storage`, cloud credential endpoints validate loopback and link-local hosts strictly (preventing SSRF or credential leakage over non-HTTPS endpoints unless explicitly opted in), cap XML and token error responses, redact credentials from every error and debug representation, reject path-climbing (`..`) and control-character object keys before signing, and refresh expiring temporary credentials between multipart upload parts.
+- In `navree-social`, `navree-oauth`, `navree-sso`, `navree-auth` and `navree-session`, external OAuth/OIDC `expires_in` values and CLI/ceremony spans use checked arithmetic, finite personal access tokens and database-stored TTLs clamp within 4-digit years (`<= 9999-12-31T23:59:59Z`) so SQLite `TEXT` comparisons and MySQL `DATETIME` columns preserve exact chronological order, SAML `xs:dateTime` timestamps require strict 4-digit UTC syntax, and SAML assertion and JWT-exchange anti-replay cache TTLs round up past subsecond truncation.
+
 ## [1.6.0] - 2026-11-26
 
 ### Upgrading

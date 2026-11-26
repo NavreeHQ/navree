@@ -17,11 +17,13 @@ Releases are numbered `major.minor.patch`.
 
 | Release | What it may contain | What you do |
 |---|---|---|
-| Patch (1.0.1) | Bug fixes and security fixes. Nothing new is added. | Take it. |
-| Minor (1.1.0) | New features, new optional features, deprecations, and a higher minimum Rust version (see below). Nothing that worked stops working. | Take it, and read the [release notes](/docs/prologue/release-notes/). |
+| Patch (1.7.1) | Bug fixes and security fixes. Nothing new is added. | Take it. |
+| Minor (1.8.0) | New features, new optional features, deprecations, and a higher minimum Rust version (see below). Public API stays compatible across minors from 1.7.0 onwards, except where a third-party crate named in a public signature becomes unmaintained or carries an unfixed security advisory with no compatible update. | Take it, and read the [release notes](/docs/prologue/release-notes/). |
 | Major (2.0.0) | Removals and changes that can break your code. | Follow the upgrade guide. |
 
-A change that can break an app that follows the public API waits for the next major release. A major release is announced at least three months ahead, and comes at most once a year.
+Across 1.0 to 1.7, two minors replaced third-party time crates in public signatures rather than carry unmaintained dependencies across 1.x: 1.4.0 replaced `chrono-tz` with `navree::time::Tz`, and 1.7.0 replaced `chrono` with [`navree::datetime`](/docs/digging-deeper/dates-and-times/) (with `navree upgrade` rewriting app imports, types and constructors). Stored database values, JSON payloads, GraphQL scalars, cookies and signed URLs did not change.
+
+From 1.7.0 onwards, a change that breaks an app following the public API waits for the next major release unless an unmaintained crate or an unfixed security advisory in a public signature forces an earlier replacement. A major release is announced at least three months ahead, and comes at most once a year.
 
 ## What counts as public API
 
@@ -46,7 +48,7 @@ Navree's error enums, and the other public enums that will gain variants, are ma
 
 ## Deprecation
 
-A feature is not removed without notice. Before a major release removes something, a minor release deprecates it and names its replacement:
+Outside a forced replacement of an unmaintained or insecure dependency (above), a feature is not removed without notice. Before a major release removes something, a minor release deprecates it and names its replacement:
 
 - **Rust items** get `#[deprecated(since = "1.4.0", note = "use X")]`, a line in the changelog and a note on the docs page. The compiler warns you where you use them.
 - **Configuration keys, routes and wire formats** log a warning at boot that names the replacement.

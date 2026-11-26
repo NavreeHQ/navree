@@ -213,6 +213,13 @@ jobs:
           tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2> /dev/null || true)"
           if [ -z "$tag" ]; then
             echo "::notice::no release tag yet: nothing to compare with"
+          elif [ "$tag" = "v1.6.0" ]; then
+            # 1.7.0 replaces chrono across the public API in one minor release
+            # (CHANGELOG.md and docs/prologue/versioning-and-support.mdx), so
+            # v1.6.0 is not a compatible baseline. Once v1.7.0 is tagged, every
+            # later commit compares against v1.7.0 and onwards again.
+            echo "::notice::no API comparison against $tag: 1.7.0 moves dates and times onto navree-datetime"
+            tag=""
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable

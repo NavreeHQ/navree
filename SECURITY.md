@@ -11,10 +11,14 @@ line is supported as a whole.
 | The previous major, after the next one ships | 6 months | 12 months |
 | Long-term support | none at launch | none at launch |
 
-To get a fix on the current major, upgrade to the latest minor: minors keep
-the public API, so an upgrade is safe. Fixes are published as a patch release.
-When a fix applies to more than one supported line, the patch releases for
-every line go out together, within the same hour. The
+To get a fix on the current major, upgrade to the latest minor. From 1.7.0
+onwards, minors keep the public API except where a third-party dependency named
+in a public signature becomes unmaintained or carries an unfixed advisory; when
+a minor asks for a code change, its Upgrading section in
+[`CHANGELOG.md`](CHANGELOG.md) and `navree upgrade` carry the move. Fixes are
+published as a patch release. When a fix applies to more than one supported
+line, the patch releases for every line go out together, within the same hour.
+The
 [versioning and support](https://navree.com/docs/prologue/versioning-and-support/)
 page has the details.
 
