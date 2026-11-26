@@ -4,7 +4,7 @@
 use std::fmt;
 use std::marker::PhantomData;
 
-use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Utc};
+use navree_datetime::{Date, Span, Time, Timestamp};
 use navree_orm::{ColumnName, Model};
 use serde::Serialize;
 
@@ -245,7 +245,7 @@ impl<M: Model> fmt::Debug for Metric<M> {
 }
 
 /// `[start, end)` of a period.
-pub(crate) type Period = (DateTime<Utc>, DateTime<Utc>);
+pub(crate) type Period = (Timestamp, Timestamp);
 
 /// The period of a value metric with [`Metric::over`]: `range=7`, `30`
 /// (the default), `90`, `month` or `year`.
@@ -311,16 +311,15 @@ impl MetricRange {
 
     /// `[start, end)` of the current period ending at `now`, and the period
     /// of the same length before it.
-    pub(crate) fn periods(self, now: DateTime<Utc>) -> (Period, Period) {
+    pub(crate) fn periods(self, now: Timestamp) -> (Period, Period) {
         let start = match self {
-            MetricRange::Days7 => now - Duration::days(7),
-            MetricRange::Days30 => now - Duration::days(30),
-            MetricRange::Days90 => now - Duration::days(90),
-            MetricRange::Month => midnight(
-                NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap_or(now.date_naive()),
-            ),
+            MetricRange::Days7 => now - Span::days(7),
+            MetricRange::Days30 => now - Span::days(30),
+            MetricRange::Days90 => now - Span::days(90),
+            MetricRange::Month => midnight(now.date_time_utc().date().first_of_month()),
             MetricRange::Year => {
-                midnight(NaiveDate::from_ymd_opt(now.year(), 1, 1).unwrap_or(now.date_naive()))
+                let date = now.date_time_utc().date();
+                midnight(Date::new(date.year(), 1, 1).unwrap_or(date))
             }
         };
         let length = now - start;
@@ -329,8 +328,8 @@ impl MetricRange {
 }
 
 /// Midnight UTC of `date`.
-pub(crate) fn midnight(date: NaiveDate) -> DateTime<Utc> {
-    Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap_or_default())
+pub(crate) fn midnight(date: Date) -> Timestamp {
+    date.at(Time::MIDNIGHT).in_utc()
 }
 
 /// The buckets of a trend ending at `today`: (label, first day, day after
@@ -338,34 +337,34 @@ pub(crate) fn midnight(date: NaiveDate) -> DateTime<Utc> {
 pub(crate) fn buckets(
     interval: Interval,
     count: u32,
-    today: NaiveDate,
-) -> Vec<(String, NaiveDate, NaiveDate)> {
+    today: Date,
+) -> Vec<(String, Date, Date)> {
     let mut out = Vec::new();
     match interval {
         Interval::Day => {
             for back in (0..count).rev() {
-                let day = today - Duration::days(i64::from(back));
-                out.push((
-                    day.format("%Y-%m-%d").to_string(),
-                    day,
-                    day + Duration::days(1),
-                ));
+                let Some(day) = today.add_days(-i64::from(back)) else {
+                    continue;
+                };
+                let next = day.add_days(1).unwrap_or(day);
+                out.push((day.format("%Y-%m-%d").to_string(), day, next));
             }
         }
         Interval::Week => {
-            let monday = today - Duration::days(i64::from(today.weekday().num_days_from_monday()));
+            let Some(monday) = today.add_days(-i64::from(today.weekday().days_from_monday())) else {
+                return out;
+            };
             for back in (0..count).rev() {
-                let start = monday - Duration::weeks(i64::from(back));
-                out.push((
-                    start.format("%Y-%m-%d").to_string(),
-                    start,
-                    start + Duration::weeks(1),
-                ));
+                let Some(start) = monday.add_days(-i64::from(back) * 7) else {
+                    continue;
+                };
+                let next = start.add_days(7).unwrap_or(start);
+                out.push((start.format("%Y-%m-%d").to_string(), start, next));
             }
         }
         Interval::Month => {
             let mut months = Vec::new();
-            let (mut year, mut month) = (today.year(), today.month());
+            let (mut year, mut month) = (today.year(), today.month_number());
             for _ in 0..count {
                 months.push((year, month));
                 if month == 1 {
@@ -376,13 +375,13 @@ pub(crate) fn buckets(
                 }
             }
             for (year, month) in months.into_iter().rev() {
-                let Some(start) = NaiveDate::from_ymd_opt(year, month, 1) else {
+                let Some(start) = Date::new(year, month, 1).ok() else {
                     continue;
                 };
                 let end = if month == 12 {
-                    NaiveDate::from_ymd_opt(year + 1, 1, 1)
+                    Date::new(year + 1, 1, 1).ok()
                 } else {
-                    NaiveDate::from_ymd_opt(year, month + 1, 1)
+                    Date::new(year, month + 1, 1).ok()
                 }
                 .unwrap_or(start);
                 out.push((start.format("%Y-%m").to_string(), start, end));
@@ -444,32 +443,32 @@ mod tests {
         assert_eq!(MetricRange::parse("7"), Some(MetricRange::Days7));
         assert_eq!(MetricRange::parse("mtd"), Some(MetricRange::Month));
         assert_eq!(MetricRange::parse("week"), None);
-        let now = Utc.with_ymd_and_hms(2026, 10, 26, 12, 0, 0).unwrap();
+        let now = Timestamp::utc(2026, 10, 26, 12, 0, 0).unwrap();
         let ((start, end), (previous_start, previous_end)) = MetricRange::Month.periods(now);
-        assert_eq!(start, Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap());
+        assert_eq!(start, Timestamp::utc(2026, 10, 1, 0, 0, 0).unwrap());
         assert_eq!(end, now);
         assert_eq!(previous_end, start);
         assert_eq!(previous_start, start - (now - start));
         let ((start, _), _) = MetricRange::Days7.periods(now);
-        assert_eq!(start, Utc.with_ymd_and_hms(2026, 10, 19, 12, 0, 0).unwrap());
+        assert_eq!(start, Timestamp::utc(2026, 10, 19, 12, 0, 0).unwrap());
     }
 
     #[test]
     fn trend_buckets_end_today() {
-        let today = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap(); // a Wednesday
+        let today = Date::new(2026, 10, 28).unwrap(); // a Wednesday
         let days = buckets(Interval::Day, 3, today);
         let labels: Vec<&str> = days.iter().map(|b| b.0.as_str()).collect();
         assert_eq!(labels, ["2026-10-26", "2026-10-27", "2026-10-28"]);
         let weeks = buckets(Interval::Week, 2, today);
-        assert_eq!(weeks[1].1, NaiveDate::from_ymd_opt(2026, 10, 26).unwrap());
-        assert_eq!(weeks[0].1, NaiveDate::from_ymd_opt(2026, 10, 19).unwrap());
+        assert_eq!(weeks[1].1, Date::new(2026, 10, 26).unwrap());
+        assert_eq!(weeks[0].1, Date::new(2026, 10, 19).unwrap());
         let months = buckets(
             Interval::Month,
             3,
-            NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
+            Date::new(2026, 1, 15).unwrap(),
         );
         let labels: Vec<&str> = months.iter().map(|b| b.0.as_str()).collect();
         assert_eq!(labels, ["2025-11", "2025-12", "2026-01"]);
-        assert_eq!(months[2].2, NaiveDate::from_ymd_opt(2026, 2, 1).unwrap());
+        assert_eq!(months[2].2, Date::new(2026, 2, 1).unwrap());
     }
 }

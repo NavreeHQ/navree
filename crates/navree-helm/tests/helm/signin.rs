@@ -237,7 +237,7 @@ async fn accounts_with_two_factor_enter_a_code_on_the_apps_page() {
         Totp::builder(Secret::from_base32(&setup.secret).unwrap())
             .build()
             .unwrap()
-            .generate(u64::try_from(clock.now().timestamp()).unwrap())
+            .generate(u64::try_from(clock.now().as_secs()).unwrap())
     };
     auth.confirm_two_factor(id, &code(&clock), &ClientMeta::default())
         .await

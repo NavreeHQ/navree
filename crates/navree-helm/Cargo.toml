@@ -40,7 +40,6 @@ test-postgres = ["navree-db/postgres"]
 test-mysql = ["navree-db/mysql"]
 
 [dependencies]
-chrono = { workspace = true }
 cookie = { workspace = true }
 form_urlencoded = { workspace = true }
 futures = { workspace = true }
@@ -53,6 +52,7 @@ navree-bounded = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }

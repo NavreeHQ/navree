@@ -3,7 +3,7 @@
 //! that are read-only, relationships beside each other on one foreign key,
 //! the account block without a letter tile, and a table that fits its box.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt};
 use navree_helm::{Field, ModuleBuilderHelmExt, Resource};
@@ -40,7 +40,7 @@ pub struct Contact {
     pub id: Uuid,
     pub company_id: Option<Uuid>,
     pub name: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 struct CreateContacts;

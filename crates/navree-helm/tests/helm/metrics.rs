@@ -1,6 +1,6 @@
 //! Metrics: values with ranges, trends, partitions, access and caching.
 
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_db::QueryLog;
 use navree_helm::{Field, Metric, ModuleBuilderHelmExt, Resource};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
@@ -12,7 +12,7 @@ use crate::support::*;
 
 /// Four deals around the app's clock (Monday 26 October 2026, noon UTC).
 async fn seed(app: &TestApp, owner: Uuid) {
-    let at = |m, d, h| Utc.with_ymd_and_hms(2026, m, d, h, 0, 0).unwrap();
+    let at = |m, d, h| Timestamp::utc(2026, m, d, h, 0, 0).unwrap();
     let gulati = company(app, "Gulati", None).await;
     let ilaichi = company(app, "Ilaichi", None).await;
     deal(
@@ -344,7 +344,7 @@ async fn a_trend_of_counts_reads_the_column_it_buckets_by_and_no_records() {
 #[tokio::test]
 async fn a_trend_is_grouped_by_the_database_in_one_statement() {
     let app = builder().module(GroupedTrendModule).build().await;
-    let at = |day: u32| Utc.with_ymd_and_hms(2026, 10, day, 6, 0, 0).unwrap();
+    let at = |day: u8| Timestamp::utc(2026, 10, day, 6, 0, 0).unwrap();
     for (day, cents) in [(26, 100), (26, 200), (25, 50), (20, 7), (1, 999)] {
         deal(
             &app,

@@ -434,10 +434,10 @@ fn wall_to_utc(text: &str, zone: navree_time::Zone) -> Option<String> {
     let text = text.trim();
     let wall = ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M"]
         .iter()
-        .find_map(|format| chrono::NaiveDateTime::parse_from_str(text, format).ok())?;
+        .find_map(|format| navree_datetime::DateTime::parse(format, text).ok())?;
     Some(
         zone.to_utc(wall)
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            .to_rfc3339_with(navree_datetime::Precision::Secs, true),
     )
 }
 

@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, SubsecRound, Utc};
+use navree_datetime::Timestamp;
 use navree_access::{WorkspaceEntry, WorkspaceGate};
 use navree_contracts::Clock;
 use navree_db::{ChangeEvent, ChangeOp, Uow};
@@ -25,10 +25,10 @@ use crate::workspace::{self, Admitted, Refused};
 use crate::{FormData, SaveContext};
 
 /// The time now, from the app's `dyn Clock` when it has one.
-pub(crate) async fn now(app: &AppContext) -> DateTime<Utc> {
+pub(crate) async fn now(app: &AppContext) -> Timestamp {
     match app.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
-        None => Utc::now(),
+        None => Timestamp::now(),
     }
 }
 
@@ -75,7 +75,7 @@ async fn apply<M: Model>(model: &mut M, form: &FormData, app: &AppContext) -> Re
 }
 
 /// Sets the date or date-time column `name` to `now` when `M` has it.
-fn touch<M: Model>(model: &mut M, name: &str, now: DateTime<Utc>) {
+fn touch<M: Model>(model: &mut M, name: &str, now: Timestamp) {
     let shape = values::shape::<M>(name);
     if values::column::<M>(name).is_some() && shape.is_temporal() {
         let _ = model.set_value(name, values::date_bound(shape, now));
@@ -191,7 +191,7 @@ pub(crate) async fn create<M: Model>(
 ) -> Result<Record<M>, AppError> {
     let mut model = blank::<M>().await?;
     apply(&mut model, &form, ctx.app()).await?;
-    let now = now(ctx.app()).await.trunc_subsecs(6);
+    let now = now(ctx.app()).await.trunc_micros();
     for column in ["created_at", "updated_at"] {
         if !form.contains(column) {
             touch(&mut model, column, now);
@@ -318,7 +318,7 @@ pub(crate) async fn update<M: Model>(
     let mut new = old.clone();
     apply(&mut new, &form, ctx.app()).await?;
     if !form.contains("updated_at") {
-        let now = now(ctx.app()).await.trunc_subsecs(6);
+        let now = now(ctx.app()).await.trunc_micros();
         touch(&mut new, "updated_at", now);
     }
     let mut sets = Vec::new();

@@ -38,16 +38,16 @@ pub(crate) fn in_zone(mut items: Vec<Item>, zone: navree_time::Zone) -> Vec<Item
             text,
             date_only: false,
         } = &mut cell.display
-            && let Ok(at) = chrono::DateTime::parse_from_rfc3339(iso)
+            && let Ok(at) = navree_datetime::Zoned::parse_rfc3339(iso)
         {
-            *text = zone_text(at.with_timezone(&chrono::Utc), zone);
+            *text = zone_text(at.timestamp(), zone);
         }
     }
     items
 }
 
 /// `at` on `zone`'s clock, with the zone's short name.
-pub(crate) fn zone_text(at: chrono::DateTime<chrono::Utc>, zone: navree_time::Zone) -> String {
+pub(crate) fn zone_text(at: navree_datetime::Timestamp, zone: navree_time::Zone) -> String {
     zone.local(at).format("%-d %b %Y %H:%M %Z").to_string()
 }
 
