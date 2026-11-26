@@ -24,7 +24,7 @@
 //! # Ok(()) }
 //! ```
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -67,6 +67,6 @@ navree_db::record! {
         /// Extra data (an object).
         pub metadata: Value,
         /// When the entry was recorded (UTC).
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
     }
 }

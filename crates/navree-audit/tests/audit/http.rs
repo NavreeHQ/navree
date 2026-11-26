@@ -4,9 +4,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeZone, Utc};
 use navree_audit::AuditModule;
 use navree_contracts::{AuditEntry, AuditKind, Clock, FixedClock};
+use navree_datetime::Timestamp;
 use navree_db::DatabaseModule;
 use navree_testing::{TestApp, principal};
 use serde_json::{Value, json};
@@ -18,7 +18,7 @@ use crate::support::{self, audit_log};
 /// `audit.read`.
 async fn seeded() -> (TestApp, Uuid, Uuid, Uuid) {
     let clock = Arc::new(FixedClock::new(
-        Utc.with_ymd_and_hms(2026, 10, 1, 9, 0, 0).unwrap(),
+        Timestamp::utc(2026, 10, 1, 9, 0, 0).unwrap(),
     ));
     let (builder, fixtures) = support::builder();
     let app = builder

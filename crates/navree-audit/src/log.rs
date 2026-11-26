@@ -4,8 +4,8 @@ use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
 
-use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{
     ChangeEvent, ChangeObserver, ChangeOp, Db, DbError, Executor, Page, PageQuery, Uow,
     prune_time_series, record,
@@ -247,7 +247,7 @@ impl AuditLog {
 
     /// Deletes entries older than `days` days; returns how many.
     pub async fn prune(&self, days: u32) -> Result<u64, DbError> {
-        let cutoff = self.clock.now() - TimeDelta::days(i64::from(days));
+        let cutoff = self.clock.now() - Span::days(i64::from(days));
         self.prune_before(cutoff).await
     }
 
@@ -255,7 +255,7 @@ impl AuditLog {
     /// TimescaleDB, where `audit_logs` is a hypertable, the weeks entirely
     /// before `cutoff` go as whole chunks (see [`prune_time_series`]),
     /// in a unit of work of its own.
-    pub async fn prune_before(&self, cutoff: DateTime<Utc>) -> Result<u64, DbError> {
+    pub async fn prune_before(&self, cutoff: Timestamp) -> Result<u64, DbError> {
         let uow = self.db.uow(None, None).await;
         match prune_time_series(&uow, AUDIT_TABLE, "created_at", cutoff).await {
             Ok(pruned) => {
