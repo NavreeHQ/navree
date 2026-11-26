@@ -41,7 +41,7 @@ const MAX_SECS: i64 = civil::days_from_civil(MAX_YEAR, 12, 31) * SECS_PER_DAY + 
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp {
     /// Whole seconds from the epoch, counted down before it: with `nanos`
     /// on top, a quarter of a second before the epoch is second -1 and

@@ -38,7 +38,7 @@ const MAX_DAYS: i64 = civil::days_from_civil(MAX_YEAR, 12, 31);
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Date {
     year: i32,
     /// 1 to 12.
