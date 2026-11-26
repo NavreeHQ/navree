@@ -24,8 +24,8 @@ struct Contact {
     id: i64,
     name: String,
     email: Option<String>,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
+    created_at: navree::datetime::Timestamp,
+    updated_at: navree::datetime::Timestamp,
 }
 
 #[tokio::test]

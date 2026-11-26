@@ -145,7 +145,7 @@ pub async fn onboarding(ctx: WorkflowCtx, input: Onboarding) -> Result<bool, Box
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TrialReminders {
     pub user_id: u64,
-    pub ends_at: chrono::DateTime<chrono::Utc>,
+    pub ends_at: navree::datetime::Timestamp,
 }
 
 /// Reminds a user three days before their trial ends, and on the day.
@@ -154,7 +154,7 @@ pub async fn trial_reminders(ctx: WorkflowCtx, input: TrialReminders) -> Result<
     let mail = ctx.app().get::<LearnerMail>().await?;
     let user_id = input.user_id;
     let started = ctx.now().await;
-    let three_days_before = input.ends_at - chrono::TimeDelta::days(3);
+    let three_days_before = input.ends_at - navree::datetime::Span::days(3);
     if started < three_days_before {
         ctx.sleep_until(three_days_before).await;
         let mail = mail.clone();
@@ -363,7 +363,7 @@ impl CrmAutomationsModule {
 // The test app
 // ---------------------------------------------------------------------------
 
-fn start() -> chrono::DateTime<chrono::Utc> {
+fn start() -> navree::datetime::Timestamp {
     "2026-10-26T08:00:00Z".parse().expect("a time")
 }
 
@@ -465,13 +465,16 @@ async fn trial_reminders_sleep_until_their_days() {
     let id = workflows
         .spawn(TrialReminders {
             user_id: 3,
-            ends_at: start() + chrono::TimeDelta::days(14),
+            ends_at: start() + navree::datetime::Span::days(14),
         })
         .await
         .unwrap();
     let run = workflows.run(id).await.unwrap();
     assert_eq!(run.status, RunStatus::Sleeping);
-    assert_eq!(run.wake_at, Some(start() + chrono::TimeDelta::days(11)));
+    assert_eq!(
+        run.wake_at,
+        Some(start() + navree::datetime::Span::days(11))
+    );
     assert_eq!(h.advance(11 * DAY).await, 1);
     assert_eq!(h.advance(3 * DAY).await, 1);
     assert_eq!(

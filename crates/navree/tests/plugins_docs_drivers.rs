@@ -12,7 +12,6 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use http::Method;
 use navree::ai::{
     Ai, AiCapabilities, AiDriver, AiDriverAnswer, AiDriverRequest, AiDriverStream, AiError,
@@ -21,6 +20,7 @@ use navree::ai::{
 use navree::cache::{Cache, CacheBackend, CacheModule, MemoryLockStore, MemoryStore};
 use navree::contracts::{Job, JobContext};
 use navree::crypto::generate_key;
+use navree::datetime::Timestamp;
 use navree::db::{DatabaseModule, Db, MigrationSet, PageQuery};
 use navree::http::body::Bytes;
 use navree::http::{Controller, Json, RouteDef};
@@ -254,7 +254,7 @@ impl QueueStore for SandukQueue {
                 options: job.options.clone(),
                 error: error.to_owned(),
                 attempts: job.attempts,
-                failed_at: DateTime::from_timestamp_millis(now).unwrap_or_default(),
+                failed_at: Timestamp::from_millis(now).unwrap_or_default(),
             });
             Ok(true)
         })
@@ -659,7 +659,7 @@ async fn mail_example_registers_and_delivers() {
 // 6. Storage (`storage.disks.invoices.driver = "sanduk"`)
 // ---------------------------------------------------------------------------
 
-type StoredFiles = Arc<Mutex<BTreeMap<String, (Bytes, DateTime<Utc>)>>>;
+type StoredFiles = Arc<Mutex<BTreeMap<String, (Bytes, Timestamp)>>>;
 
 #[derive(Default, Deserialize)]
 #[serde(default)]
@@ -673,10 +673,7 @@ pub struct SandukDisk {
 }
 
 impl SandukDisk {
-    fn get_entry(
-        &self,
-        path: &str,
-    ) -> std::result::Result<(Bytes, DateTime<Utc>), DiskDriverError> {
+    fn get_entry(&self, path: &str) -> std::result::Result<(Bytes, Timestamp), DiskDriverError> {
         self.files
             .lock()
             .unwrap()
@@ -710,7 +707,7 @@ impl DiskUpload for SandukUpload {
         files
             .lock()
             .unwrap()
-            .insert(path, (Bytes::from(buffer), Utc::now()));
+            .insert(path, (Bytes::from(buffer), Timestamp::now()));
         Box::pin(async { Ok(()) })
     }
 
@@ -732,7 +729,7 @@ impl DiskDriver for SandukDisk {
         self.files
             .lock()
             .unwrap()
-            .insert(path.to_owned(), (contents, Utc::now()));
+            .insert(path.to_owned(), (contents, Timestamp::now()));
         Box::pin(async { Ok(()) })
     }
 

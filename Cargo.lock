@@ -4087,7 +4087,6 @@ version = "1.6.0"
 dependencies = [
  "async-graphql",
  "base64 0.23.1",
- "chrono",
  "criterion",
  "http",
  "http-body-util",

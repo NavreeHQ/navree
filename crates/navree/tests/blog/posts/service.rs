@@ -1,6 +1,6 @@
 //! The business logic of the posts module.
 
-use chrono::Utc;
+use navree::datetime::Timestamp;
 use navree::mail::{Mailer, TemplateMail};
 use navree::orm::access::AccessibleQuery as _;
 use navree::prelude::*;
@@ -78,7 +78,7 @@ impl PostService {
         author_email: &str,
     ) -> Result<Record<Post>> {
         post.published = true;
-        post.published_at = Some(Utc::now());
+        post.published_at = Some(Timestamp::now());
         post.save(uow).await?;
         let mail = TemplateMail::new(author_email, "Your post is live", "mail/post_published")
             .context(json!({ "name": author_name, "title": post.title }));

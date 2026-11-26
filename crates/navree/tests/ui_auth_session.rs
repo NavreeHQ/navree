@@ -81,7 +81,7 @@ fn builder(clock: &Arc<FixedClock>) -> TestAppBuilder {
 }
 
 fn clock() -> Arc<FixedClock> {
-    Arc::new(FixedClock::new(chrono::Utc::now()))
+    Arc::new(FixedClock::new(navree::datetime::Timestamp::now()))
 }
 
 async fn get(client: &TestClient, path: &str) -> TestResponse {
@@ -177,7 +177,7 @@ fn totp(secret: &str, clock: &FixedClock) -> String {
     Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
         .build()
         .expect("a valid TOTP")
-        .generate(u64::try_from(clock.now().timestamp()).unwrap())
+        .generate(u64::try_from(clock.now().as_secs()).unwrap())
 }
 
 // One browser signs in with a second factor, switches

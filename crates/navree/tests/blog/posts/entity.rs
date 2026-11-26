@@ -1,6 +1,6 @@
 //! The `posts` table.
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
@@ -26,9 +26,9 @@ pub struct Post {
     /// Whether guests can read it.
     pub published: bool,
     /// When it was published.
-    pub published_at: Option<DateTime<Utc>>,
+    pub published_at: Option<Timestamp>,
     /// When it was written.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
