@@ -678,8 +678,8 @@ fn a_workbook_with_the_1904_date_system_is_read_as_it_was() {
 
 #[test]
 fn workbooks_the_crate_writes_are_tabulated_as_their_range_was() {
-    let date = chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap();
-    let at = date.and_hms_opt(13, 45, 10).unwrap();
+    let date = navree_datetime::Date::new(2026, 3, 1).unwrap();
+    let at = date.at(navree_datetime::Time::new(13, 45, 10).unwrap());
     let headers: Vec<String> = [
         "Name", "Age", "Ratio", "Joined", "Seen", "Active", "Note", "",
     ]
@@ -1859,7 +1859,7 @@ fn ods_text_is_its_paragraphs_and_spaces() {
             Cell::Text("a   b c".into()),
             Cell::Text("noted".into()),
             Cell::Text("the attribute".into()),
-            Cell::Date(chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap()),
+            Cell::Date(navree_datetime::Date::new(2026, 3, 1).unwrap()),
             Cell::Bool(true),
             Cell::Float(0.25),
             Cell::Text("covered".into()),
@@ -2015,18 +2015,25 @@ fn xlsb_errors_of_unknown_codes_are_text() {
 
 #[test]
 fn ods_dates_and_times_are_dates_and_times() {
-    let day = |y, m, d| chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap();
+    let day = |y, m, d| navree_datetime::Date::new(y, m, d).unwrap();
     let cases: [(&str, &str, Cell); 9] = [
         ("date", "2026-03-01", Cell::Date(day(2026, 3, 1))),
         (
             "date",
             "2026-03-01T13:45:10",
-            Cell::DateTime(day(2026, 3, 1).and_hms_opt(13, 45, 10).unwrap()),
+            Cell::DateTime(day(2026, 3, 1).at(navree_datetime::Time::new(13, 45, 10).unwrap())),
         ),
         (
             "date",
             "2026-03-01T13:45:10.250",
-            Cell::DateTime(day(2026, 3, 1).and_hms_milli_opt(13, 45, 10, 250).unwrap()),
+            Cell::DateTime(
+                day(2026, 3, 1).at(
+                    navree_datetime::Time::new(13, 45, 10)
+                        .unwrap()
+                        .with_nanos(250_000_000)
+                        .unwrap(),
+                ),
+            ),
         ),
         ("date", "2026-03-01T00:00:00", Cell::Date(day(2026, 3, 1))),
         ("date", "not a date", Cell::Text("not a date".into())),
@@ -2034,17 +2041,24 @@ fn ods_dates_and_times_are_dates_and_times() {
         (
             "time",
             "PT06H30M00S",
-            Cell::DateTime(day(1899, 12, 31).and_hms_opt(6, 30, 0).unwrap()),
+            Cell::DateTime(day(1899, 12, 31).at(navree_datetime::Time::new(6, 30, 0).unwrap())),
         ),
         (
             "time",
             "PT30H15M00S",
-            Cell::DateTime(day(1900, 1, 1).and_hms_opt(6, 15, 0).unwrap()),
+            Cell::DateTime(day(1900, 1, 1).at(navree_datetime::Time::new(6, 15, 0).unwrap())),
         ),
         (
             "time",
             "PT00H00M01.5S",
-            Cell::DateTime(day(1899, 12, 31).and_hms_milli_opt(0, 0, 1, 500).unwrap()),
+            Cell::DateTime(
+                day(1899, 12, 31).at(
+                    navree_datetime::Time::new(0, 0, 1)
+                        .unwrap()
+                        .with_nanos(500_000_000)
+                        .unwrap(),
+                ),
+            ),
         ),
         ("time", "P1Y", Cell::Text("P1Y".into())),
     ];

@@ -6019,7 +6019,6 @@ version = "1.6.0"
 dependencies = [
  "bytes",
  "chardetng",
- "chrono",
  "csv",
  "encoding_rs",
  "futures-util",
@@ -6028,6 +6027,7 @@ dependencies = [
  "navree-access",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-i18n",

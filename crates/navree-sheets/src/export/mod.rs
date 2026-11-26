@@ -12,7 +12,7 @@ pub(crate) mod service;
 use std::fmt;
 use std::future::Future;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::BoxError;
 use navree_kernel::AppContext;
 use navree_openapi::ToSchema;
@@ -200,7 +200,7 @@ pub struct ExportResult {
     /// The file's size in bytes.
     pub bytes: u64,
     /// When the link stops working.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     /// The disk the file is on.
     pub disk: String,
     /// Its path on the disk (to attach it to a mail, or copy it).

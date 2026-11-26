@@ -4,7 +4,7 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::Clock;
 use navree_kernel::AppContext;
 use navree_storage::{Disk, Storage};
@@ -12,10 +12,10 @@ use navree_storage::{Disk, Storage};
 use crate::{HeaderTranslator, SheetsError};
 
 /// The time, from the app's `dyn Clock` when it has one (tests fix it).
-pub(crate) async fn now(app: &AppContext) -> DateTime<Utc> {
+pub(crate) async fn now(app: &AppContext) -> Timestamp {
     match app.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
-        None => Utc::now(),
+        None => Timestamp::now(),
     }
 }
 
@@ -94,9 +94,9 @@ pub(crate) async fn disk(app: &AppContext, name: &str) -> Result<Disk, SheetsErr
 
 /// `secs` seconds as a duration, at most a hundred years (larger configured
 /// values would overflow date arithmetic).
-pub(crate) fn seconds(secs: u64) -> chrono::Duration {
+pub(crate) fn seconds(secs: u64) -> navree_datetime::Span {
     const CENTURY: u64 = 100 * 365 * 86_400;
-    chrono::Duration::seconds(i64::try_from(secs.min(CENTURY)).unwrap_or(0))
+    navree_datetime::Span::seconds(i64::try_from(secs.min(CENTURY)).unwrap_or(0))
 }
 
 /// `n` as an `i64` column value (saturating).

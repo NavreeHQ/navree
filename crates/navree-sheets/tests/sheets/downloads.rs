@@ -1,6 +1,6 @@
 //! Downloads of rows a handler has: `Download` and `Exports`, CSV and XLSX.
 
-use chrono::NaiveDate;
+use navree_datetime::Date;
 use futures_util::stream;
 use navree_http::response::IntoResponse;
 use navree_kernel::{Module, ModuleBuilder};
@@ -19,7 +19,7 @@ struct DealRow {
     title: String,
     #[export(header = "Amount", format = "#,##0.00")]
     amount: f64,
-    closed_on: Option<NaiveDate>,
+    closed_on: Option<Date>,
     won: bool,
     #[export(skip)]
     #[allow(dead_code)]
@@ -31,7 +31,7 @@ fn deals() -> Vec<DealRow> {
         DealRow {
             title: "=HYPERLINK(\"http://evil\")".into(),
             amount: 1200.5,
-            closed_on: NaiveDate::from_ymd_opt(2026, 10, 1),
+            closed_on: Date::new(2026, 10, 1).ok(),
             won: true,
             internal: "x".into(),
         },
@@ -101,7 +101,7 @@ async fn an_xlsx_download_has_typed_cells_and_the_sheet_name() {
     assert_eq!(rows[1][1], Data::Float(1200.5));
     match &rows[1][2] {
         Data::DateTime(at) => {
-            assert_eq!(at.date(), NaiveDate::from_ymd_opt(2026, 10, 1).unwrap());
+            assert_eq!(at.date(), Date::new(2026, 10, 1).unwrap());
         }
         other => panic!("a date cell, not {other:?}"),
     }
@@ -116,8 +116,9 @@ async fn large_downloads_keep_every_row() {
         (0u32..50_000).map(|n| DealRow {
             title: format!("صفقة {n}"),
             amount: f64::from(n) / 4.0,
-            closed_on: NaiveDate::from_ymd_opt(2026, 1, 1)
-                .map(|day| day + chrono::Days::new(u64::from(n % 365))),
+            closed_on: Date::new(2026, 1, 1)
+                .ok()
+                .and_then(|day| day.add_days(i64::from(n % 365))),
             won: n % 3 == 0,
             internal: String::new(),
         })

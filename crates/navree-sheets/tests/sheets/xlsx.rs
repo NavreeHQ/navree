@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Cursor, Read};
 
-use chrono::{NaiveDate, NaiveDateTime, TimeDelta};
+use navree_datetime::{Date, DateTime, Span, Time};
 use quick_xml::events::Event;
 
 /// A cell as it was written.
@@ -15,7 +15,7 @@ pub enum Data {
     Float(f64),
     Bool(bool),
     /// A number with a date format.
-    DateTime(NaiveDateTime),
+    DateTime(DateTime),
 }
 
 fn part(zip: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Option<String> {
@@ -146,12 +146,9 @@ pub fn read_xlsx(bytes: &[u8]) -> (Vec<String>, Vec<Vec<Data>>) {
                     _ => {
                         let n: f64 = text.parse().unwrap();
                         if dates.get(style).copied().unwrap_or(false) {
-                            let epoch = NaiveDate::from_ymd_opt(1899, 12, 30)
-                                .unwrap()
-                                .and_hms_opt(0, 0, 0)
-                                .unwrap();
+                            let epoch = Date::new(1899, 12, 30).unwrap().at(Time::new(0, 0, 0).unwrap());
                             let ms = (n * 86_400_000.0).round() as i64;
-                            Data::DateTime(epoch + TimeDelta::milliseconds(ms))
+                            Data::DateTime(epoch.add(Span::millis(ms)).unwrap())
                         } else {
                             Data::Float(n)
                         }

@@ -2,7 +2,7 @@
 //! number formats show a number as a date, a time or a duration, and the
 //! date or time a number stands for.
 
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Timelike};
+use navree_datetime::{Date, DateTime, Span, Time};
 
 use crate::Cell;
 
@@ -98,13 +98,13 @@ pub(crate) fn excel_date(serial: f64, is_1904: bool) -> Cell {
     };
     // A cast saturates, as the milliseconds of a date in range never do.
     let milliseconds = (days * 86_400_000.0).round() as i64;
-    let at = NaiveDate::from_ymd_opt(1899, 12, 30)
-        .map(|day| day.and_time(NaiveTime::MIN))
-        .zip(TimeDelta::try_milliseconds(milliseconds))
-        .and_then(|(epoch, since)| epoch.checked_add_signed(since))
+    let at = Date::new(1899, 12, 30).ok()
+        .map(|day| day.at(Time::MIDNIGHT))
+        .zip(Span::try_millis(milliseconds))
+        .and_then(|(epoch, since)| epoch.add(since))
         .filter(|at| at.date().year() <= LAST_YEAR);
     match at {
-        Some(at) if at.time() == NaiveTime::MIN => Cell::Date(at.date()),
+        Some(at) if at.time() == Time::MIDNIGHT => Cell::Date(at.date()),
         Some(at) => Cell::DateTime(at),
         None => Cell::Float(serial),
     }
@@ -112,16 +112,15 @@ pub(crate) fn excel_date(serial: f64, is_1904: bool) -> Cell {
 
 /// `at` to the nearest millisecond (a half rounds up), as [`excel_date`] gives
 /// a time.
-fn to_millisecond(at: NaiveDateTime) -> NaiveDateTime {
-    let beyond = i64::from(at.nanosecond() % 1_000_000);
-    let Some(down) = at.checked_sub_signed(TimeDelta::nanoseconds(beyond)) else {
+fn to_millisecond(at: DateTime) -> DateTime {
+    let beyond = i64::from(at.time().nanosecond() % 1_000_000);
+    let Some(down) = at.add(Span::nanos(-beyond)) else {
         return at;
     };
     if beyond < 500_000 {
         return down;
     }
-    down.checked_add_signed(TimeDelta::milliseconds(1))
-        .unwrap_or(down)
+    down.add(Span::millis(1)).unwrap_or(down)
 }
 
 /// The date or date and time a file writes in ISO 8601 (`2026-03-01`,
@@ -130,12 +129,12 @@ fn to_millisecond(at: NaiveDateTime) -> NaiveDateTime {
 /// [`Cell::Date`]. None for text of another form.
 pub(crate) fn iso_date(text: &str) -> Option<Cell> {
     let text = text.strip_suffix('Z').unwrap_or(text);
-    if let Ok(day) = NaiveDate::parse_from_str(text, "%Y-%m-%d") {
+    if let Ok(day) = Date::parse("%Y-%m-%d", text) {
         return Some(Cell::Date(day));
     }
-    let at = NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f").ok()?;
+    let at = DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", text).ok()?;
     let at = to_millisecond(at);
-    Some(if at.time() == NaiveTime::MIN {
+    Some(if at.time() == Time::MIDNIGHT {
         Cell::Date(at.date())
     } else {
         Cell::DateTime(at)
@@ -147,8 +146,10 @@ pub(crate) fn iso_date(text: &str) -> Option<Cell> {
 /// system. None for text of another form.
 pub(crate) fn iso_time(text: &str, is_1904: bool) -> Option<Cell> {
     let text = text.strip_suffix('Z').unwrap_or(text);
-    let time = NaiveTime::parse_from_str(text, "%H:%M:%S%.f").ok()?;
-    let seconds = time.signed_duration_since(NaiveTime::MIN).as_seconds_f64();
+    let time = Time::parse("%H:%M:%S%.f", text).ok()?;
+    let whole =
+        u32::from(time.hour()) * 3_600 + u32::from(time.minute()) * 60 + u32::from(time.second());
+    let seconds = f64::from(whole) + f64::from(time.nanosecond()) / 1_000_000_000.0;
     Some(excel_date(seconds / 86_400.0, is_1904))
 }
 
@@ -220,14 +221,14 @@ pub(crate) fn iso_duration(text: &str, is_1904: bool) -> Option<Cell> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveDateTime;
+    use navree_datetime::{Date, DateTime, Time};
 
     use super::*;
 
     /// [`excel_date`] as a date and time.
-    fn at(cell: Cell) -> Option<NaiveDateTime> {
+    fn at(cell: Cell) -> Option<DateTime> {
         match cell {
-            Cell::Date(day) => Some(day.and_time(NaiveTime::MIN)),
+            Cell::Date(day) => Some(day.at(Time::MIDNIGHT)),
             Cell::DateTime(at) => Some(at),
             _ => None,
         }
@@ -301,8 +302,8 @@ mod tests {
         assert!(!builtin_id_shows_date("9"));
     }
 
-    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    fn day(y: i32, m: u8, d: u8) -> Date {
+        Date::new(y, m, d).unwrap()
     }
 
     #[test]
@@ -310,7 +311,7 @@ mod tests {
         assert_eq!(excel_date(46082.0, false), Cell::Date(day(2026, 3, 1)));
         assert_eq!(
             excel_date(46082.75, false),
-            Cell::DateTime(day(2026, 3, 1).and_hms_opt(18, 0, 0).unwrap())
+            Cell::DateTime(day(2026, 3, 1).at(Time::new(18, 0, 0).unwrap()))
         );
         assert_eq!(excel_date(1000.0, true), Cell::Date(day(1906, 9, 27)));
         assert_eq!(excel_date(1000.0, false), Cell::Date(day(1902, 9, 26)));
@@ -322,12 +323,15 @@ mod tests {
         // A time alone is a time on the first day.
         assert_eq!(
             at(excel_date(0.25, false)),
-            day(1899, 12, 31).and_hms_opt(6, 0, 0)
+            Some(day(1899, 12, 31).at(Time::new(6, 0, 0).unwrap()))
         );
         // To the millisecond.
         assert_eq!(
             at(excel_date(45943.541, false)),
-            day(2025, 10, 13).and_hms_milli_opt(12, 59, 2, 400)
+            Some(
+                day(2025, 10, 13)
+                    .at(Time::new(12, 59, 2).unwrap().with_nanos(400_000_000).unwrap())
+            )
         );
         // Out of range, the number stays.
         assert_eq!(excel_date(1e300, false), Cell::Float(1e300));

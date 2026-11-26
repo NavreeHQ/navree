@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{DbError, Executor, Row, Statement, Value as SqlValue};
 use serde_json::Value;
 use uuid::Uuid;
@@ -49,12 +49,12 @@ pub(crate) struct StoredRow {
     pub(crate) errors: BTreeMap<String, Vec<String>>,
 }
 
-pub(crate) fn millis(at: DateTime<Utc>) -> i64 {
-    at.timestamp_millis()
+pub(crate) fn millis(at: Timestamp) -> i64 {
+    at.as_millis()
 }
 
-pub(crate) fn from_millis(ms: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp_millis(ms).unwrap_or_default()
+pub(crate) fn from_millis(ms: i64) -> Timestamp {
+    Timestamp::from_millis(ms).ok().unwrap_or_default()
 }
 
 fn json<T: serde::Serialize>(value: &T) -> String {
@@ -213,7 +213,7 @@ pub(crate) async fn imports_of<E: Executor + ?Sized>(
 /// Imports not changed since `before` and not being applied.
 pub(crate) async fn stale_imports<E: Executor + ?Sized>(
     exec: &E,
-    before: DateTime<Utc>,
+    before: Timestamp,
 ) -> Result<Vec<ImportRecord>, DbError> {
     let sql = format!(
         "SELECT {COLUMNS} FROM {IMPORTS_TABLE} WHERE updated_at < ? AND status <> ? \
@@ -527,7 +527,7 @@ pub(crate) async fn save_mapping<E: Executor + ?Sized>(
     workspace: Option<Uuid>,
     fingerprint: &str,
     mapping: &Mapping,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<(), DbError> {
     let (filter, values) = workspace_filter(workspace);
     let sql = format!(

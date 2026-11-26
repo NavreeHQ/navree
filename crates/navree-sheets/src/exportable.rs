@@ -52,7 +52,6 @@ impl Column {
 /// Derive it with `#[derive(Exportable)]`:
 ///
 /// ```
-/// use chrono::{DateTime, Utc};
 /// use navree_sheets::{Cell, Exportable};
 ///
 /// #[derive(Exportable)]

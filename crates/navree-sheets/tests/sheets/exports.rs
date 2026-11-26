@@ -373,7 +373,7 @@ async fn exports_run_from_code() {
 
 #[tokio::test]
 async fn prune_deletes_export_files_whose_link_expired() {
-    let clock = Arc::new(FixedClock::new(chrono::Utc::now()));
+    let clock = Arc::new(FixedClock::new(navree_datetime::Timestamp::now()));
     let app = seeded(|b| {
         b.config("sheets.exports.link_ttl_secs", 60)
             .override_value::<dyn Clock>(clock.clone())
