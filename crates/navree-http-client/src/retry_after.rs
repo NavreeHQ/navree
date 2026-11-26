@@ -3,7 +3,7 @@
 
 use std::time::{Duration, SystemTime};
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use navree_datetime::{DateTime, Timestamp};
 
 /// The wait a `Retry-After` value asks for: a number of seconds, or an HTTP
 /// date (a date in the past asks for no wait). `None` when the value is
@@ -16,27 +16,25 @@ pub(crate) fn parse_retry_after(value: &str, now: SystemTime) -> Option<Duration
         return Some(Duration::from_secs(secs));
     }
     let date = http_date(value)?;
-    Some(date.duration_since(now).unwrap_or(Duration::ZERO))
+    Some((date - Timestamp::from(now)).to_std().unwrap_or(Duration::ZERO))
 }
 
 /// An HTTP date: the preferred IMF-fixdate (`Sun, 06 Nov 1994 08:49:37
 /// GMT`), and the obsolete RFC 850 (`Sunday, 06-Nov-94 08:49:37 GMT`) and
 /// asctime (`Sun Nov  6 08:49:37 1994`) forms recipients must accept.
-fn http_date(value: &str) -> Option<SystemTime> {
-    let parsed: DateTime<Utc> = DateTime::parse_from_rfc2822(value)
-        .map(|date| date.with_timezone(&Utc))
+fn http_date(value: &str) -> Option<Timestamp> {
+    Timestamp::parse_rfc2822(value)
         .ok()
         .or_else(|| {
-            NaiveDateTime::parse_from_str(value, "%A, %d-%b-%y %H:%M:%S GMT")
+            DateTime::parse("%A, %d-%b-%y %H:%M:%S GMT", value)
                 .ok()
-                .map(|date| date.and_utc())
+                .map(DateTime::in_utc)
         })
         .or_else(|| {
-            NaiveDateTime::parse_from_str(value, "%a %b %e %H:%M:%S %Y")
+            DateTime::parse("%a %b %e %H:%M:%S %Y", value)
                 .ok()
-                .map(|date| date.and_utc())
-        })?;
-    Some(SystemTime::from(parsed))
+                .map(DateTime::in_utc)
+        })
 }
 
 #[cfg(test)]

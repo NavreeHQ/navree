@@ -4996,12 +4996,12 @@ name = "navree-http-client"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "futures-util",
  "http",
  "ipnet",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-glob",
  "navree-kernel",
  "navree-telemetry",
