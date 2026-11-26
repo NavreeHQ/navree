@@ -28,6 +28,7 @@ static BUCKET_READY: OnceCell<()> = OnceCell::const_new();
 /// Ensures `bucket` exists on `fake-gcs-server` (`200 OK` created, `409`
 /// already exists).
 async fn ensure_bucket(endpoint: &str, bucket: &str) {
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let url = format!("{endpoint}/storage/v1/b?project=navree-test");
     let reply = reqwest::Client::new()
         .post(&url)

@@ -1,7 +1,7 @@
 //! S3 multipart uploads (`CreateMultipartUpload`, `UploadPart`,
 //! `CompleteMultipartUpload`, `AbortMultipartUpload`).
 //!
-//! Every part attempt asks the store's credential [`Provider`] afresh inside
+//! Every part attempt asks the store's credential `Provider` afresh inside
 //! [`with_backoff`], so an upload that outlives a temporary STS, container
 //! or IMDS session refreshes its token on the next part and finishes.
 

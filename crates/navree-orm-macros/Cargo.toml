@@ -25,7 +25,7 @@ workspace = true
 # behaviour and the compile-fail cases under tests/ui).
 [dependencies]
 # Checks `datetime_format` casts' patterns when the model compiles.
-navree-datetime = { workspace = true, default-features = false }
+navree-datetime = { workspace = true }
 heck = { workspace = true }
 proc-macro-crate = { workspace = true }
 proc-macro2 = { workspace = true }

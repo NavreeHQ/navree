@@ -248,6 +248,19 @@ regexes = [
 
 [[allowlists]]
 description = """
+Sample values in `crates/navree-storage/tests/s3_signing.rs`: two two-part
+web-identity tokens written to a temporary file for the STS rotation test, and
+a twenty-character `AKIA...` access-key identifier that the redaction test
+checks never reaches errors, `Debug` output or logs. None is issued by any
+system."""
+targetRules = ["aws-access-token", "generic-api-key"]
+regexes = [
+  '''eyJhbGciOiJSUzI1NiJ9\.amritsar-v[12]''',
+  '''AKIAAMRITSARSECRETID''',
+]
+
+[[allowlists]]
+description = """
 The scanners' own output: the reports that scripts/sast.sh writes to
 sast-reports/ (git-ignored) hold commit hashes and redacted findings, and the
 working-tree scan would otherwise read the history report back in."""
