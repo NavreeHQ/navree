@@ -6,6 +6,7 @@ schema builder and migrations on collections, with time-series collections
 as the time-series engine.
 
 ```rust
+use navree::datetime::Timestamp;
 use navree::mongo::{MongoDb, ObjectId};
 use navree::orm::Model;
 
@@ -18,9 +19,9 @@ pub struct Deal {
     pub amount: i64,
     #[model(cast = "json")]
     pub tags: Vec<String>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-    pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 async fn biggest(mongo: &MongoDb) -> navree::orm::Result<Vec<String>> {
@@ -35,8 +36,9 @@ async fn biggest(mongo: &MongoDb) -> navree::orm::Result<Vec<String>> {
 
 ## 1. Place in the framework
 
-A runtime crate at **layer 5**. It depends on navree-kernel, -contracts,
--config, -telemetry, -schema, -db and -orm (the HIERARCHY row in
+A runtime crate at **layer 5**. It depends on navree-datetime (with its
+`bson` feature), navree-kernel, -contracts, -config, -telemetry, -schema,
+-db and -orm (the HIERARCHY row in
 `crates/navree/tests/dependency_graph.rs`), and on `mongodb` (rustls with
 ring, DNS seed lists) and `bson`. The facade re-exports it as
 `navree::mongo` behind the opt-in features `mongo` and `mongodb`; the

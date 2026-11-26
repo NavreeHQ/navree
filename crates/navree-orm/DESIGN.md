@@ -43,8 +43,8 @@ Principles:
 | `navree-mongo` | L5 | MongoDB: `MongoModule`, `MongoDriver: DocumentDriver`, sessions and units of work, the schema builder and migrations on collections (its own `DESIGN.md`) |
 | `navree-schema` | L2 | Migrations and the schema builder (its own `DESIGN.md`; the ORM does not depend on it) |
 
-`navree-orm` depends on navree-kernel, navree-contracts, navree-http,
-navree-db and navree-orm-macros. Its HIERARCHY row
+`navree-orm` depends on navree-datetime, navree-kernel, navree-contracts,
+navree-http, navree-db and navree-orm-macros. Its HIERARCHY row
 (`crates/navree/tests/dependency_graph.rs`) also allows navree-config,
 navree-telemetry, navree-events, navree-crypto and navree-api, for the
 lifecycle and the attribute layer. The attribute layer uses navree-crypto
@@ -93,7 +93,7 @@ src/
   value.rs          Value and Kind (navree-db's), Field, FieldError, ValueFor, Numeric, to_json, same_value
   ulid.rs           Ulid (time-ordered 128-bit ids, Crockford base32)
   row.rs            Row: one result row (SQL or document); typed and dynamic reads; Serialize
-  model.rs          Model trait (+ the static API), ModelMeta, ColumnMeta, KeyKind, PrimaryKey, Timestamp, derive_support
+  model.rs          Model trait (+ the static API), ModelMeta, ColumnMeta, KeyKind, PrimaryKey, HasTimestamps, derive_support
   column.rs         Column<M, T>, col, col_as, Untyped, Filter, Assignment, ColumnName, ColumnOf, IntoExpr, IntoQuery
   record.rs         Record<M>: the instance; dirty tracking; extras; relations; the instance API
   persist.rs        insert / update / delete / refresh / touch / increment flows
@@ -177,9 +177,9 @@ pub struct Deal {
     pub stage: Stage,                    // stored as its serde name
     #[model(cast = "json")]
     pub meta: Option<DealMeta>,          // JSON; NULL is None
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 ```
 
@@ -247,7 +247,7 @@ Errors are compile errors with spans and fixes (unknown keys suggest the
 closest one; missing key and timestamp fields, `Option` keys, casts on
 keys, duplicate columns, non-nullable soft-delete columns). Malformed
 attributes are reported alone (no cascade). Trait bounds carry
-`#[diagnostic::on_unimplemented]` notes (`PrimaryKey`, `Timestamp`,
+`#[diagnostic::on_unimplemented]` notes (`PrimaryKey`, `HasTimestamps`,
 `Numeric`, `ValueFor`). The cases are pinned by `tests/compile_fail.rs`.
 
 `Model` requires `Clone + Send + Sync + Serialize + 'static`. Its provided
@@ -281,9 +281,8 @@ documents) and `Vector` (pgvector's `vector` on PostgreSQL, little-endian
 column)`, which by default reads the column as navree-db reads it by its
 type (`Row::value`) and converts it with `from_value`. Implemented for
 `bool`, the 8- to 64-bit integers, `f32`, `f64`, `Decimal`, `String`,
-`Vec<u8>`, `Uuid`, `Ulid`, `NaiveDate`, `NaiveTime`, `NaiveDateTime`,
-`DateTime<Utc>`, `DateTime<FixedOffset>`, `serde_json::Value`, `Value` and
-`Option<T>`. Conversion is tolerant where databases differ: any integer
+`Vec<u8>`, `Uuid`, `Ulid`, `Date`, `Time`, `DateTime`, `Timestamp`, `Zoned`,
+`serde_json::Value`, `Value` and `Option<T>`. Conversion is tolerant where databases differ: any integer
 width, exact `NUMERIC`/`DECIMAL` sums read as integers, floats from
 decimals, booleans from MySQL's `TINYINT(1)`, UUIDs from text or bytes,
 date-times and JSON from text (SQLite, MySQL expressions).
@@ -389,8 +388,8 @@ task's current unit of work that `&Db` joined): `entity` is the table,
 as exact strings). Mass writes record no events.
 
 Timestamps come from the app's `dyn Clock` when the executor's pool belongs
-to an app (`Db::app()`), else `Utc::now()`, truncated to microseconds so the
-stored and in-memory values agree on every database.
+to an app (`Db::app()`), else `Timestamp::now()`, truncated to microseconds
+so the stored and in-memory values agree on every database.
 
 ## 5. Queries
 
@@ -1105,8 +1104,8 @@ builders.
 | Attribute | Field type | Stored as | Notes |
 |---|---|---|---|
 | `"decimal(N)"` | `Decimal` | a decimal | rounded half away from zero to N places (N ≤ 28) when written |
-| `"datetime_format(\"..\")"` | `DateTime<Utc>`/`<FixedOffset>`, `NaiveDateTime`, `NaiveDate`, `NaiveTime` | text | the format is checked at compile time; serialized in the same format |
-| `"unix_timestamp"`, `"unix_timestamp_ms"` | `DateTime<Utc>`, `NaiveDateTime` | an integer | the record holds the stored precision after a save |
+| `"datetime_format(\"..\")"` | `Timestamp`, `Zoned`, `DateTime`, `Date`, `Time` | text | the format is checked at compile time; serialized in the same format |
+| `"unix_timestamp"`, `"unix_timestamp_ms"` | `Timestamp`, `DateTime` | an integer | the record holds the stored precision after a save |
 | `"encrypted"`, `"encrypted_json"` | `String`/`Vec<u8>`, any serde type | navree-crypto payload `v1.<kid>.<nonce>.<ct>` | compared by plain value; a payload under a previous key is stale and rewritten at the next save; `#[model(encrypter = "name")]` picks a named encrypter |
 | `"hashed"` | `String` | an Argon2id PHC string | hashed in `prepare` (navree-crypto's `Hasher`, off the async threads); an Argon2 hash is kept; other algorithms' hashes and malformed Argon2 strings are refused |
 | `"binary_uuid"`, `"binary_ulid"` | `Uuid`, `Ulid` | 16 bytes | ULIDs big-endian, so bytes sort by time |
