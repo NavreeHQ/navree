@@ -163,9 +163,9 @@ mod tests {
     fn add_prints_like_the_docs() {
         let dir = app();
         let mut out = Vec::new();
-        add("postgres", dir.path(), &mut out).unwrap();
-        add("mailpit", dir.path(), &mut out).unwrap();
-        add("mailpit", dir.path(), &mut out).unwrap();
+        let _ = add("postgres", dir.path(), &mut out).unwrap();
+        let _ = add("mailpit", dir.path(), &mut out).unwrap();
+        let _ = add("mailpit", dir.path(), &mut out).unwrap();
         assert_eq!(
             printed(out),
             "  created  dock.toml        # [services.postgres]\n\
@@ -183,7 +183,7 @@ mod tests {
         std::fs::write(dir.path().join("dock.toml"), "[services.redis]\n").unwrap();
         let exec = FakeExecutor::new().with_programs::<[&str; 0]>([]);
         let mut out = Vec::new();
-        run_with(
+        let _ = run_with(
             &DockCommand::Env { export: true },
             dir.path(),
             exec,
@@ -206,17 +206,17 @@ mod tests {
         std::fs::write(dir.path().join("dock.toml"), "[services.redis]\n").unwrap();
         let mut out = Vec::new();
         let up = DockCommand::Up { services: vec![] };
-        run_with(&up, dir.path(), FakeExecutor::new(), &mut out).unwrap();
+        let _ = run_with(&up, dir.path(), FakeExecutor::new(), &mut out).unwrap();
         let ps = FakeExecutor::new().respond(
             "ps --all",
             CmdOutput::ok("crm-api-redis|running|redis:7|127.0.0.1:6379->6379/tcp\n"),
         );
-        run_with(&DockCommand::Status, dir.path(), ps, &mut out).unwrap();
+        let _ = run_with(&DockCommand::Status, dir.path(), ps, &mut out).unwrap();
         let down = DockCommand::Down {
             services: vec![],
             volumes: true,
         };
-        run_with(&down, dir.path(), FakeExecutor::new(), &mut out).unwrap();
+        let _ = run_with(&down, dir.path(), FakeExecutor::new(), &mut out).unwrap();
         let text = printed(out);
         assert!(
             text.starts_with("Starting crm-api services with docker\n"),
@@ -256,7 +256,7 @@ mod tests {
             CmdOutput::ok("crm-api-redis|running|redis:7|127.0.0.1:6379->6379/tcp\n"),
         );
         let mut out = Vec::new();
-        remove_with("redis", true, dir.path(), exec, &mut out).unwrap();
+        let _ = remove_with("redis", true, dir.path(), exec, &mut out).unwrap();
         assert_eq!(
             printed(out),
             "  updated  dock.toml        # removed [services.redis]\nRemoved redis and deleted its data.\n"
@@ -267,7 +267,7 @@ mod tests {
         );
         // Without a runtime it still edits the file (with a warning).
         let none = FakeExecutor::new().with_programs::<[&str; 0]>([]);
-        remove_with("nats", false, dir.path(), none, &mut Vec::new()).unwrap();
+        let _ = remove_with("nats", false, dir.path(), none, &mut Vec::new()).unwrap();
         assert_eq!(
             std::fs::read_to_string(dir.path().join("dock.toml")).unwrap(),
             ""

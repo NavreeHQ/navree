@@ -297,9 +297,10 @@ fn has_field(src: &str, field: &str) -> bool {
 /// table shows: an `id`, a `name` and `created_at`, as `make:model` writes them.
 fn is_standard_model(src: &str, pascal: &str) -> bool {
     declares_struct(src, pascal)
-        && ["id: Uuid", "name: String", "created_at: DateTime<Utc>"]
-            .iter()
-            .all(|field| has_field(src, field))
+        && has_field(src, "id: Uuid")
+        && has_field(src, "name: String")
+        && (has_field(src, "created_at: Timestamp")
+            || has_field(src, "created_at: DateTime<Utc>"))
 }
 
 /// The path, from `tables/<name>.rs`, of the module's model `entity`, if it
@@ -553,7 +554,7 @@ mod tests {
 
     #[test]
     fn a_model_is_found_by_its_struct_and_its_columns() {
-        let model = "pub struct Deal {\n    pub id: Uuid,\n    pub name: String,\n    pub created_at: DateTime<Utc>,\n}\n";
+        let model = "pub struct Deal {\n    pub id: Uuid,\n    pub name: String,\n    pub created_at: Timestamp,\n}\n";
         assert!(is_standard_model(model, "Deal"));
         assert!(!is_standard_model(model, "Dea"), "a prefix is not the name");
         assert!(!is_standard_model(model, "Deals"));

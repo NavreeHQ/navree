@@ -19,7 +19,7 @@ use crate::templates::render;
 pub struct Column {
     /// The column name (the field's, or `#[model(column = "..")]`).
     pub name: String,
-    /// The type's last path segment (`String`, `Uuid`, `DateTime`, ...),
+    /// The type's last path segment (`String`, `Uuid`, `Timestamp`, ...),
     /// inside `Option<..>`.
     pub ty: String,
     /// Whether the type is an `Option`.
@@ -261,8 +261,8 @@ fn quoted_value(tokens: &str, key: &str) -> Option<String> {
     None
 }
 
-/// `(optional, last segment)` of a type: `Option<DateTime<Utc>>` is
-/// `(true, "DateTime")`.
+/// `(optional, last segment)` of a type: `Option<Timestamp>` is
+/// `(true, "Timestamp")`.
 fn type_name(ty: &syn::Type) -> (bool, String) {
     let syn::Type::Path(path) = ty else {
         return (false, String::new());
@@ -353,8 +353,8 @@ fn field_for(column: &Column, columns: &[Column]) -> Option<FieldCode> {
             format!("Field::money(\"{name}\", \"currency\").sortable()")
         }
         _ if is_number(ty) => format!("Field::number(\"{name}\").sortable()"),
-        "NaiveDate" | "Date" => format!("Field::date(\"{name}\").sortable()"),
-        "DateTime" | "NaiveDateTime" | "DateTimeUtc" => {
+        "Date" | "NaiveDate" => format!("Field::date(\"{name}\").sortable()"),
+        "Timestamp" | "Zoned" | "DateTime" | "NaiveDateTime" | "DateTimeUtc" => {
             format!("Field::datetime(\"{name}\"){readonly}.sortable()")
         }
         "Uuid" | "Ulid" if name.ends_with("_id") => {
@@ -560,7 +560,7 @@ mod tests {
     use super::*;
 
     const DEAL: &str = r#"
-use chrono::{DateTime, NaiveDate, Utc};
+use navree::datetime::{Date, Timestamp};
 use navree::orm::Model;
 use serde::Serialize;
 use uuid::Uuid;
@@ -578,10 +578,10 @@ pub struct Deal {
     pub owner_id: Option<Uuid>,
     pub notes: Option<String>,
     pub won: bool,
-    pub expected_close_date: Option<NaiveDate>,
+    pub expected_close_date: Option<Date>,
     #[model(skip)]
     pub score: u8,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 "#;
 
