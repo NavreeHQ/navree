@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::helm::{ActionContext, FormData};
 use navree::prelude::*;
 use navree::webhooks::Webhooks;
@@ -59,7 +59,7 @@ pub fn uuid(form: &FormData, field: &str) -> Result<Option<Option<Uuid>>, AppErr
 }
 
 /// The date in `field` (`YYYY-MM-DD`).
-pub fn date(form: &FormData, field: &str) -> Result<Option<Option<NaiveDate>>, AppError> {
+pub fn date(form: &FormData, field: &str) -> Result<Option<Option<Date>>, AppError> {
     let Some(value) = form.get(field) else {
         return Ok(None);
     };
@@ -68,7 +68,7 @@ pub fn date(form: &FormData, field: &str) -> Result<Option<Option<NaiveDate>>, A
     }
     value
         .as_str()
-        .and_then(|text| NaiveDate::parse_from_str(text.trim(), "%Y-%m-%d").ok())
+        .and_then(|text| Date::parse("%Y-%m-%d", text.trim()).ok())
         .map(|date| Some(Some(date)))
         .ok_or_else(|| {
             invalid(

@@ -1,8 +1,8 @@
 //! Accounts in the panel: users and workspaces.
 
-use chrono::Utc;
 use navree::BoxFuture;
 use navree::auth::User;
+use navree::datetime::Timestamp;
 use navree::helm::SaveContext;
 use navree::helm::{Action, ActionResult, Field, Filter, FormData, Metric, RecordOf, Resource};
 use navree::prelude::*;
@@ -62,7 +62,7 @@ impl Resource for UserAdmin {
                             continue;
                         }
                         user.update(ctx.uow(), |user| {
-                            let now = Utc::now();
+                            let now = Timestamp::now();
                             user.email_verified_at = Some(now);
                             user.updated_at = now;
                         })

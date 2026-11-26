@@ -28,10 +28,10 @@
 //! Every account uses [`PASSWORD`]. Running the seeder again changes
 //! nothing: what exists is found again.
 
-use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Utc, Weekday};
 use navree::access::AccessService;
 use navree::auth::{AuthService, User};
 use navree::config::Config;
+use navree::datetime::{Date, Span, Time, Timestamp, Weekday};
 use navree::db::{Db, Seeder, Uow};
 use navree::flags::{FlagScope, Flags, Rollout};
 use navree::settings::{Scope, Settings};
@@ -367,7 +367,7 @@ impl Seeder for SystemSeeder {
 /// Creates (or finds) everything the seeder seeds.
 pub async fn seed(ctx: &AppContext) -> Result<(), BoxError> {
     let db = ctx.get::<Db>().await?;
-    let calendar = Calendar::new(Utc::now());
+    let calendar = Calendar::new(Timestamp::now());
     let mut rng = Rng::new(0x5EED_0001);
 
     // The operator signed up first, at the start of the history.
@@ -555,7 +555,7 @@ async fn seed_work(
         for n in 0..wanted {
             let (name, description) = PROJECTS[(n + offset) % PROJECTS.len()];
             let created_at = calendar.when(rng);
-            let age_days = (calendar.now - created_at).num_days();
+            let age_days = (calendar.now - created_at).as_days();
             // Older projects are more often finished with.
             let archived = rng.percent(if age_days > 14 { 30 } else { 6 });
             let author = *rng.pick(people);
@@ -600,7 +600,7 @@ async fn seed_work(
 fn make_task(
     workspace: Uuid,
     project: Uuid,
-    project_at: DateTime<Utc>,
+    project_at: Timestamp,
     archived: bool,
     people: &[Uuid],
     calendar: &Calendar,
@@ -626,7 +626,9 @@ fn make_task(
         _ => 4,
     };
     let due_on = rng.percent(75).then(|| {
-        (created_at + Duration::days(3 + i64::try_from(rng.below(28)).unwrap_or(7))).date_naive()
+        (created_at + Span::days(3 + i64::try_from(rng.below(28)).unwrap_or(7)))
+            .date_time_utc()
+            .date()
     });
     Task {
         id: Uuid::now_v7(),
@@ -646,7 +648,7 @@ fn make_task(
 /// progress, done): the numbers it found were a share of those.
 fn make_report(workspace: Uuid, totals: [u64; 3], calendar: &Calendar, rng: &mut Rng) -> Report {
     let created_at = calendar.when(rng);
-    let recent = (calendar.now - created_at).num_minutes() < 30;
+    let recent = (calendar.now - created_at).as_minutes() < 30;
     let status = match rng.below(100) {
         _ if recent => "queued",
         0..=7 => "computed",
@@ -655,7 +657,7 @@ fn make_report(workspace: Uuid, totals: [u64; 3], calendar: &Calendar, rng: &mut
     let share = 40 + rng.below(61);
     let [todo, doing, done] = totals.map(|count| count * share / 100);
     let finished_at = (status != "queued")
-        .then(|| created_at + Duration::seconds(2 + i64::try_from(rng.below(40)).unwrap_or(5)));
+        .then(|| created_at + Span::seconds(2 + i64::try_from(rng.below(40)).unwrap_or(5)));
     Report {
         id: Uuid::now_v7(),
         workspace_id: workspace,
@@ -856,7 +858,7 @@ async fn seed_settings(
 /// The account for `email`, created with [`PASSWORD`] if it does not
 /// exist, with its address marked verified.
 pub async fn ensure_account(ctx: &AppContext, name: &str, email: &str) -> Result<User, BoxError> {
-    ensure_account_at(ctx, name, email, Utc::now()).await
+    ensure_account_at(ctx, name, email, Timestamp::now()).await
 }
 
 /// [`ensure_account`], creating the account as if it signed up at
@@ -867,7 +869,7 @@ pub async fn ensure_account_at(
     ctx: &AppContext,
     name: &str,
     email: &str,
-    created_at: DateTime<Utc>,
+    created_at: Timestamp,
 ) -> Result<User, BoxError> {
     let auth = ctx.get::<AuthService>().await?;
     let db = ctx.get::<Db>().await?;
@@ -887,7 +889,7 @@ pub async fn ensure_account_at(
                 user.created_at = created_at;
                 user.updated_at = created_at;
             }
-            user.email_verified_at = Some(user.created_at + Duration::minutes(5));
+            user.email_verified_at = Some(user.created_at + Span::minutes(5));
         })
         .await?;
     Ok(record.into_inner())
@@ -950,21 +952,21 @@ impl Rng {
 /// The last [`HISTORY_DAYS`] days, each with a weight: later days count
 /// more, weekends less.
 struct Calendar {
-    now: DateTime<Utc>,
-    days: Vec<(DateTime<Utc>, u64)>,
+    now: Timestamp,
+    days: Vec<(Timestamp, u64)>,
     total: u64,
 }
 
 impl Calendar {
-    fn new(now: DateTime<Utc>) -> Self {
-        let today = now.date_naive();
+    fn new(now: Timestamp) -> Self {
+        let today = now.date_time_utc().date();
         let mut days = Vec::new();
         for back in (0..HISTORY_DAYS).rev() {
-            let date: NaiveDate = today - Duration::days(back);
-            let start = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap_or_default());
+            let date: Date = today.add_days(-back).unwrap_or(today);
+            let start = date.at(Time::MIDNIGHT).in_utc();
             let recent = u64::try_from(HISTORY_DAYS - back).unwrap_or(1);
             let mut weight = 40 + 3 * recent;
-            if matches!(date.weekday(), Weekday::Sat | Weekday::Sun) {
+            if matches!(date.weekday(), Weekday::Saturday | Weekday::Sunday) {
                 weight = weight * 35 / 100;
             }
             days.push((start, weight));
@@ -974,21 +976,20 @@ impl Calendar {
     }
 
     /// The start of the history.
-    fn start(&self) -> DateTime<Utc> {
+    fn start(&self) -> Timestamp {
         self.days
             .first()
-            .map_or(self.now, |(start, _)| *start + Duration::hours(9))
+            .map_or(self.now, |(start, _)| *start + Span::hours(9))
     }
 
     /// A time on one of the days, in working hours, never in the future.
-    fn when(&self, rng: &mut Rng) -> DateTime<Utc> {
+    fn when(&self, rng: &mut Rng) -> Timestamp {
         let mut pick = rng.below(self.total);
         for (start, weight) in &self.days {
             if pick < *weight {
                 let seconds = 6 * 3600 + i64::try_from(rng.below(12 * 3600)).unwrap_or(0);
                 let guard = 60 + i64::try_from(rng.below(3 * 3600)).unwrap_or(0);
-                return (*start + Duration::seconds(seconds))
-                    .min(self.now - Duration::seconds(guard));
+                return (*start + Span::seconds(seconds)).min(self.now - Span::seconds(guard));
             }
             pick -= weight;
         }
@@ -996,10 +997,10 @@ impl Calendar {
     }
 
     /// A time from `from` to now.
-    fn between(&self, from: DateTime<Utc>, rng: &mut Rng) -> DateTime<Utc> {
-        let span = (self.now - from).num_seconds().max(1);
+    fn between(&self, from: Timestamp, rng: &mut Rng) -> Timestamp {
+        let span = (self.now - from).as_seconds().max(1);
         let offset = rng.below(u64::try_from(span).unwrap_or(1));
-        from + Duration::seconds(i64::try_from(offset).unwrap_or(0))
+        from + Span::seconds(i64::try_from(offset).unwrap_or(0))
     }
 }
 
@@ -1032,13 +1033,13 @@ mod tests {
 
     #[test]
     fn times_stay_inside_the_history() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let calendar = Calendar::new(now);
         let mut rng = Rng::new(7);
         for _ in 0..500 {
             let at = calendar.when(&mut rng);
             assert!(at <= now);
-            assert!(at >= now - Duration::days(HISTORY_DAYS + 1));
+            assert!(at >= now - Span::days(HISTORY_DAYS + 1));
             let later = calendar.between(at, &mut rng);
             assert!(later >= at && later <= now);
         }

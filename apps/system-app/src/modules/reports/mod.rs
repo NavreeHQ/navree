@@ -8,8 +8,8 @@
 
 mod migrations;
 
-use chrono::{DateTime, Utc};
 use navree::contracts::{Job, JobContext, JobOptions};
+use navree::datetime::Timestamp;
 use navree::db::Db;
 use navree::micro::ServiceClient;
 use navree::orm::prelude::*;
@@ -39,11 +39,11 @@ pub struct Report {
     /// The job's attempt that finished it.
     pub attempts: i32,
     /// When the worker finished it.
-    pub finished_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<Timestamp>,
     /// When it was asked for.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// The queued job: counts the workspace's tasks by status into the report.
@@ -139,7 +139,7 @@ impl ReportEvents {
                 report
                     .update(&*db, |report| {
                         report.status = "done".to_owned();
-                        report.finished_at = Some(Utc::now());
+                        report.finished_at = Some(Timestamp::now());
                     })
                     .await?;
             }

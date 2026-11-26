@@ -1,6 +1,6 @@
 //! `/api/v1/tasks`: the current workspace's tasks.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::openapi::ToSchema;
 use navree::orm::access::AccessibleQuery;
 use navree::orm::prelude::*;
@@ -30,7 +30,7 @@ pub struct CreateTask {
     pub priority: i32,
     /// When it is due.
     #[validate(skip)]
-    pub due_on: Option<NaiveDate>,
+    pub due_on: Option<Date>,
 }
 
 fn default_priority() -> i32 {

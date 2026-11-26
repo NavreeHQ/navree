@@ -2,7 +2,7 @@
 //! `/admin/pages/ops-overview`, a table per workspace and the latest
 //! activity, drawn from `templates/ops-overview.html`.
 
-use chrono::Utc;
+use navree::datetime::Timestamp;
 use navree::helm::{HelmPage, PageContext};
 use navree::orm::prelude::*;
 use navree::prelude::*;
@@ -33,7 +33,7 @@ pub fn operations_overview() -> HelmPage {
 /// What the page shows.
 async fn overview(ctx: PageContext) -> Result<Value> {
     let uow = ctx.uow();
-    let today = Utc::now().date_naive();
+    let today = Timestamp::now().date_time_utc().date();
     let workspaces = Workspace::query()
         .order_by(Workspace::NAME)
         .get(uow)

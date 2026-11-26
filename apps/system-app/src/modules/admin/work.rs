@@ -6,8 +6,8 @@
 //! record it changes. The connection's role decides what it sees: the
 //! compose database's role is a superuser, so it sees every workspace.
 
-use chrono::Utc;
 use navree::BoxFuture;
+use navree::datetime::Timestamp;
 use navree::helm::{
     Action, ActionResult, Field, Filter, FormData, Metric, RecordOf, Resource, SaveContext,
     Workspaces,
@@ -163,7 +163,7 @@ impl Resource for ProjectAdmin {
                 .only_on_detail()
                 .handle(|ctx, projects| async move {
                     let note: String = ctx.input("note")?;
-                    let today = Utc::now().format("%-d %b %Y");
+                    let today = Timestamp::now().format("%-d %b %Y");
                     let mut changed = 0;
                     for mut project in projects {
                         let workspace = project.workspace_id;
@@ -304,7 +304,7 @@ impl Resource for TaskAdmin {
             Filter::boolean("overdue", "Overdue", |query, on| {
                 if on {
                     query
-                        .where_(Task::DUE_ON.lt(Utc::now().date_naive()))
+                        .where_(Task::DUE_ON.lt(Timestamp::now().date_time_utc().date()))
                         .where_(Task::STATUS.ne("done"))
                 } else {
                     query

@@ -6,7 +6,7 @@
 //! so the resource is read-only: the panel shows no New, Edit or Delete for
 //! one and refuses them.
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::helm::{Field, Filter, Metric, Resource};
 use navree::orm::prelude::*;
 use navree::prelude::*;
@@ -52,7 +52,7 @@ pub struct AuditEntry {
     /// Extra data.
     pub metadata: serde_json::Value,
     /// When the entry was recorded.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// The kinds of entry.

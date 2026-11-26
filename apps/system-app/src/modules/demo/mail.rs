@@ -8,8 +8,7 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use chrono::{Datelike, Duration, Utc};
-
+use navree::datetime::Timestamp;
 use navree::http::{IntoResponse, Response};
 use navree::mail::{Mailer, TemplateMail};
 use navree::openapi::ToSchema;
@@ -212,10 +211,11 @@ pub fn newsletter(name: &str, to: &str, issue: u32) -> TemplateMail {
 /// weekly digest, by turns, each for its own recipient.
 pub fn varied(n: u32) -> TemplateMail {
     let (to, name) = recipient(n);
-    let today = Utc::now().date_naive();
-    let due = today + Duration::days(5 + i64::from(n % 20));
+    let today = Timestamp::now().date_time_utc().date();
+    let due = today.add_days(5 + i64::from(n % 20)).unwrap_or(today);
     let monday = today
-        - Duration::days(i64::from(today.weekday().num_days_from_monday()) + 7 * i64::from(n % 3));
+        .add_days(-(i64::from(today.weekday().days_from_monday()) + 7 * i64::from(n % 3)))
+        .unwrap_or(today);
     match n % 4 {
         0 => {
             let workspace = WORKSPACES[(n % 3) as usize];
