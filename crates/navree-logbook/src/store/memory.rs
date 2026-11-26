@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_kernel::BoxFuture;
 
 use super::{ListQuery, LogbookStore};
@@ -139,7 +139,7 @@ impl LogbookStore for MemoryStore {
     fn prune(
         &self,
         max_entries: usize,
-        older_than: DateTime<Utc>,
+        older_than: Timestamp,
     ) -> BoxFuture<'_, Result<u64, LogbookError>> {
         let mut inner = self.lock();
         let mut deleted = 0;

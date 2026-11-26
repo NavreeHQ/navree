@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{ChangeEvent, ChangeObserver, DbError, Uow};
 use navree_kernel::BoxFuture;
 use navree_telemetry::{EventContext, Outcome, Telemetry, TelemetryEvent, TelemetryRecord};
@@ -28,14 +28,14 @@ fn is_failure(outcome: Outcome) -> bool {
 }
 
 /// When something that ended at `end` after `duration` started.
-fn started(end: DateTime<Utc>, duration: Duration) -> DateTime<Utc> {
-    end - chrono::Duration::from_std(duration).unwrap_or_default()
+fn started(end: Timestamp, duration: Duration) -> Timestamp {
+    end - Span::try_from(duration).unwrap_or_default()
 }
 
 /// What one record becomes, before the context is applied.
 struct Recorded {
     content: Content,
-    at: DateTime<Utc>,
+    at: Timestamp,
     duration_ms: Option<f64>,
     failed: bool,
     slow: bool,
@@ -45,7 +45,7 @@ struct Recorded {
 }
 
 impl Recorded {
-    fn new(content: Content, at: DateTime<Utc>) -> Recorded {
+    fn new(content: Content, at: Timestamp) -> Recorded {
         Recorded {
             content,
             at,
@@ -57,7 +57,7 @@ impl Recorded {
         }
     }
 
-    fn lasting(mut self, end: DateTime<Utc>, duration: Duration) -> Recorded {
+    fn lasting(mut self, end: Timestamp, duration: Duration) -> Recorded {
         self.at = started(end, duration);
         self.duration_ms = Some(ms(duration));
         self
@@ -463,7 +463,7 @@ impl Active {
         })
     }
 
-    fn job(&self, at: DateTime<Utc>, duration: Duration, part: JobPart<'_>) -> Recorded {
+    fn job(&self, at: Timestamp, duration: Duration, part: JobPart<'_>) -> Recorded {
         let mut recorded = Recorded::new(
             Content::Job(JobEntry {
                 queue: part.queue.to_owned(),
@@ -505,7 +505,7 @@ impl Active {
         }
         for change in changes {
             let mut entry = Entry::new(
-                Utc::now(),
+                Timestamp::now(),
                 Content::Model(ModelEntry {
                     entity: change.entity.clone(),
                     id: change.id.clone(),

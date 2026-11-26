@@ -8,7 +8,7 @@ mod sqlite;
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_kernel::BoxFuture;
 
 pub use memory::MemoryStore;
@@ -88,7 +88,7 @@ pub trait LogbookStore: Send + Sync + 'static {
     fn prune(
         &self,
         max_entries: usize,
-        older_than: DateTime<Utc>,
+        older_than: Timestamp,
     ) -> BoxFuture<'_, Result<u64, LogbookError>>;
 
     /// Deletes everything; returns how many entries went.

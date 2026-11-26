@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_kernel::BoxFuture;
 use sqlx::sqlite::{
     SqliteArguments, SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions,
@@ -264,7 +264,7 @@ impl SqliteStore {
     async fn prune_entries(
         &self,
         max_entries: usize,
-        older_than: DateTime<Utc>,
+        older_than: Timestamp,
     ) -> Result<u64, LogbookError> {
         let mut tx = self.begin_write().await?;
         let doomed_old = "SELECT DISTINCT batch_key FROM logbook_entries WHERE at < ?";
@@ -406,8 +406,8 @@ fn seq_arg(seq: u64) -> i64 {
 }
 
 /// Microseconds since the Unix epoch.
-fn micros(at: DateTime<Utc>) -> i64 {
-    at.timestamp_micros()
+fn micros(at: Timestamp) -> i64 {
+    at.as_micros()
 }
 
 fn entry_from_row(row: &SqliteRow) -> Result<Entry, LogbookError> {
@@ -428,7 +428,7 @@ fn entry_from_row(row: &SqliteRow) -> Result<Entry, LogbookError> {
         id: row.try_get("id")?,
         seq: u64::try_from(seq).unwrap_or(0),
         batch_id: row.try_get("batch_id")?,
-        at: Utc.timestamp_micros(at).single().unwrap_or_else(Utc::now),
+        at: Timestamp::from_micros(at).unwrap_or_else(|_| Timestamp::now()),
         duration_ms: row.try_get("duration_ms")?,
         user_id: row.try_get("user_id")?,
         workspace_id: row.try_get("workspace_id")?,
@@ -476,7 +476,7 @@ impl LogbookStore for SqliteStore {
     fn prune(
         &self,
         max_entries: usize,
-        older_than: DateTime<Utc>,
+        older_than: Timestamp,
     ) -> BoxFuture<'_, Result<u64, LogbookError>> {
         Box::pin(self.prune_entries(max_entries, older_than))
     }

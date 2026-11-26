@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use chrono::{Duration, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_logbook::{
     Entry, EntryKind, Filter, ListQuery, LogbookStore, MemoryStore, SqliteStore, StatusMatch, Term,
 };
@@ -102,7 +102,7 @@ fn titles(entries: &[Entry]) -> Vec<String> {
 }
 
 async fn inserts_and_lists_newest_first_on(store: Arc<dyn LogbookStore>) {
-    let now = Utc::now();
+    let now = Timestamp::now();
     store
         .insert(vec![
             entry_at(now, None, dump("first")),
@@ -121,7 +121,7 @@ async fn inserts_and_lists_newest_first_on(store: Arc<dyn LogbookStore>) {
 }
 
 async fn pages_with_before_and_after_on(store: Arc<dyn LogbookStore>) {
-    let now = Utc::now();
+    let now = Timestamp::now();
     let entries: Vec<Entry> = (0..5)
         .map(|i| entry_at(now, None, dump(&format!("e{i}"))))
         .collect();
@@ -150,7 +150,7 @@ async fn pages_with_before_and_after_on(store: Arc<dyn LogbookStore>) {
 }
 
 async fn filters_every_term_on(store: Arc<dyn LogbookStore>) {
-    let now = Utc::now();
+    let now = Timestamp::now();
     let mut deals = entry_at(
         now,
         Some("req-1"),
@@ -257,7 +257,7 @@ async fn filters_every_term_on(store: Arc<dyn LogbookStore>) {
 }
 
 async fn keeps_tags_per_batch_on(store: Arc<dyn LogbookStore>) {
-    let now = Utc::now();
+    let now = Timestamp::now();
     store
         .add_tags("req-1".into(), vec!["import:42".into()])
         .await
@@ -285,22 +285,22 @@ async fn keeps_tags_per_batch_on(store: Arc<dyn LogbookStore>) {
 }
 
 async fn finds_entries_and_batches_on(store: Arc<dyn LogbookStore>) {
-    let now = Utc::now();
+    let now = Timestamp::now();
     let entry = entry_at(now, Some("job-1"), query("SELECT 2", 2.5));
     let id = entry.id.clone();
     store.insert(vec![entry.clone()]).await.unwrap();
     let found = store.entry(&id).await.unwrap().unwrap();
     assert_eq!(found.content, entry.content);
     assert_eq!(found.batch_id.as_deref(), Some("job-1"));
-    assert_eq!(found.at.timestamp_micros(), now.timestamp_micros());
+    assert_eq!(found.at.as_micros(), now.as_micros());
     assert!(store.entry("nope").await.unwrap().is_none());
     assert!(store.batch("nope").await.unwrap().is_empty());
     assert_eq!(found.kind(), EntryKind::Query);
 }
 
 async fn prunes_whole_batches_by_age_on(store: Arc<dyn LogbookStore>) {
-    let now = Utc::now();
-    let old = now - Duration::hours(30);
+    let now = Timestamp::now();
+    let old = now - Span::hours(30);
     store
         .insert(vec![
             entry_at(old, Some("old"), query("SELECT old", 1.0)),
@@ -313,14 +313,14 @@ async fn prunes_whole_batches_by_age_on(store: Arc<dyn LogbookStore>) {
         .add_tags("old".into(), vec!["gone".into()])
         .await
         .unwrap();
-    let deleted = store.prune(1000, now - Duration::hours(24)).await.unwrap();
+    let deleted = store.prune(1000, now - Span::hours(24)).await.unwrap();
     assert_eq!(deleted, 2, "the old batch goes whole");
     assert_eq!(titles(&list(&*store, "").await), ["GET /new"]);
     assert!(list(&*store, "tag:gone").await.is_empty());
 }
 
 async fn prunes_whole_batches_by_count_on(store: Arc<dyn LogbookStore>) {
-    let now = Utc::now();
+    let now = Timestamp::now();
     store
         .insert(vec![
             entry_at(now, Some("a"), query("SELECT a", 1.0)),
@@ -333,15 +333,15 @@ async fn prunes_whole_batches_by_count_on(store: Arc<dyn LogbookStore>) {
         .unwrap();
     // Keeping 3 means dropping the 2 oldest entries, which belong to
     // batches a and b: both go whole.
-    let deleted = store.prune(3, now - Duration::hours(24)).await.unwrap();
+    let deleted = store.prune(3, now - Span::hours(24)).await.unwrap();
     assert_eq!(deleted, 4);
     assert_eq!(titles(&list(&*store, "").await), ["loose"]);
-    assert_eq!(store.prune(3, now - Duration::hours(24)).await.unwrap(), 0);
+    assert_eq!(store.prune(3, now - Span::hours(24)).await.unwrap(), 0);
 }
 
 async fn counts_entries_by_kind_on(store: Arc<dyn LogbookStore>) {
     assert!(store.counts().await.unwrap().is_empty());
-    let now = Utc::now();
+    let now = Timestamp::now();
     store
         .insert(vec![
             entry_at(now, None, dump("a")),
@@ -367,7 +367,7 @@ async fn counts_entries_by_kind_on(store: Arc<dyn LogbookStore>) {
 }
 
 async fn clears_everything_on(store: Arc<dyn LogbookStore>) {
-    let now = Utc::now();
+    let now = Timestamp::now();
     store
         .insert(vec![
             entry_at(now, None, dump("x")),
@@ -391,7 +391,7 @@ async fn the_file_store_survives_a_restart() {
     {
         let store = SqliteStore::open(&path).await.unwrap();
         store
-            .insert(vec![entry_at(Utc::now(), None, dump("before the restart"))])
+            .insert(vec![entry_at(Timestamp::now(), None, dump("before the restart"))])
             .await
             .unwrap();
         store.add_tags("x".into(), vec!["t".into()]).await.unwrap();

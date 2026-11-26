@@ -5,9 +5,9 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use chrono::Utc;
 use http::request::Parts;
 use navree_contracts::AuthState;
+use navree_datetime::Timestamp;
 use navree_http::{AppError, RouteAuthorizer, RouteMeta};
 use navree_kernel::{BoxFuture, Module, ModuleBuilder};
 use navree_logbook::{Logbook, LogbookModule, VIEW_PERMISSION};
@@ -404,7 +404,7 @@ async fn mail_opens_as_sandboxed_html() {
     let app = app().await;
     let logbook = app.get::<Logbook>().await;
     logbook.record(&TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context: EventContext::default(),
         event: TelemetryEvent::MailSent(MailSent {
             to: vec!["anu@example.com".into()],

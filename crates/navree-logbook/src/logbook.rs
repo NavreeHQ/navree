@@ -7,7 +7,7 @@ use std::future::Future;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
-use chrono::{Duration as ChronoDuration, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_glob::Glob;
 use navree_kernel::{BoxFuture, WeakAppContext};
 use navree_telemetry::{Interest, TelemetryContext, TelemetryRecord, TelemetrySink};
@@ -268,7 +268,7 @@ impl Logbook {
         });
         let context = navree_telemetry::Telemetry::current_context();
         let mut entry = Entry::new(
-            Utc::now(),
+            Timestamp::now(),
             Content::Dump(DumpEntry {
                 label: label.to_owned(),
                 value,
@@ -376,7 +376,7 @@ impl Logbook {
         let active = self.active.as_ref().ok_or(LogbookError::Disabled)?;
         self.flush().await;
         let hours = i64::try_from(self.options.keep_hours).unwrap_or(i64::MAX / 3_600_000);
-        let cutoff = Utc::now() - ChronoDuration::hours(hours.min(24 * 365 * 100));
+        let cutoff = Timestamp::now() - Span::hours(hours.min(24 * 365 * 100));
         active.store.prune(self.options.max_entries, cutoff).await
     }
 }
@@ -561,7 +561,7 @@ mod tests {
 
     fn line() -> TelemetryRecord {
         TelemetryRecord {
-            at: Utc::now(),
+            at: Timestamp::now(),
             context: EventContext::default(),
             event: TelemetryEvent::Log(LogRecord {
                 level: LogLevel::Warn,

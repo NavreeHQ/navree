@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_logbook::{
     Content, DumpEntry, Entry, Logbook, LogbookOptions, QueryEntry, RequestEntry, StoreKind,
 };
@@ -57,7 +57,7 @@ pub fn in_job(job_id: &str) -> EventContext {
 /// Feeds one event to the Logbook as its telemetry sink would get it.
 pub fn feed(logbook: &Logbook, context: &EventContext, event: TelemetryEvent) {
     logbook.record(&TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context: context.clone(),
         event,
     });
@@ -89,7 +89,7 @@ pub fn request_event(request_id: &str, method: &str, path: &str, status: u16) ->
 }
 
 /// A plain entry for store tests.
-pub fn entry_at(at: DateTime<Utc>, batch: Option<&str>, content: Content) -> Entry {
+pub fn entry_at(at: Timestamp, batch: Option<&str>, content: Content) -> Entry {
     let mut entry = Entry::new(at, content);
     entry.batch_id = batch.map(str::to_owned);
     entry
