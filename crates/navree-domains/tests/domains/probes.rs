@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_domains::TlsStatus;
 use navree_lighthouse::LighthouseFake;
 use serde_json::json;
@@ -20,7 +20,7 @@ async fn certificates_of_verified_domains_are_probed_daily() {
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
     world.add(workspace, "pending.acme-corp.test").await;
-    let expires = world.now() + TimeDelta::days(60);
+    let expires = world.now() + Span::days(60);
     world.fakes.probe.expires("crm.acme-corp.test", expires);
     let domains = world.domains().await;
 
@@ -68,7 +68,7 @@ async fn certificates_close_to_expiry_are_reported() {
     world
         .fakes
         .probe
-        .expires("crm.acme-corp.test", world.now() + TimeDelta::days(5));
+        .expires("crm.acme-corp.test", world.now() + Span::days(5));
     let mut events = world.events(&["domains.certificate_expiring"]).await;
     let run = world
         .domains()

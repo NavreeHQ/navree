@@ -2,7 +2,7 @@
 //! the app has `EventsModule`. They carry the domain, so a listener (a
 //! mail to the workspace's admins, an audit trail) needs no query.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_events::Event;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -86,7 +86,7 @@ pub struct DomainCertificateIssued {
     /// The custom domain (`None` for one of `domains.acme.hosts`).
     pub domain_id: Option<Uuid>,
     /// When the new certificate expires.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     /// A renewal, not the first certificate.
     pub renewal: bool,
 }
@@ -104,7 +104,7 @@ pub struct DomainCertificateExpiring {
     /// The custom domain (`None` for one of `domains.acme.hosts`).
     pub domain_id: Option<Uuid>,
     /// When the certificate expires.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     /// Whole days left (0 once expired).
     pub days_left: i64,
 }

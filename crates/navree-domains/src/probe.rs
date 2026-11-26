@@ -9,7 +9,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_kernel::BoxFuture;
 use rustls::DigitallySignedStruct;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -24,9 +24,9 @@ use crate::certs::validity_der;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProbedCertificate {
     /// The start of its validity.
-    pub not_before: DateTime<Utc>,
+    pub not_before: Timestamp,
     /// The end of its validity.
-    pub not_after: DateTime<Utc>,
+    pub not_after: Timestamp,
 }
 
 /// Reads the certificate a host presents on HTTPS. The module registers a
@@ -257,13 +257,13 @@ impl ServerCertVerifier for ReadOnly {
 /// failure. Clones share the table.
 ///
 /// ```
-/// use chrono::{TimeDelta, Utc};
+/// use navree_datetime::{Span, Timestamp};
 /// use navree_domains::{CertificateProbe, ProbeFake};
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() {
 /// let probe = ProbeFake::new();
-/// probe.expires("shop.acme.test", Utc::now() + TimeDelta::days(60));
+/// probe.expires("shop.acme.test", Timestamp::now() + Span::days(60));
 /// assert!(probe.probe("shop.acme.test").await.is_ok());
 /// assert!(probe.probe("unknown.acme.test").await.is_err());
 /// # }
@@ -275,7 +275,7 @@ pub struct ProbeFake {
 
 #[derive(Debug, Default)]
 struct FakeProbes {
-    answers: BTreeMap<String, Result<DateTime<Utc>, String>>,
+    answers: BTreeMap<String, Result<Timestamp, String>>,
     probed: Vec<String>,
 }
 
@@ -290,7 +290,7 @@ impl ProbeFake {
     }
 
     /// `host` presents a certificate that expires at `at`.
-    pub fn expires(&self, host: &str, at: DateTime<Utc>) {
+    pub fn expires(&self, host: &str, at: Timestamp) {
         self.with(|probes| {
             probes.answers.insert(host.to_ascii_lowercase(), Ok(at));
         });
@@ -324,7 +324,7 @@ impl CertificateProbe for ProbeFake {
         Box::pin(async move {
             match answer {
                 Some(Ok(not_after)) => Ok(ProbedCertificate {
-                    not_before: not_after - chrono::TimeDelta::days(90),
+                    not_before: not_after - Span::days(90),
                     not_after,
                 }),
                 Some(Err(reason)) => Err(DomainsError::Certificate(format!("{host}: {reason}"))),

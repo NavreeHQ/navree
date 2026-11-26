@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::Model;
 use serde::Serialize;
 use uuid::Uuid;
@@ -47,27 +47,27 @@ pub struct Domain {
     /// Checks since it was added or last verified.
     pub check_attempts: i32,
     /// When DNS was last checked.
-    pub last_checked_at: Option<DateTime<Utc>>,
+    pub last_checked_at: Option<Timestamp>,
     /// When the scheduler checks it next.
-    pub next_check_at: Option<DateTime<Utc>>,
+    pub next_check_at: Option<Timestamp>,
     /// When it was verified.
-    pub verified_at: Option<DateTime<Utc>>,
+    pub verified_at: Option<Timestamp>,
     /// What the last check found missing.
     pub last_error: Option<String>,
     /// `pending`, `active`, `failed` or `off`.
     pub tls_status: String,
     /// When its certificate expires, when known.
-    pub certificate_expires_at: Option<DateTime<Utc>>,
+    pub certificate_expires_at: Option<Timestamp>,
     /// When its certificate was last checked, issued or renewed.
-    pub certificate_checked_at: Option<DateTime<Utc>>,
+    pub certificate_checked_at: Option<Timestamp>,
     /// Why the last certificate issuance or probe failed.
     pub tls_error: Option<String>,
     /// Who added it.
     pub created_by: Option<Uuid>,
     /// When it was added.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// A row of `custom_domain_certificates`: a certificate issued through
@@ -89,13 +89,13 @@ pub struct Certificate {
     #[model(hidden)]
     pub private_key: String,
     /// The start of the leaf's validity.
-    pub not_before: DateTime<Utc>,
+    pub not_before: Timestamp,
     /// The end of the leaf's validity.
-    pub not_after: DateTime<Utc>,
+    pub not_after: Timestamp,
     /// When it was first issued.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it was last renewed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl fmt::Debug for Certificate {
@@ -125,9 +125,9 @@ pub struct Challenge {
     /// The answer.
     pub key_authorization: String,
     /// When the answer is dropped.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     /// When it was published.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// A row of `custom_domain_acme_accounts`: the ACME account of one
@@ -144,9 +144,9 @@ pub struct AcmeAccount {
     #[model(hidden)]
     pub credentials: String,
     /// When the account was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the credentials last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl fmt::Debug for AcmeAccount {

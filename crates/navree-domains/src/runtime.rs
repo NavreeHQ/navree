@@ -6,10 +6,10 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use navree_config::Config;
 use navree_contracts::{Clock, SystemClock};
 use navree_crypto::Encrypter;
+use navree_datetime::Timestamp;
 use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
 use navree_kernel::{AppContext, WeakAppContext};
@@ -120,7 +120,7 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn now(&self) -> DateTime<Utc> {
+    pub(crate) fn now(&self) -> Timestamp {
         self.clock.now()
     }
 

@@ -1,7 +1,7 @@
 //! The commands `domains:list`, `domains:verify` and
 //! `domains:certificates`.
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_domains::{DomainStatus, TlsStatus};
 use uuid::Uuid;
 
@@ -90,7 +90,7 @@ async fn domains_certificates_probes_and_domains_list_lists() {
     world
         .fakes
         .probe
-        .expires("crm.acme-corp.test", world.now() + TimeDelta::days(70));
+        .expires("crm.acme-corp.test", world.now() + Span::days(70));
     world
         .app
         .run_command("domains:certificates", &["--due"])

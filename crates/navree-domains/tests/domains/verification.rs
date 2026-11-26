@@ -37,7 +37,7 @@ async fn a_domain_is_verified_once_its_records_appear() {
     assert_eq!(checked.last_checked_at, Some(world.now()));
     assert_eq!(
         checked.next_check_at,
-        Some(world.now() + chrono::TimeDelta::minutes(5))
+        Some(world.now() + navree_datetime::Span::minutes(5))
     );
 
     // The TXT record alone is not enough while routing is required.
@@ -59,7 +59,7 @@ async fn a_domain_is_verified_once_its_records_appear() {
     // Checked again a day later for its routing.
     assert_eq!(
         verified.next_check_at,
-        Some(world.now() + chrono::TimeDelta::hours(24))
+        Some(world.now() + navree_datetime::Span::hours(24))
     );
     let names = events.drain();
     assert_eq!(names.len(), 1);
@@ -161,7 +161,7 @@ async fn a_resolver_failure_is_recorded_and_returned() {
     assert!(stored.last_error.unwrap().contains("SERVFAIL"));
     assert_eq!(
         stored.next_check_at,
-        Some(world.now() + chrono::TimeDelta::minutes(5))
+        Some(world.now() + navree_datetime::Span::minutes(5))
     );
     // The scheduler logs a failure and goes on with the others.
     let other = world.add(workspace, "go.acme-corp.test").await;

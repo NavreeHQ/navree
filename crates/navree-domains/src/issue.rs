@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_kernel::BoxFuture;
 use navree_orm::{Model as _, Record};
 use uuid::Uuid;
@@ -25,7 +25,7 @@ impl Domains {
     /// custom domain, or one of `domains.acme.hosts`), stores it with its
     /// key sealed, serves it, and returns when it expires. Needs
     /// `domains.tls = "acme"` and an application key.
-    pub async fn issue_certificate(&self, host: &str) -> Result<DateTime<Utc>, DomainsError> {
+    pub async fn issue_certificate(&self, host: &str) -> Result<Timestamp, DomainsError> {
         let rt = self.rt.clone();
         if rt.options.tls != TlsMode::Acme {
             return Err(DomainsError::Config(
@@ -235,7 +235,7 @@ impl Domains {
             return Ok(run);
         }
         let now = rt.now();
-        let due_before = now - TimeDelta::hours(i64::from(rt.options.certificates.check_hours));
+        let due_before = now - Span::hours(i64::from(rt.options.certificates.check_hours));
         let mut query = models::Domain::query()
             .where_(models::Domain::STATUS.eq(DomainStatus::Verified.as_str()))
             .order_by(models::Domain::HOST);
@@ -282,8 +282,8 @@ impl Domains {
             .where_(models::Certificate::HOST.eq(row.host.clone()))
             .first(&*rt.db)
             .await?;
-        let renew_after = |not_after: DateTime<Utc>| {
-            not_after - TimeDelta::days(i64::from(rt.options.acme.renew_days))
+        let renew_after = |not_after: Timestamp| {
+            not_after - Span::days(i64::from(rt.options.acme.renew_days))
         };
         match stored.as_ref().map(|cert| cert.not_after) {
             Some(not_after) if renew_after(not_after) > now => {
@@ -330,7 +330,7 @@ impl Domains {
                 .await?
                 .map(|cert| cert.not_after);
             let due = stored.is_none_or(|not_after| {
-                not_after - TimeDelta::days(i64::from(rt.options.acme.renew_days)) <= now
+                not_after - Span::days(i64::from(rt.options.acme.renew_days)) <= now
             });
             if !due {
                 continue;
@@ -398,8 +398,8 @@ impl Domains {
 
     /// Adds `host` to the run's expiring list when it expires within
     /// `domains.certificates.warn_days`.
-    fn note_expiry(&self, host: &str, not_after: DateTime<Utc>, run: &mut CertificateRun) {
-        let warn = TimeDelta::days(i64::from(self.rt.options.certificates.warn_days));
+    fn note_expiry(&self, host: &str, not_after: Timestamp, run: &mut CertificateRun) {
+        let warn = Span::days(i64::from(self.rt.options.certificates.warn_days));
         if not_after - self.rt.now() <= warn {
             run.expiring.push((host.to_owned(), not_after));
         }
@@ -423,9 +423,9 @@ async fn report_expiring(
     rt: &Runtime,
     host: &str,
     domain_id: Option<Uuid>,
-    expires_at: DateTime<Utc>,
+    expires_at: Timestamp,
 ) {
-    let days_left = (expires_at - rt.now()).num_days().max(0);
+    let days_left = (expires_at - rt.now()).as_days().max(0);
     tracing::warn!(target: "navree::domains", host, %expires_at, days_left, "a certificate expires soon");
     rt.emit(DomainCertificateExpiring {
         host: host.to_owned(),
@@ -516,7 +516,7 @@ impl AcmeStore for Store {
                 token: token.to_owned(),
                 host: host.to_owned(),
                 key_authorization: key_authorization.to_owned(),
-                expires_at: now + TimeDelta::minutes(CHALLENGE_TTL_MINUTES),
+                expires_at: now + Span::minutes(CHALLENGE_TTL_MINUTES),
                 created_at: now,
             })
             .save(&*self.0.db)

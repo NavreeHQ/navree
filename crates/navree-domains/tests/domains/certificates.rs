@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_domains::{DomainsError, TlsStatus, models};
 use navree_lighthouse::LighthouseFake;
 use navree_orm::Model as _;
@@ -31,7 +31,7 @@ async fn verified_domains_get_certificates() {
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
     // Verified, waiting for its certificate.
     assert_eq!(domain.tls, TlsStatus::Pending);
-    let expires = world.now() + TimeDelta::days(90);
+    let expires = world.now() + Span::days(90);
     world.fakes.ca.expire_at(expires);
     let mut events = world.events(&["domains.certificate_issued"]).await;
     let domains = world.domains().await;
@@ -42,8 +42,10 @@ async fn verified_domains_get_certificates() {
     let domain = domains.get(domain.id).await.unwrap();
     assert_eq!(domain.tls, TlsStatus::Active);
     assert_eq!(
-        domain.certificate_expires_at.map(|at| at.date_naive()),
-        Some(expires.date_naive())
+        domain
+            .certificate_expires_at
+            .map(|at| at.date_time_utc().date()),
+        Some(expires.date_time_utc().date())
     );
     assert!(domains.certificates().contains("crm.acme-corp.test"));
     // The key is sealed with the app key.
@@ -145,7 +147,7 @@ async fn certificates_are_renewed_before_they_expire_and_reported_when_they_are_
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
     let domains = world.domains().await;
-    world.fakes.ca.expire_at(world.now() + TimeDelta::days(45));
+    world.fakes.ca.expire_at(world.now() + Span::days(45));
     assert_eq!(
         domains.check_certificates(None).await.unwrap().issued,
         ["crm.acme-corp.test"]
@@ -156,7 +158,7 @@ async fn certificates_are_renewed_before_they_expire_and_reported_when_they_are_
     assert!(run.renewed.is_empty() && run.expiring.is_empty(), "{run:?}");
     // 30 days before: renewed.
     world.advance(14 * DAY);
-    world.fakes.ca.expire_at(world.now() + TimeDelta::days(90));
+    world.fakes.ca.expire_at(world.now() + Span::days(90));
     let mut events = world
         .events(&["domains.certificate_issued", "domains.certificate_expiring"])
         .await;
@@ -174,7 +176,7 @@ async fn certificates_are_renewed_before_they_expire_and_reported_when_they_are_
     assert_eq!(run.expiring.len(), 1);
     assert_eq!(run.expiring[0].0, "crm.acme-corp.test");
     // The fake CA's certificates end at midnight.
-    let days_left = (run.expiring[0].1 - world.now()).num_days();
+    let days_left = (run.expiring[0].1 - world.now()).as_days();
     assert!((9..=10).contains(&days_left), "{days_left}");
     let expiring = events.drain();
     assert_eq!(expiring.len(), 1);

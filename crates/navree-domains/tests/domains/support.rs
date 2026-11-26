@@ -6,11 +6,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, TimeZone, Utc};
 use http::Method;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree_contracts::{Clock, FixedClock, Principal};
 use navree_crypto::{CryptoModule, generate_key};
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, Db};
 use navree_domains::{
     AcmeClient, AcmeFake, CertificateProbe, CurrentDomain, CustomDomain, DnsFake, DnsLookup,
@@ -33,8 +33,8 @@ pub const ADDRESS: &str = "203.0.113.10";
 pub const PREFIX: &str = "_domain-verification";
 
 /// 2026-10-28T09:00:00Z.
-pub fn start() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, 28, 9, 0, 0).unwrap()
+pub fn start() -> Timestamp {
+    Timestamp::utc(2026, 10, 28, 9, 0, 0).unwrap()
 }
 
 /// Everyone may do what their permissions say (the workspace owner has
@@ -129,7 +129,7 @@ impl World {
         self.fakes.clock.advance(by);
     }
 
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         self.fakes.clock.now()
     }
 

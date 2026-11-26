@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, PoisonError, RwLock};
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::{ClientHello, ResolvesServerCert};
@@ -40,7 +40,7 @@ pub struct DomainCertificates {
 #[derive(Clone)]
 struct Served {
     key: Arc<CertifiedKey>,
-    not_after: DateTime<Utc>,
+    not_after: Timestamp,
 }
 
 impl fmt::Debug for DomainCertificates {
@@ -68,7 +68,7 @@ impl DomainCertificates {
     }
 
     /// When the certificate of `host` expires.
-    pub fn expires_at(&self, host: &str) -> Option<DateTime<Utc>> {
+    pub fn expires_at(&self, host: &str) -> Option<Timestamp> {
         self.read()
             .get(&host.to_ascii_lowercase())
             .map(|served| served.not_after)
@@ -133,8 +133,8 @@ impl ResolvesServerCert for DomainCertificates {
 /// A leaf certificate's validity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Validity {
-    pub(crate) not_before: DateTime<Utc>,
-    pub(crate) not_after: DateTime<Utc>,
+    pub(crate) not_before: Timestamp,
+    pub(crate) not_after: Timestamp,
 }
 
 /// The certificates of a PEM chain, leaf first.
@@ -172,9 +172,8 @@ pub(crate) fn validity_der(der: &[u8]) -> Result<Validity, DomainsError> {
         .map_err(|error| DomainsError::Certificate(format!("the certificate: {error}")))?;
     let validity = cert.validity();
     let at = |seconds: i64| {
-        Utc.timestamp_opt(seconds, 0).single().ok_or_else(|| {
-            DomainsError::Certificate("a certificate date is out of range".to_owned())
-        })
+        Timestamp::from_secs(seconds)
+            .map_err(|_| DomainsError::Certificate("a certificate date is out of range".to_owned()))
     };
     Ok(Validity {
         not_before: at(validity.not_before.timestamp())?,
@@ -184,7 +183,7 @@ pub(crate) fn validity_der(der: &[u8]) -> Result<Validity, DomainsError> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Datelike, TimeDelta};
+    use navree_datetime::Span;
 
     use super::*;
     use crate::acme::{AcmeFake, AcmeOrder, AcmeStore};
@@ -235,13 +234,16 @@ mod tests {
     #[tokio::test]
     async fn certificates_are_served_by_host_with_their_expiry() {
         let ca = AcmeFake::new();
-        let expires = Utc::now() + TimeDelta::days(30);
+        let expires = Timestamp::now() + Span::days(30);
         ca.expire_at(expires);
         let cert = issued("shop.acme.test", &ca).await;
         let validity = validity(&cert.chain_pem).unwrap();
-        assert_eq!(validity.not_after.date_naive(), expires.date_naive());
         assert_eq!(
-            (validity.not_after - validity.not_before).num_days(),
+            validity.not_after.date_time_utc().date(),
+            expires.date_time_utc().date()
+        );
+        assert_eq!(
+            (validity.not_after - validity.not_before).as_days(),
             90,
             "{validity:?}"
         );
@@ -252,8 +254,10 @@ mod tests {
         assert!(certificates.contains("shop.acme.test"));
         assert_eq!(certificates.hosts(), ["shop.acme.test"]);
         assert_eq!(
-            certificates.expires_at("shop.acme.test").map(|at| at.day()),
-            Some(expires.day())
+            certificates
+                .expires_at("shop.acme.test")
+                .map(|at| at.date_time_utc().date().day()),
+            Some(expires.date_time_utc().date().day())
         );
         certificates.server_config().unwrap();
         certificates.remove("shop.acme.test");
