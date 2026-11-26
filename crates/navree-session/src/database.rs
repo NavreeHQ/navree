@@ -5,8 +5,8 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use chrono::{DateTime, Utc};
 use navree_contracts::{BoxError, BoxFuture, Clock, SessionRecord, SessionStore, SystemClock};
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{Backend, Db, DbError, Executor, MigrationSet, Statement};
 use serde_json::{Map, Value};
@@ -77,7 +77,7 @@ impl DatabaseStore {
             return Ok(None);
         };
         let data: String = row.get("data")?;
-        let expires_at: Option<DateTime<Utc>> = row.get("expires_at")?;
+        let expires_at: Option<Timestamp> = row.get("expires_at")?;
         match serde_json::from_str::<Map<String, Value>>(&data) {
             Ok(data) => Ok(Some(SessionRecord { data, expires_at })),
             Err(_) => {

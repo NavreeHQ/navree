@@ -3,9 +3,9 @@
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use chrono::{DateTime, Utc};
 use http::request::Parts;
 use navree_contracts::SessionRecord;
+use navree_datetime::Timestamp;
 use navree_http::AppError;
 use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
 use serde::Serialize;
@@ -78,7 +78,7 @@ pub(crate) struct State {
     /// The id the record was loaded under; `None` for a new session.
     pub(crate) stored_id: Option<String>,
     /// When the loaded record expires.
-    pub(crate) expires_at: Option<DateTime<Utc>>,
+    pub(crate) expires_at: Option<Timestamp>,
     /// Something changed since the session was loaded.
     pub(crate) dirty: bool,
     /// [`Session::csrf_token`] was called: the response carries the

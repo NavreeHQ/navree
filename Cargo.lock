@@ -5952,7 +5952,6 @@ dependencies = [
 name = "navree-session"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "cookie",
  "form_urlencoded",
  "futures-util",
@@ -5963,6 +5962,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-glob",
  "navree-http",

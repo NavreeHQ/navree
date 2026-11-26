@@ -5,9 +5,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::{TimeDelta, Utc};
 use http::Method;
 use navree_contracts::{SessionRecord, SessionStore};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{DatabaseModule, Db, Executor, ExecutorExt, Migrator, Statement, Uow};
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
@@ -87,13 +87,13 @@ async fn rows(db: &Db) -> i64 {
         .expect("count sessions")
 }
 
-fn record(data: serde_json::Value, expires_in: TimeDelta) -> SessionRecord {
+fn record(data: serde_json::Value, expires_in: Span) -> SessionRecord {
     let serde_json::Value::Object(data) = data else {
         panic!("session data is an object");
     };
     SessionRecord {
         data,
-        expires_at: Some(Utc::now() + expires_in),
+        expires_at: Some(Timestamp::now() + expires_in),
     }
 }
 
@@ -111,21 +111,21 @@ async fn database_store_roundtrip(scratch: Scratch) {
     assert_eq!(value, json!({"items": [1, 2]}));
     let stored = store.load(&id).await.unwrap().expect("the record");
     assert_eq!(stored.data["cart"], json!({"items": [1, 2]}));
-    assert!(stored.expires_at.unwrap() > Utc::now() + TimeDelta::minutes(119));
+    assert!(stored.expires_at.unwrap() > Timestamp::now() + Span::minutes(119));
 
     // Directly: save, replace, load, delete.
     let saved = record(
         json!({"a": 1, "nested": {"b": [true, null]}}),
-        TimeDelta::minutes(5),
+        Span::minutes(5),
     );
     store.save("direct", saved.clone()).await.unwrap();
     let loaded = store.load("direct").await.unwrap().expect("saved record");
     assert_eq!(loaded.data, saved.data);
     let drift = loaded.expires_at.unwrap() - saved.expires_at.unwrap();
-    assert!(drift.abs() < TimeDelta::seconds(1), "{drift}");
+    assert!(drift.abs() < Span::seconds(1), "{drift:?}");
 
     store
-        .save("direct", record(json!({"a": 2}), TimeDelta::minutes(5)))
+        .save("direct", record(json!({"a": 2}), Span::minutes(5)))
         .await
         .unwrap();
     assert_eq!(
@@ -180,11 +180,11 @@ async fn prune_expired_deletes_old_rows(scratch: Scratch) {
     let db = app.get::<Db>().await;
     let store = DatabaseStore::new((*db).clone());
     store
-        .save("old", record(json!({}), TimeDelta::minutes(-1)))
+        .save("old", record(json!({}), Span::minutes(-1)))
         .await
         .unwrap();
     store
-        .save("live", record(json!({}), TimeDelta::minutes(10)))
+        .save("live", record(json!({}), Span::minutes(10)))
         .await
         .unwrap();
     store

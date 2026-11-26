@@ -206,8 +206,9 @@ impl SessionOptions {
     }
 
     /// The lifetime as a duration.
-    pub(crate) fn lifetime(&self) -> chrono::TimeDelta {
-        chrono::TimeDelta::minutes(i64::try_from(self.lifetime_minutes).unwrap_or(i64::MAX))
+    pub(crate) fn lifetime(&self) -> navree_datetime::Span {
+        navree_datetime::Span::try_minutes(i64::try_from(self.lifetime_minutes).unwrap_or(i64::MAX))
+            .unwrap_or(navree_datetime::Span::MAX)
     }
 
     /// The name the session cookie is set and read under: `__Host-` and
@@ -323,7 +324,7 @@ mod tests {
         assert!(options.host_prefix);
         assert!(options.csrf_except.is_empty());
         assert!(options.check().is_ok());
-        assert_eq!(options.lifetime(), chrono::TimeDelta::minutes(120));
+        assert_eq!(options.lifetime(), navree_datetime::Span::minutes(120));
     }
 
     // The session cookie carries the `__Host-` prefix whenever
