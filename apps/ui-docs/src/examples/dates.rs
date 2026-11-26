@@ -1,6 +1,6 @@
 //! Calendar, DatePicker, DateRangePicker, TimePicker, DateTimePicker.
 
-use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
+use navree::datetime::{Date, DateTime, Time, Weekday};
 use navree::ui::dates::*;
 use navree::ui::*;
 
@@ -204,22 +204,22 @@ pub fn all() -> Vec<Example> {
 
 fn calendar_thumb() -> Calendar {
     Calendar::new("thumb")
-        .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
-        .selected(NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default())
+        .today(Date::new(2026, 11, 3).unwrap_or_default())
+        .selected(Date::new(2026, 11, 12).unwrap_or_default())
         .size(Size::Sm)
 }
 
 fn calendar_default() -> Calendar {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
     Calendar::new("due")
         .name("due")
         .today(today)
-        .selected(NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default())
+        .selected(Date::new(2026, 11, 12).unwrap_or_default())
         .with_today()
 }
 
 fn calendar_multiple() -> Calendar {
-    let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap_or_default();
+    let day = |d| Date::new(2026, 11, d).unwrap_or_default();
     Calendar::new("days")
         .name("days")
         .today(day(3))
@@ -229,7 +229,7 @@ fn calendar_multiple() -> Calendar {
 }
 
 fn calendar_range() -> Calendar {
-    let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap_or_default();
+    let day = |d| Date::new(2026, 11, d).unwrap_or_default();
     Calendar::new("window")
         .range_names("from", "to")
         .today(day(3))
@@ -239,7 +239,7 @@ fn calendar_range() -> Calendar {
 }
 
 fn calendar_limits() -> Calendar {
-    let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap_or_default();
+    let day = |m, d| Date::new(2026, m, d).unwrap_or_default();
     Calendar::new("visit")
         .name("visit")
         .today(day(11, 3))
@@ -247,7 +247,7 @@ fn calendar_limits() -> Calendar {
             DateRules::new()
                 .min(day(11, 2))
                 .max(day(12, 31))
-                .disable_weekdays([Weekday::Sat, Weekday::Sun])
+                .disable_weekdays([Weekday::Saturday, Weekday::Sunday])
                 .disable_dates([day(11, 11)])
                 .disable_range(day(12, 24), day(12, 26))
                 .disable_if(|date| date.day() == 13),
@@ -256,24 +256,24 @@ fn calendar_limits() -> Calendar {
 
 fn calendar_weeks() -> Calendar {
     Calendar::new("weeks")
-        .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
-        .week_start(Weekday::Mon)
+        .today(Date::new(2026, 11, 3).unwrap_or_default())
+        .week_start(Weekday::Monday)
         .week_numbers()
         .fixed_weeks()
 }
 
 fn calendar_dropdowns() -> Calendar {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
     Calendar::new("born")
         .name("born")
         .today(today)
-        .month(NaiveDate::from_ymd_opt(1990, 5, 1).unwrap_or_default())
+        .month(Date::new(1990, 5, 1).unwrap_or_default())
         .caption(CaptionLayout::Dropdowns)
         .max(today)
 }
 
 fn calendar_locales() -> impl IntoIterator<Item = (&'static str, Calendar)> {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
     [
         (
             "de",
@@ -298,8 +298,8 @@ fn calendar_locales() -> impl IntoIterator<Item = (&'static str, Calendar)> {
 }
 
 fn calendar_states() -> impl IntoIterator<Item = (&'static str, Calendar)> {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
-    let chosen = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
+    let chosen = Date::new(2026, 11, 12).unwrap_or_default();
     [
         (
             "Read only",
@@ -320,8 +320,8 @@ fn calendar_states() -> impl IntoIterator<Item = (&'static str, Calendar)> {
 
 fn date_picker_thumb() -> DatePicker {
     DatePicker::new("thumb")
-        .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
-        .value(NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default())
+        .today(Date::new(2026, 11, 3).unwrap_or_default())
+        .value(Date::new(2026, 11, 12).unwrap_or_default())
         .label("Date")
 }
 
@@ -329,23 +329,23 @@ fn date_picker_default() -> Field {
     Field::new("due", "Due date")
         .help("Type it as 11/30/2026, or pick it.")
         .control(
-            DatePicker::new("due").today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default()),
+            DatePicker::new("due").today(Date::new(2026, 11, 3).unwrap_or_default()),
         )
 }
 
 fn date_picker_options() -> Field {
     Field::new("follow-up", "Follow up").control(
         DatePicker::new("follow_up")
-            .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
-            .value(NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default())
+            .today(Date::new(2026, 11, 3).unwrap_or_default())
+            .value(Date::new(2026, 11, 12).unwrap_or_default())
             .clearable()
             .with_today(),
     )
 }
 
 fn date_picker_states() -> impl IntoIterator<Item = (&'static str, Field)> {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
-    let chosen = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
+    let chosen = Date::new(2026, 11, 12).unwrap_or_default();
     [
         (
             "Invalid",
@@ -377,7 +377,7 @@ fn date_picker_states() -> impl IntoIterator<Item = (&'static str, Field)> {
 
 fn date_picker_button() -> DatePicker {
     DatePicker::new("when")
-        .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
+        .today(Date::new(2026, 11, 3).unwrap_or_default())
         .style(PickerStyle::Button)
         .placeholder("Pick a day")
         .clearable()
@@ -385,8 +385,8 @@ fn date_picker_button() -> DatePicker {
 }
 
 fn date_picker_locales() -> impl IntoIterator<Item = (&'static str, DatePicker)> {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
-    let chosen = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
+    let chosen = Date::new(2026, 11, 12).unwrap_or_default();
     [
         (
             "de",
@@ -416,18 +416,18 @@ fn date_picker_locales() -> impl IntoIterator<Item = (&'static str, DatePicker)>
 }
 
 fn date_picker_birth() -> Field {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
     Field::new("born", "Date of birth").control(
         DatePicker::new("born")
             .today(today)
             .caption(CaptionLayout::Dropdowns)
             .max(today)
-            .value(NaiveDate::from_ymd_opt(1990, 5, 17).unwrap_or_default()),
+            .value(Date::new(1990, 5, 17).unwrap_or_default()),
     )
 }
 
 fn date_range_picker_thumb() -> DateRangePicker {
-    let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap_or_default();
+    let day = |d| Date::new(2026, 11, d).unwrap_or_default();
     DateRangePicker::new("from", "to")
         .today(day(3))
         .title("Created")
@@ -436,14 +436,14 @@ fn date_range_picker_thumb() -> DateRangePicker {
 
 fn date_range_picker_default() -> DateRangePicker {
     DateRangePicker::new("from", "to")
-        .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
-        .week_start(Weekday::Mon)
+        .today(Date::new(2026, 11, 3).unwrap_or_default())
+        .week_start(Weekday::Monday)
         .title("Created")
 }
 
 fn date_range_picker_presets() -> DateRangePicker {
     DateRangePicker::new("from", "to")
-        .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
+        .today(Date::new(2026, 11, 3).unwrap_or_default())
         .presets([
             DatePreset::Today,
             DatePreset::Last7Days,
@@ -457,7 +457,7 @@ fn date_range_picker_presets() -> DateRangePicker {
 }
 
 fn date_range_picker_confirm() -> DateRangePicker {
-    let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap_or_default();
+    let day = |m, d| Date::new(2026, m, d).unwrap_or_default();
     DateRangePicker::new("from", "to")
         .today(day(11, 3))
         .value(DateRange::new(day(10, 27), day(11, 3)))
@@ -466,7 +466,7 @@ fn date_range_picker_confirm() -> DateRangePicker {
 }
 
 fn date_range_picker_limits() -> DateRangePicker {
-    let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap_or_default();
+    let day = |m, d| Date::new(2026, m, d).unwrap_or_default();
     // The limits are one value: the same one holds the request on the server.
     let limits = RangeRules::new(DateRules::new().min(day(10, 15)).max(day(11, 20)))
         .min_days(2)
@@ -483,7 +483,7 @@ fn date_range_picker_limits() -> DateRangePicker {
 }
 
 fn date_range_picker_report() -> Node {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
     // The picker lives in a GET form, so the window is in the address, and the form
     // fetches its region again when the window changes.
     el("form")
@@ -494,7 +494,7 @@ fn date_range_picker_report() -> Node {
             DateRangePicker::new("from", "to")
                 .today(today)
                 .title("Created")
-                .value(DateRange::new(today - chrono::Duration::days(6), today)),
+                .value(DateRange::new(today.add_days(-6).unwrap_or(today), today)),
             Button::primary("Apply").submit(),
         ))
         .into()
@@ -502,18 +502,18 @@ fn date_range_picker_report() -> Node {
 
 fn time_picker_thumb() -> TimePicker {
     TimePicker::new("thumb")
-        .value(NaiveTime::from_hms_opt(14, 30, 0).unwrap_or_default())
+        .value(Time::new(14, 30, 0).unwrap_or_default())
         .label("Time")
 }
 
 fn time_picker_default() -> Field {
     Field::new("starts", "Starts at").control(
-        TimePicker::new("starts").value(NaiveTime::from_hms_opt(14, 30, 0).unwrap_or_default()),
+        TimePicker::new("starts").value(Time::new(14, 30, 0).unwrap_or_default()),
     )
 }
 
 fn time_picker_clocks() -> impl IntoIterator<Item = (&'static str, TimePicker)> {
-    let at = NaiveTime::from_hms_opt(15, 5, 0).unwrap_or_default();
+    let at = Time::new(15, 5, 0).unwrap_or_default();
     [
         ("en", TimePicker::new("en").value(at).label("Time")),
         (
@@ -534,7 +534,7 @@ fn time_picker_clocks() -> impl IntoIterator<Item = (&'static str, TimePicker)> 
 }
 
 fn time_picker_rules() -> Field {
-    let at = |h| NaiveTime::from_hms_opt(h, 0, 0).unwrap_or_default();
+    let at = |h| Time::new(h, 0, 0).unwrap_or_default();
     Field::new("visit-time", "Visit").control(
         TimePicker::new("visit").rules(
             TimeRules::new()
@@ -542,7 +542,7 @@ fn time_picker_rules() -> Field {
                 .max(at(17))
                 .unavailable(
                     at(12),
-                    NaiveTime::from_hms_opt(12, 59, 0).unwrap_or_default(),
+                    Time::new(12, 59, 0).unwrap_or_default(),
                 )
                 .step_minutes(15),
         ),
@@ -550,7 +550,7 @@ fn time_picker_rules() -> Field {
 }
 
 fn time_picker_states() -> impl IntoIterator<Item = (&'static str, TimePicker)> {
-    let at = NaiveTime::from_hms_opt(8, 0, 0).unwrap_or_default();
+    let at = Time::new(8, 0, 0).unwrap_or_default();
     [
         (
             "Invalid",
@@ -575,21 +575,21 @@ fn time_picker_states() -> impl IntoIterator<Item = (&'static str, TimePicker)> 
 
 fn time_picker_zone() -> TimePicker {
     TimePicker::new("meeting")
-        .value(NaiveTime::from_hms_opt(9, 0, 0).unwrap_or_default())
+        .value(Time::new(9, 0, 0).unwrap_or_default())
         .zone_note("Times are in Asia/Kolkata (IST).")
         .label("Meeting")
 }
 
 /// 12 November 2026, 2:30 in the afternoon: the dates pages' today is 3 November.
-fn date_time() -> chrono::NaiveDateTime {
-    NaiveDate::from_ymd_opt(2026, 11, 12)
+fn date_time() -> DateTime {
+    Date::new(2026, 11, 12)
         .unwrap_or_default()
-        .and_time(NaiveTime::from_hms_opt(14, 30, 0).unwrap_or_default())
+        .at(Time::new(14, 30, 0).unwrap_or_default())
 }
 
 fn date_time_picker_thumb() -> DateTimePicker {
     DateTimePicker::new("thumb")
-        .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
+        .today(Date::new(2026, 11, 3).unwrap_or_default())
         .value(date_time())
         .label("Starts")
 }
@@ -597,29 +597,29 @@ fn date_time_picker_thumb() -> DateTimePicker {
 fn date_time_picker_default() -> Field {
     Field::new("starts", "Starts").control(
         DateTimePicker::new("starts")
-            .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
+            .today(Date::new(2026, 11, 3).unwrap_or_default())
             .value(date_time()),
     )
 }
 
 fn date_time_picker_rules() -> Field {
-    let at = |h| NaiveTime::from_hms_opt(h, 0, 0).unwrap_or_default();
+    let at = |h| Time::new(h, 0, 0).unwrap_or_default();
     Field::new("visit", "Site visit")
         .help("Weekdays, from 9 in the morning to 5 in the evening.")
         .control(
             DateTimePicker::new("visit")
-                .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
+                .today(Date::new(2026, 11, 3).unwrap_or_default())
                 .date_rules(
                     DateRules::new()
-                        .min(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
-                        .disable_weekdays([Weekday::Sat, Weekday::Sun]),
+                        .min(Date::new(2026, 11, 3).unwrap_or_default())
+                        .disable_weekdays([Weekday::Saturday, Weekday::Sunday]),
                 )
                 .time_rules(TimeRules::new().min(at(9)).max(at(17)).step_minutes(30)),
         )
 }
 
 fn date_time_picker_states() -> impl IntoIterator<Item = (&'static str, Field)> {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
     [
         (
             "Invalid",
@@ -657,7 +657,7 @@ fn date_time_picker_zone() -> Field {
     Field::new("call", "Call with Harpreet Sandhu").control(
         DateTimePicker::new("call")
             .locale(DateLocale::of("en-IN"))
-            .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())
+            .today(Date::new(2026, 11, 3).unwrap_or_default())
             .value(date_time())
             .zone_note("Times are in Asia/Kolkata (IST)."),
     )

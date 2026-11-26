@@ -2,7 +2,7 @@
 //! takes a while. `NAVREE_TEST_MONGODB_URL` names the server and the collection
 //! `dt_big` lives in the database `ui_dt_big`.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::mongo::{MongoDb, MongoOptions};
 use navree::orm::Model;
 use navree::ui::table::NoFilter;
@@ -29,7 +29,7 @@ pub struct Big {
     #[col(sortable, numeric, filter = range)]
     pub amount: Option<i64>,
     #[col(sortable, filter = date)]
-    pub created_on: Option<NaiveDate>,
+    pub created_on: Option<Date>,
 }
 
 #[derive(Clone, TableRow)]
@@ -44,7 +44,7 @@ pub struct BigRow {
     #[col(sortable, numeric, filter = range)]
     pub amount: Option<i64>,
     #[col(sortable, filter = date)]
-    pub created_on: Option<NaiveDate>,
+    pub created_on: Option<Date>,
 }
 
 fn median(mut times: Vec<u128>) -> u128 {

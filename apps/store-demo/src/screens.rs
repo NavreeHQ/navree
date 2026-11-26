@@ -8,7 +8,7 @@
 //! answer a browser with the page and a native client with the screen. What
 //! a screen does goes to the handlers the pages use.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::native::ui::*;
 
 use crate::data::{
@@ -101,7 +101,7 @@ pub struct Today<'a> {
     pub events: u64,
     /// The stream that says when the shop moved.
     pub stream: String,
-    pub today: NaiveDate,
+    pub today: Date,
 }
 
 /// The day at a glance: what it brought in, its figures, what needs a hand,
@@ -349,7 +349,7 @@ fn activity(day: &Today<'_>) -> Section {
 pub const ACTIVITY: &str = "activity";
 
 /// One event: who did what to which order or product, and when.
-pub fn activity_row(entry: &FeedEntry, today: NaiveDate) -> FeedRow {
+pub fn activity_row(entry: &FeedEntry, today: Date) -> FeedRow {
     let event = &entry.event;
     let Some(kind) = Kind::parse(&event.kind) else {
         return FeedRow::new("The shop", "changed", "").id(format!("event-{}", event.id));
@@ -450,7 +450,7 @@ pub fn activity_row(entry: &FeedEntry, today: NaiveDate) -> FeedRow {
 
 /// The rows that came since a client's newest, as the change to its list: the
 /// events to merge in at the top, and the cursor the list is at now.
-pub fn activity_since(entries: &[FeedEntry], asked: &str, today: NaiveDate) -> Vec<Op> {
+pub fn activity_since(entries: &[FeedEntry], asked: &str, today: Date) -> Vec<Op> {
     let since = entries.first().map_or_else(
         || asked.to_owned(),
         |entry| Cursor::of(&entry.event).to_string(),
@@ -475,7 +475,7 @@ pub struct OrderScreen<'a> {
     pub history: &'a [Event],
     /// The customer's latest other orders.
     pub others: &'a [Order],
-    pub today: NaiveDate,
+    pub today: Date,
 }
 
 /// An order as a record: its state, what was bought, who bought it and where
@@ -590,7 +590,7 @@ pub fn order_body(shown: &OrderScreen<'_>) -> Stack {
 
 /// Where the order stands: its three states in words, its total set large,
 /// and when it was placed.
-fn state(view: &OrderView, today: NaiveDate) -> Card {
+fn state(view: &OrderView, today: Date) -> Card {
     let order = &view.order;
     let badge = |words: &str, tone: Tone| Badge::new(words).tone(tone).dot();
     let status = Status::parse(&order.status);
@@ -768,7 +768,7 @@ fn delivery(view: &OrderView) -> Section {
 }
 
 /// The steps an order goes through: what happened, and what is still to come.
-fn steps(order: &Order, history: &[Event], today: NaiveDate) -> Timeline {
+fn steps(order: &Order, history: &[Event], today: Date) -> Timeline {
     let house = warehouse(&order.warehouse);
     let cancelled = Status::parse(&order.status) == Status::Cancelled;
     let reached = |kind: Kind| history.iter().any(|event| event.kind == kind.key());

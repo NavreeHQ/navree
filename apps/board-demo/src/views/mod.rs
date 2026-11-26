@@ -2,7 +2,7 @@
 //! them with rows from the database, and the website's previews call them with the
 //! seed, so both draw the same thing.
 
-use chrono::NaiveDate;
+use navree::datetime::{Date, Timestamp};
 use navree::ui::*;
 
 use crate::data::{PROJECT, Person, TEAM, person_icon};
@@ -41,8 +41,8 @@ pub fn shell() -> Shell {
 
 /// How a due date reads beside today, and the tone it is drawn in: late is red,
 /// today and tomorrow amber.
-pub fn due_label(due: NaiveDate, today: NaiveDate) -> (String, Tone) {
-    let days = (due - today).num_days();
+pub fn due_label(due: Date, today: Date) -> (String, Tone) {
+    let days = today.days_until(due);
     match days {
         ..=-2 => (format!("{} days late", -days), Tone::Danger),
         -1 => ("1 day late".to_owned(), Tone::Danger),
@@ -70,9 +70,9 @@ pub fn person(people: &[Person], id: Option<i64>) -> Option<&Person> {
 
 /// `Tue 3 Nov, 19:35`, in India's time.
 pub fn moment(at: i64) -> String {
-    chrono::DateTime::from_timestamp(at, 0)
+    Timestamp::from_secs(at)
         .map(|time| {
-            time.with_timezone(&crate::data::ist())
+            time.in_zone(crate::data::ist())
                 .format("%a %-d %b, %H:%M")
                 .to_string()
         })
@@ -90,8 +90,8 @@ mod tests {
 
     #[test]
     fn due_dates_read_from_today() {
-        let today = NaiveDate::from_ymd_opt(2026, 11, 4).unwrap_or_default();
-        let at = |days: i64| today + chrono::Duration::days(days);
+        let today = Date::new(2026, 11, 4).unwrap_or_default();
+        let at = |days: i64| today.add_days(days).unwrap_or(today);
         assert_eq!(
             due_label(at(-3), today),
             ("3 days late".to_owned(), Tone::Danger)

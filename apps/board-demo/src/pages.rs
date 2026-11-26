@@ -22,9 +22,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use chrono::NaiveDate;
 use http::header::SET_COOKIE;
 use http::{HeaderMap, Method, StatusCode};
+use navree::datetime::Date;
 use navree::db::{Db, Uow};
 use navree::http::extract::{Path, Query};
 use navree::http::response::{IntoResponse, Response};
@@ -62,7 +62,7 @@ type Params = HashMap<String, String>;
 const AS: &str = "board_as";
 
 /// Today, in India.
-fn today() -> NaiveDate {
+fn today() -> Date {
     day_of(now())
 }
 

@@ -2,7 +2,7 @@
 //! off. Its description, a checklist whose lines move like the cards do, the
 //! comments, and what happened to it.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::form::FormView;
 use navree::ui::*;
 use serde::Deserialize;
@@ -29,7 +29,7 @@ pub struct CardData {
 }
 
 /// The card in the drawer: about 60% of the width, with the board in sight behind it.
-pub fn card_sheet(data: &CardData, viewer: &Person, today: NaiveDate) -> Sheet {
+pub fn card_sheet(data: &CardData, viewer: &Person, today: Date) -> Sheet {
     let column = Column::parse(&data.card.list).unwrap_or(Column::Backlog);
     Sheet::new(DRAWER, data.card.title.clone())
         .width(SheetWidth::Lg)
@@ -55,7 +55,7 @@ pub fn card_sheet(data: &CardData, viewer: &Person, today: NaiveDate) -> Sheet {
 pub fn card_detail(
     data: &CardData,
     viewer: &Person,
-    today: NaiveDate,
+    today: Date,
     form: Option<FormView<CommentForm>>,
 ) -> Node {
     Grid::cols(3)
@@ -76,7 +76,7 @@ pub fn card_detail(
 }
 
 /// Who has it, when it is due, where it is.
-fn facts(data: &CardData, today: NaiveDate) -> Node {
+fn facts(data: &CardData, today: Date) -> Node {
     let card = &data.card;
     let assignee = match person(&data.people, card.assignee) {
         Some(who) => FactCard::new("Assignee", who.name.clone()).detail(who.job.clone()),

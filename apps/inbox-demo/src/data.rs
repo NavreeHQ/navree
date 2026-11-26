@@ -4,7 +4,7 @@
 //! Every name, company and address here is invented. Addresses are on
 //! `example.com`, `example.org` and `example.net`.
 
-use chrono::{DateTime, NaiveDate};
+use navree::datetime::{Date, Timestamp};
 use navree::orm::Model;
 use navree::ui::{Tone, icons};
 
@@ -54,7 +54,7 @@ pub struct Customer {
     /// A two-letter country code.
     pub country: String,
     pub city: String,
-    pub since: Option<NaiveDate>,
+    pub since: Option<Date>,
     /// Comma separated.
     pub tags: String,
 }
@@ -86,7 +86,7 @@ pub struct Conversation {
     pub sla_due: Option<i64>,
     /// When the clock started, to say how much of it is left.
     pub sla_from: Option<i64>,
-    pub snoozed_until: Option<NaiveDate>,
+    pub snoozed_until: Option<Date>,
     /// Customer messages no agent has opened yet.
     pub unread: i64,
     /// The latest message, short, for the list.
@@ -563,8 +563,10 @@ pub fn saved(key: &str) -> Option<&'static SavedReply> {
 }
 
 /// The day of a moment in the desk's zone.
-pub fn day_of(at: i64) -> Option<NaiveDate> {
-    DateTime::from_timestamp(at + i64::from(OFFSET), 0).map(|time| time.date_naive())
+pub fn day_of(at: i64) -> Option<Date> {
+    Timestamp::from_secs(at + i64::from(OFFSET))
+        .ok()
+        .map(|time| time.date_time_utc().date())
 }
 
 /// Where a conversation's clock stands.
@@ -1196,9 +1198,7 @@ pub fn seed(now: i64) -> Seed {
             Plan::Enterprise => 30 + dice.below(50) as i64,
         };
         let months = 3 + dice.below(40) as i64;
-        let since = today
-            .checked_sub_signed(chrono::Duration::days(months * 30))
-            .unwrap_or(today);
+        let since = today.add_days(-(months * 30)).unwrap_or(today);
         let lifetime = plan.seat_paise() * seats * months;
         let mut tags: Vec<&str> = Vec::new();
         for _ in 0..1 + dice.below(3) {
@@ -1410,7 +1410,7 @@ pub fn seed(now: i64) -> Seed {
                 sla_due,
                 sla_from,
                 snoozed_until: (status == Status::Snoozed)
-                    .then(|| today.checked_add_signed(chrono::Duration::days(3)))
+                    .then(|| today.add_days(3))
                     .flatten(),
                 unread,
                 preview: preview_of(&last_body),

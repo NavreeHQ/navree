@@ -120,7 +120,7 @@ pub struct NewDeal {
     pub stage: Stage,
     /// Expected close
     #[validate(skip)]
-    pub closes_on: Option<chrono::NaiveDate>,
+    pub closes_on: Option<navree::datetime::Date>,
     /// Hot deal
     #[validate(skip)]
     pub hot: bool,

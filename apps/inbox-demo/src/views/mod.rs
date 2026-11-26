@@ -2,7 +2,7 @@
 //! with rows from the database, and the website's previews call them with the seed,
 //! so both draw the same thing.
 
-use chrono::DateTime;
+use navree::datetime::Timestamp;
 use navree::ui::flags::CountryCode;
 use navree::ui::{NavGroup, NavItem, Shell, ToastPosition, UserMenu, icons};
 
@@ -294,9 +294,9 @@ pub fn written(at: i64, now: i64) -> String {
     let time = clock(at);
     if day == today {
         format!("Today, {time}")
-    } else if today.pred_opt() == Some(day) {
+    } else if today.yesterday() == Some(day) {
         format!("Yesterday, {time}")
-    } else if day.format("%Y").to_string() == today.format("%Y").to_string() {
+    } else if day.year() == today.year() {
         format!("{}, {time}", day.format("%-d %b"))
     } else {
         format!("{}, {time}", day.format("%-d %b %Y"))
@@ -310,15 +310,15 @@ pub fn only_first_name(name: &str) -> String {
 
 /// `09:41` in the desk's zone.
 pub fn clock(at: i64) -> String {
-    DateTime::from_timestamp(at + i64::from(OFFSET), 0)
-        .map(|time| time.format("%H:%M").to_string())
+    Timestamp::from_secs(at + i64::from(OFFSET))
+        .map(|time| time.date_time_utc().format("%H:%M").to_string())
         .unwrap_or_default()
 }
 
 /// `3 Nov, 09:41` in the desk's zone.
 pub fn moment(at: i64) -> String {
-    DateTime::from_timestamp(at + i64::from(OFFSET), 0)
-        .map(|time| time.format("%-d %b, %H:%M").to_string())
+    Timestamp::from_secs(at + i64::from(OFFSET))
+        .map(|time| time.date_time_utc().format("%-d %b, %H:%M").to_string())
         .unwrap_or_default()
 }
 
@@ -330,8 +330,8 @@ pub fn ago(at: i64, now: i64) -> String {
         60..=3599 => format!("{} min", s / 60),
         3600..=86_399 => format!("{} h", s / 3600),
         86_400..=604_799 => format!("{} d", s / 86_400),
-        _ => DateTime::from_timestamp(at + i64::from(OFFSET), 0)
-            .map(|time| time.format("%-d %b").to_string())
+        _ => Timestamp::from_secs(at + i64::from(OFFSET))
+            .map(|time| time.date_time_utc().format("%-d %b").to_string())
             .unwrap_or_default(),
     }
 }

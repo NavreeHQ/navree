@@ -134,7 +134,7 @@ fn seeded(moves: &[(i64, Column)]) -> BoardData {
     }
 }
 
-fn today() -> chrono::NaiveDate {
+fn today() -> navree::datetime::Date {
     data::day_of(NOW)
 }
 

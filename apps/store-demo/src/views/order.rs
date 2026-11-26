@@ -2,7 +2,7 @@
 //! paid, the route from the warehouse, the notes, and what staff can do to it.
 //! The drawer over the orders table and the order's own page both draw this.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::form::{FormView, Money};
 use navree::ui::*;
 use serde::Deserialize;
@@ -29,7 +29,7 @@ pub struct OrderView {
     /// How many orders its customer has placed, this one too.
     pub orders: u64,
     /// When the customer joined.
-    pub since: Option<NaiveDate>,
+    pub since: Option<Date>,
     /// The customer's phone number, in E.164.
     pub phone: String,
     /// Now, for the actions that depend on the time.
@@ -563,7 +563,7 @@ fn post_form(action: String, button: Button) -> Element {
 }
 
 /// The badges and the moment, across the top.
-fn summary(view: &OrderView, today: NaiveDate) -> Row {
+fn summary(view: &OrderView, today: Date) -> Row {
     let order = &view.order;
     Row::gap(3)
         .align(Align::Center)
@@ -652,7 +652,7 @@ pub const OTHERS: &str = "order-others";
 
 /// The customer's latest other orders: each a link with its date, its badge and
 /// its total.
-pub fn other_orders(others: &[Order], today: NaiveDate) -> Node {
+pub fn other_orders(others: &[Order], today: Date) -> Node {
     if others.is_empty() {
         return Text::muted("This is their first order.").into();
     }
@@ -694,7 +694,7 @@ pub fn other_orders(others: &[Order], today: NaiveDate) -> Node {
 pub fn order_detail(
     view: &OrderView,
     level: u8,
-    today: NaiveDate,
+    today: Date,
     open_as_page: bool,
     parts: Parts<'_>,
 ) -> Stack {
@@ -743,7 +743,7 @@ pub fn order_detail(
 
 /// The drawer a row of the table opens, filled for one order: over the table,
 /// 60% of the screen wide.
-pub fn order_drawer(view: &OrderView, today: NaiveDate, parts: Parts<'_>) -> Sheet {
+pub fn order_drawer(view: &OrderView, today: Date, parts: Parts<'_>) -> Sheet {
     let order = &view.order;
     let sheet = Sheet::new(DRAWER, format!("Order {}", order.number))
         .width(SheetWidth::Xl)
@@ -763,7 +763,7 @@ pub fn order_drawer(view: &OrderView, today: NaiveDate, parts: Parts<'_>) -> She
 }
 
 /// The order on a page of its own: the same detail and the same dialogs.
-pub fn order_page(view: &OrderView, today: NaiveDate, parts: Parts<'_>) -> Element {
+pub fn order_page(view: &OrderView, today: Date, parts: Parts<'_>) -> Element {
     el("div")
         .attr("id", PAGE)
         .child((order_detail(view, 2, today, false, parts), dialogs(view)))

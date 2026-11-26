@@ -27,10 +27,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use chrono::{DateTime, NaiveDate, Utc};
 use http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, COOKIE, REFERER, SET_COOKIE};
 use http::request::Parts;
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
+use navree::datetime::{Date, Span, Timestamp};
 use navree::db::{Db, Executor as DbExecutor, Uow};
 use navree::http::extract::{Json, Path, Query};
 use navree::http::response::{IntoResponse, Response};
@@ -80,7 +80,7 @@ pub struct Pages {
 type Result<T> = std::result::Result<T, AppError>;
 
 /// Today in the desk's zone.
-fn today() -> NaiveDate {
+fn today() -> Date {
     day_of(now()).unwrap_or_default()
 }
 
@@ -248,8 +248,8 @@ fn no_store(mut response: Response) -> Response {
 /// The cookie's value that says a visitor works as `agent`, signed with the app's key and
 /// good for a year: `7.1825329600.<signature>`. The signature is the app's own
 /// [`UrlSigner`]'s, over `/as/7` and the expiry.
-pub fn agent_cookie(signer: &UrlSigner, agent: i64, now: DateTime<Utc>) -> String {
-    let signed = signer.sign(&format!("/as/{agent}"), now + chrono::Duration::days(365));
+pub fn agent_cookie(signer: &UrlSigner, agent: i64, now: Timestamp) -> String {
+    let signed = signer.sign(&format!("/as/{agent}"), now + Span::days(365));
     let query = signed.split_once('?').map_or("", |(_, query)| query);
     let mut expires = "";
     let mut signature = "";
@@ -265,7 +265,7 @@ pub fn agent_cookie(signer: &UrlSigner, agent: i64, now: DateTime<Utc>) -> Strin
 
 /// The agent a signed cookie's value names, if the app signed it and it hasn't expired at
 /// `now`: anything else names nobody.
-pub fn agent_of_cookie(signer: &UrlSigner, value: &str, now: DateTime<Utc>) -> Option<i64> {
+pub fn agent_of_cookie(signer: &UrlSigner, value: &str, now: Timestamp) -> Option<i64> {
     let mut parts = value.splitn(3, '.');
     let (agent, expires, signature) = (parts.next()?, parts.next()?, parts.next()?);
     let digits = |text: &str| {
@@ -294,7 +294,7 @@ async fn who(
     headers: &HeaderMap,
 ) -> Result<Agent> {
     let wanted = cookie(headers, AGENT_COOKIE)
-        .and_then(|value| agent_of_cookie(signer, value, Utc::now()))
+        .and_then(|value| agent_of_cookie(signer, value, Timestamp::now()))
         .unwrap_or(DEFAULT_AGENT);
     if let Some(agent) = Agent::query()
         .where_(Agent::ACTIVE.eq(true))
@@ -963,7 +963,7 @@ impl Pages {
             Conversation::INBOX.set(inbox_of(status.key()).to_owned()),
             Conversation::LAST_AT.set(at),
             Conversation::LAST_REV.set(rev),
-            Conversation::SNOOZED_UNTIL.set(None::<NaiveDate>),
+            Conversation::SNOOZED_UNTIL.set(None::<Date>),
             Conversation::REV.set(rev),
             Conversation::MESSAGES.set_expr(plus_one("messages")),
         ];
@@ -1076,7 +1076,7 @@ impl Pages {
         uow: &Uow,
         headers: &HeaderMap,
         id: i64,
-        day: NaiveDate,
+        day: Date,
     ) -> Result<Response> {
         let Some(found) = conversation(uow, id).await? else {
             return Ok(missing_reply());
@@ -1126,11 +1126,11 @@ impl Pages {
     }
 
     /// The day a quick choice means.
-    fn preset_day(preset: &str) -> Option<NaiveDate> {
+    fn preset_day(preset: &str) -> Option<Date> {
         let today = today();
         match preset {
-            "tomorrow" => today.succ_opt(),
-            "next-week" => today.checked_add_signed(chrono::Duration::days(7)),
+            "tomorrow" => today.tomorrow(),
+            "next-week" => today.add_days(7),
             _ => None,
         }
     }
@@ -1150,9 +1150,7 @@ impl Pages {
             Err(rejected) => return Ok(rejected.into_response()),
         };
         let today = today();
-        let last = today
-            .checked_add_signed(chrono::Duration::days(SNOOZE_DAYS))
-            .unwrap_or(today);
+        let last = today.add_days(SNOOZE_DAYS).unwrap_or(today);
         let day = match form.preset.as_deref().filter(|preset| !preset.is_empty()) {
             Some(preset) => Self::preset_day(preset),
             None => form.until,
@@ -1324,7 +1322,7 @@ impl Pages {
             .into_response();
         if let Ok(value) = HeaderValue::from_str(&format!(
             "{AGENT_COOKIE}={}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly",
-            agent_cookie(&self.signer, found.id, Utc::now())
+            agent_cookie(&self.signer, found.id, Timestamp::now())
         )) {
             response.headers_mut().append(SET_COOKIE, value);
         }

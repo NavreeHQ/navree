@@ -16,7 +16,6 @@ path = "src/main.rs"
 unsafe_code = "forbid"
 
 [dependencies]
-chrono = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
 # A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo

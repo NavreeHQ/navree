@@ -4,7 +4,7 @@
 //! A column holds thousands of cards, so the page draws the first ones and each
 //! column loads more as it is scrolled, a page at a time, by a cursor.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::*;
 
 use crate::data::{Card, Column, Label, PROJECT, Person, labels_of};
@@ -148,7 +148,7 @@ pub fn column(
     people: &[Person],
     viewer: &Person,
     filters: &Filters,
-    today: NaiveDate,
+    today: Date,
 ) -> SortList {
     let column = page.column;
     let shown = page.start + page.cards.len();
@@ -195,7 +195,7 @@ pub fn column(
 /// The columns. A move posts to `/board/moves`, where the server checks it
 /// against the board as it is then and gives the card a rank between its new
 /// neighbours'.
-pub fn columns(data: &BoardData, viewer: &Person, filters: &Filters, today: NaiveDate) -> Sortable {
+pub fn columns(data: &BoardData, viewer: &Person, filters: &Filters, today: Date) -> Sortable {
     let mut pairs = filters.pairs();
     pairs.extend(shown_pairs(data));
     Sortable::new("columns", format!("{PROJECT} board"))
@@ -210,7 +210,7 @@ pub fn columns(data: &BoardData, viewer: &Person, filters: &Filters, today: Naiv
 
 /// One card as the board shows it: its labels, its title (which opens the drawer),
 /// who has it, when it is due, its checklist and its comments.
-pub fn card_face(card: &Card, people: &[Person], today: NaiveDate) -> Node {
+pub fn card_face(card: &Card, people: &[Person], today: Date) -> Node {
     let labels = labels_of(&card.labels);
     let mut facts = Vec::new();
     if let Some(who) = person(people, card.assignee) {
@@ -311,7 +311,7 @@ pub fn filter_bar(people: &[Person], filters: &Filters) -> Node {
 /// The board in its region: redrawn by the filters, and fetched again whenever the
 /// event stream says the board changed, so other people's moves slide in. Its
 /// source asks for as many cards in each column as the page holds.
-pub fn board(data: &BoardData, viewer: &Person, filters: &Filters, today: NaiveDate) -> Region {
+pub fn board(data: &BoardData, viewer: &Person, filters: &Filters, today: Date) -> Region {
     let mut pairs = filters.pairs();
     pairs.extend(shown_pairs(data));
     Region::new(REGION)
@@ -377,7 +377,7 @@ pub fn board_page(
     data: &BoardData,
     viewer: &Person,
     filters: &Filters,
-    today: NaiveDate,
+    today: Date,
 ) -> AppPage {
     page.actions((
         web_only(Command::trigger("jump", "Find a card")),

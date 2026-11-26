@@ -9,7 +9,6 @@
 //! - `order_card` draws one order, with Mark delivered and Refund for a manager. Refund
 //!   asks first, in a dialog the page draws.
 
-use chrono::Utc;
 use navree::access::{Read, Update};
 use navree::ai::ui::genui::{
     Action, ActionButton, ActionDone, AppError, BoxFuture, Catalog, Key, RunAction, Surface,
@@ -17,6 +16,7 @@ use navree::ai::ui::genui::{
 };
 use navree::ai::ui::{AssistantConfig, PageContext};
 use navree::ai::{Agent, AgentOptions, AgentRun, agent};
+use navree::datetime::Timestamp;
 use navree::injectable;
 use navree::openapi::ToSchema;
 use navree::orm::Model as _;
@@ -112,7 +112,7 @@ impl Agent for ShopAssistant {
              show `order_card`. To refund an order, call `refund_order`: the user approves it on \
              the page. Answer in one or two short sentences.",
             run.user().name,
-            Utc::now().with_timezone(&ist()).format("%A %-d %B %Y"),
+            Timestamp::now().in_zone(ist()).format("%A %-d %B %Y"),
         )
     }
 
@@ -234,7 +234,7 @@ impl Surface<AgentRun> for PaymentsByMethod {
         run: &'a AgentRun,
     ) -> BoxFuture<'a, Result<SurfaceView, AppError>> {
         Box::pin(async move {
-            let since = period_start(props.period.as_str(), Utc::now());
+            let since = period_start(props.period.as_str(), Timestamp::now());
             let orders: Vec<Order> = readable(run)
                 .await?
                 .into_iter()

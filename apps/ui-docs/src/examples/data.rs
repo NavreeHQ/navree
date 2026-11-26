@@ -153,12 +153,12 @@ pub struct Deal {
     #[col(sortable, numeric, filter = range, label = "Amount (₹)")]
     pub amount: Money,
     #[col(sortable, filter = date, label = "Closes")]
-    pub closes_on: chrono::NaiveDate,
+    pub closes_on: navree::datetime::Date,
 }
 
 /// Five deals, the same on every run.
 fn deals() -> Vec<Deal> {
-    let day = |d| chrono::NaiveDate::from_ymd_opt(2026, 11, d).unwrap_or_default();
+    let day = |d| navree::datetime::Date::new(2026, 11, d).unwrap_or_default();
     [
         (
             1,

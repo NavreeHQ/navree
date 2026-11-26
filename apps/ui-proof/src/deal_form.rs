@@ -63,7 +63,7 @@ pub struct NewDeal {
     pub currency: Currency,
     /// Expected close
     #[validate(skip)]
-    pub expected_close_date: Option<chrono::NaiveDate>,
+    pub expected_close_date: Option<navree::datetime::Date>,
     #[validate(skip)]
     pub stage: Stage,
     /// Owner

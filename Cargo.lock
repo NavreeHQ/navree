@@ -64,7 +64,6 @@ dependencies = [
 name = "agent-demo"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree",
  "serde",
@@ -733,7 +732,6 @@ dependencies = [
 name = "board-demo"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree",
  "serde",
@@ -3157,7 +3155,6 @@ checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
 name = "inbox-demo"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree",
  "serde",
@@ -8843,7 +8840,6 @@ checksum = "d7beae5182595e9a8b683fa98c4317f956c9a2dec3b9716990d20023cc60c766"
 name = "store-demo"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree",
  "serde",
@@ -9927,7 +9923,6 @@ name = "ui-docs"
 version = "1.6.0"
 dependencies = [
  "board-demo",
- "chrono",
  "inbox-demo",
  "navree",
  "proc-macro2",
@@ -9942,7 +9937,6 @@ dependencies = [
 name = "ui-proof"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "futures-util",
  "http",
  "navree",
@@ -9957,7 +9951,6 @@ dependencies = [
 name = "ui-table-proof"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "http",
  "navree",
  "serde",

@@ -222,7 +222,7 @@ pub fn hold_clock(at: i64) {
 /// Now, in unix seconds.
 pub fn now() -> i64 {
     match HELD.load(std::sync::atomic::Ordering::Relaxed) {
-        0 => chrono::Utc::now().timestamp(),
+        0 => navree::datetime::Timestamp::now().as_secs(),
         held => held,
     }
 }

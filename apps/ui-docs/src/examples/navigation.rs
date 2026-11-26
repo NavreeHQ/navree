@@ -105,7 +105,7 @@ pub struct OpenDeal {
     #[col(hide_on_mobile)]
     pub city: &'static str,
     #[col(sortable, filter = date, label = "Closes")]
-    pub closes_on: chrono::NaiveDate,
+    pub closes_on: navree::datetime::Date,
 }
 
 const OWNERS: &[(&str, &str)] = &[
@@ -139,7 +139,7 @@ fn rupees(amount: i64) -> String {
 
 /// The eight largest open deals, the same on every run.
 fn open_deals() -> Vec<OpenDeal> {
-    let day = |m, d| chrono::NaiveDate::from_ymd_opt(2026, m, d).unwrap_or_default();
+    let day = |m, d| navree::datetime::Date::new(2026, m, d).unwrap_or_default();
     [
         (
             1,

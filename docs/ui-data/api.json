@@ -2036,13 +2036,13 @@
       {
         "name": "selected",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The chosen day."
       },
       {
         "name": "selected_days",
         "generics": "",
-        "args": "days: impl IntoIterator<Item = NaiveDate>",
+        "args": "days: impl IntoIterator<Item = Date>",
         "doc": "The chosen days, for `CalendarMode::Multiple`."
       },
       {
@@ -2054,7 +2054,7 @@
       {
         "name": "month",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The month to open on, given as any day in it. By default the month of the choice, else the month of today."
       },
       {
@@ -2072,13 +2072,13 @@
       {
         "name": "min",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The earliest day that can be chosen."
       },
       {
         "name": "max",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The latest day that can be chosen."
       },
       {
@@ -2090,7 +2090,7 @@
       {
         "name": "today",
         "generics": "",
-        "args": "today: NaiveDate",
+        "args": "today: Date",
         "doc": "Today, as the page counts it. The calendar marks it and the browser module never asks the clock, so a page is the same wherever it is read. Without it, today is the day in UTC."
       },
       {
@@ -2216,19 +2216,19 @@
       {
         "name": "day",
         "generics": "",
-        "args": "date: NaiveDate, value: impl IntoValue",
+        "args": "date: Date, value: impl IntoValue",
         "doc": "Adds a day. A value that is not a finite number, or `None`, is a day with no data. A date given twice keeps the last value."
       },
       {
         "name": "days",
         "generics": "<V: IntoValue>",
-        "args": "days: impl IntoIterator<Item =(NaiveDate, V)>",
+        "args": "days: impl IntoIterator<Item =(Date, V)>",
         "doc": "Adds days: dates with their values. Days between them that are not given have no data."
       },
       {
         "name": "range",
         "generics": "",
-        "args": "first: NaiveDate, last: NaiveDate",
+        "args": "first: Date, last: Date",
         "doc": "Draws these dates, first to last, whether or not they have data: a range that starts before the first day given, or ends after the last, shows the days between as empty. Days given outside it are left out."
       },
       {
@@ -2791,13 +2791,13 @@
       {
         "name": "times",
         "generics": "",
-        "args": "times: impl IntoIterator<Item = NaiveDateTime>",
+        "args": "times: impl IntoIterator<Item = DateTime>",
         "doc": "Times along x, as wall-clock times in the zone the data was counted in."
       },
       {
         "name": "days",
         "generics": "",
-        "args": "days: impl IntoIterator<Item = NaiveDate>",
+        "args": "days: impl IntoIterator<Item = Date>",
         "doc": "Days along x."
       },
       {
@@ -5148,7 +5148,7 @@
       {
         "name": "format_range",
         "generics": "",
-        "args": "range: &DateRange, today: NaiveDate",
+        "args": "range: &DateRange, today: Date",
         "doc": "A range as a chip reads it: `Nov 1 – 3`, `Nov 28 – Dec 3`, `Dec 28, 2025 – Jan 4, 2026`. The year is left out when it is the year of `today` and the range stays inside it. One day reads as that day alone."
       }
     ],
@@ -5178,13 +5178,13 @@
       {
         "name": "value",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "Sets the date."
       },
       {
         "name": "value_opt",
         "generics": "",
-        "args": "day: Option<NaiveDate>",
+        "args": "day: Option<Date>",
         "doc": "Sets the date, or leaves the picker empty."
       },
       {
@@ -5202,13 +5202,13 @@
       {
         "name": "min",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The earliest day that can be chosen."
       },
       {
         "name": "max",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The latest day that can be chosen."
       },
       {
@@ -5220,7 +5220,7 @@
       {
         "name": "today",
         "generics": "",
-        "args": "today: NaiveDate",
+        "args": "today: Date",
         "doc": "Today, as the page counts it. Without it, today is the day in UTC."
       },
       {
@@ -5346,7 +5346,7 @@
       {
         "name": "range",
         "generics": "",
-        "args": "today: NaiveDate, week_start: Weekday, earliest: Option<NaiveDate>",
+        "args": "today: Date, week_start: Weekday, earliest: Option<Date>",
         "doc": "The range, counted from `today`. `week_start` is the first day of the week; `earliest` is where *all time* begins (`None` makes *all time* no range)."
       }
     ],
@@ -5433,13 +5433,13 @@
       {
         "name": "new",
         "generics": "",
-        "args": "a: NaiveDate, b: NaiveDate",
+        "args": "a: Date, b: Date",
         "doc": "A range between two days, given in either order."
       },
       {
         "name": "single",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "A range of one day."
       },
       {
@@ -5459,13 +5459,13 @@
       {
         "name": "contains",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "Whether `day` is in it."
       },
       {
         "name": "utc_bounds",
-        "generics": "<Tz: TimeZone>",
-        "args": "zone: &Tz",
+        "generics": "<Z: WallZone>",
+        "args": "zone: &Z",
         "doc": "The instants the range spans in a zone, as `[start, end)`: the first moment of `from` and the first moment of the day after `to`. A day whose midnight the zone skipped starts when the clocks jump."
       },
       {
@@ -5525,13 +5525,13 @@
       {
         "name": "min",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The earliest day that can be chosen."
       },
       {
         "name": "max",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The latest day that can be chosen."
       },
       {
@@ -5543,7 +5543,7 @@
       {
         "name": "today",
         "generics": "",
-        "args": "today: NaiveDate",
+        "args": "today: Date",
         "doc": "Today, as the page counts it: in the zone of the workspace or the person that the page's days are counted in. Every preset is counted from it."
       },
       {
@@ -5692,13 +5692,13 @@
       {
         "name": "min",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The earliest day that can be chosen."
       },
       {
         "name": "max",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "The latest day that can be chosen."
       },
       {
@@ -5710,19 +5710,19 @@
       {
         "name": "disable_dates",
         "generics": "",
-        "args": "days: impl IntoIterator<Item = NaiveDate>",
+        "args": "days: impl IntoIterator<Item = Date>",
         "doc": "Turns single days off."
       },
       {
         "name": "disable_range",
         "generics": "",
-        "args": "from: NaiveDate, to: NaiveDate",
+        "args": "from: Date, to: Date",
         "doc": "Turns a run of days off, both ends included. Given backwards, it is put right."
       },
       {
         "name": "disable_if",
         "generics": "",
-        "args": "rule: impl Fn(NaiveDate) -> bool + Send + Sync + 'static",
+        "args": "rule: impl Fn(Date) -> bool + Send + Sync + 'static",
         "doc": "Turns off every day the function answers `true` for. The calendar asks it for the days it can show (three years around the month it opens on) and stops navigation at the edges of that window; the server asks it for each date that comes back."
       },
       {
@@ -5746,13 +5746,13 @@
       {
         "name": "check",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "Why `day` can't be chosen, or `Ok` when it can."
       },
       {
         "name": "allows",
         "generics": "",
-        "args": "day: NaiveDate",
+        "args": "day: Date",
         "doc": "Whether `day` can be chosen."
       },
       {
@@ -5764,7 +5764,7 @@
       {
         "name": "blocks_span",
         "generics": "",
-        "args": "from: NaiveDate, to: NaiveDate",
+        "args": "from: Date, to: Date",
         "doc": "Whether any day from `from` to `to` can't be chosen. The limits, the weekdays, the listed days and the listed runs are asked as ranges, so the cost is that of the rules and not of the days in the span. Only a rule function must be asked a day at a time, and for that a span of more than 40,000 days (about 110 years, more than any calendar the browser can show is given) counts as blocked."
       }
     ],
@@ -5800,13 +5800,13 @@
       {
         "name": "value",
         "generics": "",
-        "args": "at: NaiveDateTime",
+        "args": "at: DateTime",
         "doc": "Sets the date and time."
       },
       {
         "name": "value_opt",
         "generics": "",
-        "args": "at: Option<NaiveDateTime>",
+        "args": "at: Option<DateTime>",
         "doc": "Sets the date and time, or leaves the picker empty."
       },
       {
@@ -5842,7 +5842,7 @@
       {
         "name": "today",
         "generics": "",
-        "args": "today: NaiveDate",
+        "args": "today: Date",
         "doc": "Today, as the page counts it. Without it, today is the day in UTC."
       },
       {
@@ -7839,7 +7839,7 @@
       {
         "name": "dates",
         "generics": "",
-        "args": "locale: DateLocale, today: chrono::NaiveDate",
+        "args": "locale: DateLocale, today: navree_datetime::Date",
         "doc": "Names the days and times of the form's date and time pickers after a language and region, and says what today is. Without a day, today is the day in UTC."
       },
       {
@@ -14219,13 +14219,13 @@
       {
         "name": "from_query",
         "generics": "<Tz: ReportZone>",
-        "args": "query: &ReportQuery, limits: &RangeRules, today: NaiveDate, default: DatePreset, zone: &Tz",
+        "args": "query: &ReportQuery, limits: &RangeRules, today: Date, default: DatePreset, zone: &Tz",
         "doc": "The report a request asks for: its window when `limits` allow it, `default` counted from `today` when the URL has none or one they refuse (which `refused` then says), and its grain when it fits."
       },
       {
         "name": "from_query_starting",
         "generics": "<Tz: ReportZone>",
-        "args": "query: &ReportQuery, limits: &RangeRules, today: NaiveDate, default: DatePreset, week_start: Weekday, zone: &Tz",
+        "args": "query: &ReportQuery, limits: &RangeRules, today: Date, default: DatePreset, week_start: Weekday, zone: &Tz",
         "doc": "`from_query` with weeks starting on `week_start`."
       }
     ],
@@ -14335,19 +14335,19 @@
       {
         "name": "bucket_of",
         "generics": "",
-        "args": "at: DateTime<Utc>",
+        "args": "at: Timestamp",
         "doc": "The period an instant falls in."
       },
       {
         "name": "count",
         "generics": "",
-        "args": "instants: impl IntoIterator<Item = DateTime<Utc>>",
+        "args": "instants: impl IntoIterator<Item = Timestamp>",
         "doc": "How many of `instants` fall in each period: for data already in memory."
       },
       {
         "name": "sum",
         "generics": "",
-        "args": "values: impl IntoIterator<Item =(DateTime<Utc>, f64)>",
+        "args": "values: impl IntoIterator<Item =(Timestamp, f64)>",
         "doc": "The sum of the values in each period: for data already in memory."
       },
       {
@@ -16913,7 +16913,7 @@
         "name": "lastmod",
         "generics": "",
         "args": "date: impl Display",
-        "doc": "When its content last changed: a date such as `2026-11-12`, or a `chrono::NaiveDate`. Never a date in the future, and never the build's date for a page that didn't change."
+        "doc": "When its content last changed: a date such as `2026-11-12`, or a `navree_datetime::Date`. Never a date in the future, and never the build's date for a page that didn't change."
       },
       {
         "name": "language",
@@ -20043,13 +20043,13 @@
       {
         "name": "value",
         "generics": "",
-        "args": "time: NaiveTime",
+        "args": "time: Time",
         "doc": "Sets the time."
       },
       {
         "name": "value_opt",
         "generics": "",
-        "args": "time: Option<NaiveTime>",
+        "args": "time: Option<Time>",
         "doc": "Sets the time, or leaves the picker empty."
       },
       {
@@ -20073,13 +20073,13 @@
       {
         "name": "min",
         "generics": "",
-        "args": "time: NaiveTime",
+        "args": "time: Time",
         "doc": "The earliest time."
       },
       {
         "name": "max",
         "generics": "",
-        "args": "time: NaiveTime",
+        "args": "time: Time",
         "doc": "The latest time."
       },
       {
@@ -20175,19 +20175,19 @@
       {
         "name": "min",
         "generics": "",
-        "args": "time: NaiveTime",
+        "args": "time: Time",
         "doc": "The earliest time."
       },
       {
         "name": "max",
         "generics": "",
-        "args": "time: NaiveTime",
+        "args": "time: Time",
         "doc": "The latest time."
       },
       {
         "name": "unavailable",
         "generics": "",
-        "args": "from: NaiveTime, to: NaiveTime",
+        "args": "from: Time, to: Time",
         "doc": "Turns off a span of times, both ends included down to the minute: `12:00` to `12:59` turns off every time until `12:59:59`."
       },
       {
@@ -20211,13 +20211,13 @@
       {
         "name": "check",
         "generics": "",
-        "args": "time: NaiveTime",
+        "args": "time: Time",
         "doc": "Why `time` can't be chosen, or `Ok`."
       },
       {
         "name": "allows",
         "generics": "",
-        "args": "time: NaiveTime",
+        "args": "time: Time",
         "doc": "Whether `time` can be chosen."
       },
       {
