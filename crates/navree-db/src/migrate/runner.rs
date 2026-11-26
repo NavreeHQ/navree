@@ -552,7 +552,7 @@ async fn bookkeeping(
                 Value::from(step.module),
                 Value::from(step.name()),
                 Value::I64(batch),
-                Value::from(chrono::Utc::now()),
+                Value::from(navree_datetime::Timestamp::now()),
             ],
         ),
         Direction::Down => Statement::new(

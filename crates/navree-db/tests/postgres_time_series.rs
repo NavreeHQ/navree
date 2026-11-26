@@ -11,7 +11,7 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use chrono::{DateTime, TimeDelta, TimeZone, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{Db, DbOptions, TimePoint, prune_time_series};
 use navree_db::{Executor, ExecutorExt, Pool, Statement};
 use navree_schema::Schema;
@@ -104,11 +104,11 @@ async fn number(db: &Db, sql: &str) -> i64 {
 }
 
 /// Noon UTC on October `n`, 2026.
-fn day(n: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, n, 12, 0, 0).unwrap()
+fn day(n: u32) -> Timestamp {
+    Timestamp::utc(2026, 10, u8::try_from(n).unwrap(), 12, 0, 0).unwrap()
 }
 
-async fn insert_event(db: &Db, table: &str, at: DateTime<Utc>) {
+async fn insert_event(db: &Db, table: &str, at: Timestamp) {
     insert(
         db,
         table,
@@ -162,13 +162,13 @@ async fn hypertables_lose_whole_chunks() {
     for n in 1..=10 {
         insert_event(&db, "events", day(n)).await;
     }
-    insert_event(&db, "events", day(5) + TimeDelta::hours(8)).await;
+    insert_event(&db, "events", day(5) + Span::hours(8)).await;
     let chunks = || number(&db, "SELECT count(*) FROM show_chunks('events')");
     assert_eq!(chunks().await, 10);
 
     // October 5th at 18:00: the chunks of the 1st to the 4th go whole, the
     // 5th's chunk straddles the cutoff and loses its noon event.
-    let cutoff = day(5) + TimeDelta::hours(6);
+    let cutoff = day(5) + Span::hours(6);
     let deleted = db
         .transaction(
             |uow| async move { prune_time_series(&uow, "events", "occurred_at", cutoff).await },
@@ -229,14 +229,14 @@ async fn integer_time_columns_lose_whole_chunks_too() {
             "id, at_ms",
             vec![
                 uuid::Uuid::now_v7().into(),
-                day(n).timestamp_millis().into(),
+                day(n).as_millis().into(),
             ],
         )
         .await;
     }
     let chunks = || number(&db, "SELECT count(*) FROM show_chunks('ticks')");
     assert_eq!(chunks().await, 6);
-    let deleted = prune_time_series(&db, "ticks", "at_ms", day(4).timestamp_millis())
+    let deleted = prune_time_series(&db, "ticks", "at_ms", day(4).as_millis())
         .await
         .unwrap();
     assert_eq!(deleted, 3);
@@ -365,7 +365,7 @@ async fn pruning_runs_on_transactions_and_the_db() {
             "id, at_ms",
             vec![
                 uuid::Uuid::now_v7().into(),
-                day(n).timestamp_millis().into(),
+                day(n).as_millis().into(),
             ],
         )
         .await;
@@ -408,7 +408,7 @@ async fn pruning_runs_on_transactions_and_the_db() {
     assert_eq!(chunks("events").await, 5);
 
     // Integer time columns, and a cutoff of the wrong kind refused.
-    let deleted = prune_time_series(&db, "ticks", "at_ms", day(4).timestamp_millis())
+    let deleted = prune_time_series(&db, "ticks", "at_ms", day(4).as_millis())
         .await
         .unwrap();
     assert_eq!(deleted, 3);

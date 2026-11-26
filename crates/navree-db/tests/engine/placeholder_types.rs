@@ -311,10 +311,11 @@ async fn streamed(db: &impl Executor, sql: &str, value: Value) -> Result<Vec<i64
 
 /// One value of every kind, and a `NULL` of every kind.
 fn every_kind() -> Vec<Value> {
-    use chrono::{FixedOffset, NaiveDate, NaiveTime, TimeZone, Utc};
+    use navree_datetime::{Date, Disambiguation, Offset, Time, Zone};
 
-    let date = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap();
-    let time = NaiveTime::from_hms_opt(13, 45, 30).unwrap();
+    let date = Date::new(2026, 10, 29).unwrap();
+    let time = Time::new(13, 45, 30).unwrap();
+    let plus_two = Zone::fixed(Offset::east(2 * 3600).unwrap());
     let mut values = vec![
         Value::Bool(true),
         Value::I8(-8),
@@ -337,13 +338,13 @@ fn every_kind() -> Vec<Value> {
         )),
         Value::Date(date),
         Value::Time(time),
-        Value::DateTime(date.and_time(time)),
-        Value::Timestamp(Utc.from_utc_datetime(&date.and_time(time))),
+        Value::DateTime(date.at(time)),
+        Value::Timestamp(date.at(time).in_utc()),
         Value::TimestampTz(
-            FixedOffset::east_opt(2 * 3600)
+            plus_two
+                .to_timestamp(date.at(time), Disambiguation::Compatible)
                 .unwrap()
-                .from_local_datetime(&date.and_time(time))
-                .unwrap(),
+                .in_zone(plus_two),
         ),
         Value::Enum {
             type_name: "mood".into(),

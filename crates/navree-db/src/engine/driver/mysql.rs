@@ -61,8 +61,8 @@ fn bind(
         Value::Date(v) => args.add(*v),
         Value::Time(v) => args.add(*v),
         Value::DateTime(v) => args.add(*v),
-        Value::Timestamp(v) => args.add(v.naive_utc()),
-        Value::TimestampTz(v) => args.add(v.naive_utc()),
+        Value::Timestamp(v) => args.add(v.date_time_utc()),
+        Value::TimestampTz(v) => args.add(v.timestamp().date_time_utc()),
         Value::Enum { value, .. } => args.add(value.as_str()),
         Value::Vector(v) => args.add(super::vector_bytes(v)),
     }
@@ -89,10 +89,10 @@ fn bind_null(
         Kind::Bytes => args.add(None::<Vec<u8>>),
         Kind::Json => args.add(None::<serde_json::Value>),
         Kind::Uuid => args.add(None::<uuid::Uuid>),
-        Kind::Date => args.add(None::<chrono::NaiveDate>),
-        Kind::Time => args.add(None::<chrono::NaiveTime>),
+        Kind::Date => args.add(None::<navree_datetime::Date>),
+        Kind::Time => args.add(None::<navree_datetime::Time>),
         Kind::DateTime | Kind::Timestamp | Kind::TimestampTz => {
-            args.add(None::<chrono::NaiveDateTime>)
+            args.add(None::<navree_datetime::DateTime>)
         }
         Kind::Enum => args.add(None::<String>),
         Kind::Vector => args.add(None::<Vec<u8>>),
@@ -137,7 +137,7 @@ fn decode(raw: MySqlValueRef<'_>, type_name: &str) -> Result<Value, sqlx::error:
         "DOUBLE" => Value::F64(d(raw)?),
         "DECIMAL" => Value::Decimal(d(raw)?),
         "DATE" => Value::Date(d(raw)?),
-        "TIME" => match d::<chrono::NaiveTime>(raw.clone()) {
+        "TIME" => match d::<navree_datetime::Time>(raw.clone()) {
             Ok(time) => Value::Time(time),
             // A duration beyond a day, or a negative one.
             Err(_) => Value::String(format!("{:?}", d::<sqlx::mysql::types::MySqlTime>(raw)?)),

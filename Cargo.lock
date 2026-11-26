@@ -4541,12 +4541,12 @@ name = "navree-db"
 version = "1.6.0"
 dependencies = [
  "base64 0.23.1",
- "chrono",
  "futures-util",
  "http",
  "http-body-util",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-kernel",

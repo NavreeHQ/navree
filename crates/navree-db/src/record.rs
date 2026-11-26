@@ -24,7 +24,7 @@
 //! anything else.
 //!
 //! ```
-//! use chrono::{DateTime, Utc};
+//! use navree_datetime::Timestamp;
 //! use navree_db::{Backend, Filter, Record};
 //! use uuid::Uuid;
 //!
@@ -35,7 +35,7 @@
 //!         pub id: Uuid,
 //!         pub workspace_id: Option<Uuid>,
 //!         pub email: String,
-//!         pub created_at: DateTime<Utc>,
+//!         pub created_at: Timestamp,
 //!     }
 //! }
 //!
@@ -123,7 +123,7 @@ pub trait Record: Sized + Send + Sync + 'static {
 /// (derives, serde, docs) pass through.
 ///
 /// ```
-/// use chrono::{DateTime, Utc};
+/// use navree_datetime::Timestamp;
 /// use navree_db::Record;
 ///
 /// navree_db::record! {
@@ -134,7 +134,7 @@ pub trait Record: Sized + Send + Sync + 'static {
 ///         pub name: String,
 ///         /// `allow` or `deny`.
 ///         pub effect: String as "type",
-///         pub created_at: DateTime<Utc>,
+///         pub created_at: Timestamp,
 ///     }
 /// }
 ///
@@ -1034,7 +1034,7 @@ fn diff(old: serde_json::Value, new: serde_json::Value) -> (Fields, Fields) {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     use super::*;
@@ -1048,7 +1048,7 @@ mod tests {
             kind: String as "type",
             #[serde(skip_serializing)]
             secret: String,
-            created_at: DateTime<Utc>,
+            created_at: Timestamp,
         }
     }
 
@@ -1074,7 +1074,7 @@ mod tests {
             owner_id: None,
             kind: "new".into(),
             secret: "s".into(),
-            created_at: DateTime::<Utc>::UNIX_EPOCH,
+            created_at: Timestamp::UNIX_EPOCH,
         };
         assert_eq!(deal.key(), Value::Uuid(Uuid::nil()));
         assert_eq!(deal.values().len(), 6);
@@ -1145,7 +1145,7 @@ mod tests {
             owner_id: None,
             kind: "new".into(),
             secret: "s".into(),
-            created_at: DateTime::<Utc>::UNIX_EPOCH,
+            created_at: Timestamp::UNIX_EPOCH,
         };
         assert_eq!(
             insert_statement(Backend::Postgres, &deal)

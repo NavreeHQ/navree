@@ -4,7 +4,7 @@
 //! upserts, deletes, change events through a unit of work, and where
 //! `Db::read_executor` reads.
 
-use chrono::{DateTime, Duration, SubsecRound, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::record::{self, Filter};
 use navree_db::{Backend, ChangeOp, Db, ErrorKind, PageQuery, Record};
 use serde::Serialize;
@@ -25,8 +25,8 @@ navree_db::record! {
         pub tags: serde_json::Value,
         #[serde(skip_serializing)]
         pub secret: String,
-        pub seen_at: Option<DateTime<Utc>>,
-        pub created_at: DateTime<Utc>,
+        pub seen_at: Option<Timestamp>,
+        pub created_at: Timestamp,
     }
 }
 
@@ -57,12 +57,12 @@ async fn contacts(db: &Db, backend: Backend) {
     .await;
 }
 
-fn now() -> DateTime<Utc> {
+fn now() -> Timestamp {
     // Microseconds: what MySQL's TIMESTAMP(6) and PostgreSQL keep.
-    Utc::now().trunc_subsecs(6)
+    Timestamp::now().trunc_micros()
 }
 
-fn contact(email: &str, workspace: Option<Uuid>, at: DateTime<Utc>) -> Contact {
+fn contact(email: &str, workspace: Option<Uuid>, at: Timestamp) -> Contact {
     Contact {
         id: Uuid::now_v7(),
         workspace_id: workspace,
@@ -102,7 +102,7 @@ pub async fn records_round_trip(scratch: Scratch) {
         let row = contact(
             &format!("c{n}@example.com"),
             workspace,
-            start + Duration::seconds(n + 1),
+            start + Span::seconds(n + 1),
         );
         record::insert(&db, &row).await.unwrap();
     }
@@ -142,7 +142,7 @@ pub async fn records_round_trip(scratch: Scratch) {
         .filter(Filter::all().compare(
             "created_at",
             navree_db::Compare::Gt,
-            start + Duration::seconds(8),
+            start + Span::seconds(8),
         ))
         .count(&db)
         .await
@@ -184,7 +184,7 @@ pub async fn records_round_trip(scratch: Scratch) {
     changed.active = false;
     changed.visits = 3;
     changed.tags = serde_json::json!({"vip": true});
-    changed.seen_at = Some(start + Duration::milliseconds(1500));
+    changed.seen_at = Some(start + Span::millis(1500));
     changed.workspace_id = None;
     assert_eq!(record::update(&db, &changed).await.unwrap(), 1);
     assert_eq!(

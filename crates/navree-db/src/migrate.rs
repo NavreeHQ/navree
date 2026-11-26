@@ -10,7 +10,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_kernel::{AppContext, BoxError};
 use navree_schema::{Dialect, NamedMigration, SchemaError};
 
@@ -161,7 +161,7 @@ pub struct MigrationStatus {
     /// The batch it was applied in.
     pub batch: Option<i64>,
     /// When it was applied.
-    pub applied_at: Option<DateTime<Utc>>,
+    pub applied_at: Option<Timestamp>,
 }
 
 /// A migration problem.
@@ -517,7 +517,7 @@ fn plan(sets: &[Arc<MigrationSet>]) -> Result<Vec<Step<'_>>, MigrationError> {
 /// A `navree_migrations` row.
 struct Applied {
     batch: i64,
-    applied_at: Option<DateTime<Utc>>,
+    applied_at: Option<Timestamp>,
 }
 
 /// The migrations table, as every version of the migrator has created it:
@@ -614,7 +614,7 @@ pub async fn record_migration(
             crate::Value::from(module),
             crate::Value::from(name),
             crate::Value::I64(batch),
-            crate::Value::from(Utc::now()),
+            crate::Value::from(Timestamp::now()),
         ],
     );
     conn.execute(&statement).await.map(drop)
@@ -639,7 +639,7 @@ async fn applied_rows(conn: &dyn Executor) -> Result<HashMap<(String, String), A
         let name: String = row.get("name")?;
         let batch: i64 = row.get("batch")?;
         let applied_at = row
-            .get::<Option<DateTime<Utc>>>("applied_at")
+            .get::<Option<Timestamp>>("applied_at")
             .ok()
             .flatten();
         applied.insert((module, name), Applied { batch, applied_at });
