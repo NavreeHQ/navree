@@ -5,8 +5,7 @@
 
 use std::fmt::Write as _;
 
-use chrono::format::StrftimeItems;
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
+use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned, pattern};
 use navree_template::{Environment, Error, ErrorKind, Value, ValueKind};
 
 /// Registers every Navree filter on `env`.
@@ -105,28 +104,29 @@ fn group_digits(n: u64, indian: bool) -> String {
 
 /// `{{ value|date("%d %b %Y") }}`: formats an RFC 3339 date-time (kept in
 /// its own offset), a date-time without offset (`2026-10-25T14:30:00` or
-/// with a space), a date (`2026-10-25`) or a Unix timestamp in seconds (UTC)
-/// with a chrono `strftime` format, `%Y-%m-%d` by default. `none` renders as
-/// an empty string.
+/// with a space), a date (`2026-10-25`), a time (`14:30:00` or `14:30`) or
+/// a Unix timestamp in seconds (UTC) with a `strftime` format, `%Y-%m-%d`
+/// by default. `none` renders as an empty string.
 fn date(value: Value, format: Option<&str>) -> Result<String, Error> {
     if value.is_none() {
         return Ok(String::new());
     }
     let moment = Moment::parse(&value).ok_or_else(|| {
-        invalid("date filter: the value is not a date, a date-time or a Unix timestamp")
+        invalid("date filter: the value is not a date, a time, a date-time or a Unix timestamp")
     })?;
-    let items = StrftimeItems::new(format.unwrap_or("%Y-%m-%d"))
-        .parse()
-        .map_err(|_| invalid("date filter: invalid format string"))?;
+    let pat = format.unwrap_or("%Y-%m-%d");
+    pattern::check(pat).map_err(|_| invalid("date filter: invalid format string"))?;
     let mut out = String::new();
     let written = match moment {
-        Moment::Zoned(at) => write!(out, "{}", at.format_with_items(items.iter())),
-        Moment::Naive(at) => write!(out, "{}", at.format_with_items(items.iter())),
-        Moment::Date(day) => write!(out, "{}", day.format_with_items(items.iter())),
+        Moment::Zoned(at) => write!(out, "{}", at.format(pat)),
+        Moment::Timestamp(at) => write!(out, "{}", at.format(pat)),
+        Moment::DateTime(at) => write!(out, "{}", at.format(pat)),
+        Moment::Date(day) => write!(out, "{}", day.format(pat)),
+        Moment::Time(time) => write!(out, "{}", time.format(pat)),
     };
     written.map_err(|_| {
         invalid(
-            "date filter: the format asks for fields the value does not have (a time or offset)",
+            "date filter: the format asks for fields the value does not have (a date, time or offset)",
         )
     })?;
     Ok(out)
@@ -134,28 +134,27 @@ fn date(value: Value, format: Option<&str>) -> Result<String, Error> {
 
 /// A value the `date` filter understands.
 enum Moment {
-    Zoned(DateTime<FixedOffset>),
-    Naive(NaiveDateTime),
-    Date(NaiveDate),
+    Zoned(Zoned),
+    Timestamp(Timestamp),
+    DateTime(DateTime),
+    Date(Date),
+    Time(Time),
 }
 
 impl Moment {
     fn parse(value: &Value) -> Option<Moment> {
         if let Some(text) = value.as_str() {
             let text = text.trim();
-            return DateTime::parse_from_rfc3339(text)
+            return Zoned::parse_rfc3339(text)
                 .map(Moment::Zoned)
-                .or_else(|_| {
-                    NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f").map(Moment::Naive)
-                })
-                .or_else(|_| {
-                    NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S%.f").map(Moment::Naive)
-                })
-                .or_else(|_| NaiveDate::parse_from_str(text, "%Y-%m-%d").map(Moment::Date))
+                .or_else(|_| DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", text).map(Moment::DateTime))
+                .or_else(|_| DateTime::parse("%Y-%m-%d %H:%M:%S%.f", text).map(Moment::DateTime))
+                .or_else(|_| Date::parse("%Y-%m-%d", text).map(Moment::Date))
+                .or_else(|_| text.parse::<Time>().map(Moment::Time))
                 .ok();
         }
         let seconds = integer(value)?;
-        DateTime::from_timestamp(seconds, 0).map(|at| Moment::Zoned(at.fixed_offset()))
+        Timestamp::from_secs(seconds).ok().map(Moment::Timestamp)
     }
 }
 
