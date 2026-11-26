@@ -16,7 +16,7 @@
 /// and the web flow's to the Services ID, and revoking a token needs the
 /// client it belongs to.
 pub(crate) mod social_account_client {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use navree_db::Uow;
     use navree_orm::{Executor, Model as _, OrmError, Record};
     use serde::Serialize;
@@ -31,7 +31,7 @@ pub(crate) mod social_account_client {
         /// The client id the tokens were issued to.
         pub(crate) client_id: String,
         /// When it was recorded.
-        pub(crate) updated_at: DateTime<Utc>,
+        pub(crate) updated_at: Timestamp,
     }
 
     /// Records that `account_id`'s tokens belong to `client_id`.
@@ -39,7 +39,7 @@ pub(crate) mod social_account_client {
         uow: &Uow,
         account_id: Uuid,
         client_id: &str,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Result<(), OrmError> {
         let updated = Model::query()
             .where_key(account_id)
@@ -87,7 +87,7 @@ pub(crate) mod social_account_client {
 pub mod social_account {
     use std::fmt;
 
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use navree_db::{ChangeEvent, ChangeOp, Uow};
     use navree_orm::{Assignment, Model as _, OrmError};
     use serde::Serialize;
@@ -123,13 +123,13 @@ pub mod social_account {
         #[serde(skip_serializing)]
         pub refresh_token: Option<String>,
         /// When the access token expires.
-        pub token_expires_at: Option<DateTime<Utc>>,
+        pub token_expires_at: Option<Timestamp>,
         /// The granted scopes, space-separated.
         pub scopes: Option<String>,
         /// When the account was linked.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the account last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 
     /// The tokens are redacted.
@@ -278,7 +278,7 @@ pub mod social_account {
 
         #[test]
         fn tokens_are_not_serialized() {
-            let now = Utc::now();
+            let now = Timestamp::now();
             let account = Model {
                 id: Uuid::now_v7(),
                 user_id: Uuid::now_v7(),

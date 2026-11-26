@@ -8,10 +8,10 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
-use chrono::Utc;
 use navree_auth::{AuthModule, AuthService, ClientMeta, User};
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
 use navree_crypto::{CryptoModule, generate_key};
+use navree_datetime::Timestamp;
 use navree_db::{DatabaseModule, Db};
 use navree_http_client::{HttpClientModule, HttpClientOptions, SsrfPolicy};
 use navree_orm::Model as _;
@@ -131,7 +131,7 @@ pub async fn verify_email(app: &TestApp, id: uuid::Uuid) {
     let db = app.get::<Db>().await;
     User::query()
         .where_key(id)
-        .update(&*db, [User::EMAIL_VERIFIED_AT.set(Some(Utc::now()))])
+        .update(&*db, [User::EMAIL_VERIFIED_AT.set(Some(Timestamp::now()))])
         .await
         .expect("the email is marked verified");
 }
@@ -141,7 +141,7 @@ pub async fn verify_email(app: &TestApp, id: uuid::Uuid) {
 pub async fn create_verified_user(app: &TestApp, name: &str, email: &str) -> User {
     let mut user = create_user(app, name, email).await;
     verify_email(app, user.id).await;
-    user.email_verified_at = Some(Utc::now());
+    user.email_verified_at = Some(Timestamp::now());
     user
 }
 

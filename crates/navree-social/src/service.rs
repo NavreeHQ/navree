@@ -152,7 +152,7 @@ impl Social {
             }
         }
         let ttl = i64::try_from(rt.options.state_ttl_secs).unwrap_or(i64::MAX);
-        let exp = rt.now().timestamp().saturating_add(ttl);
+        let exp = rt.now().as_secs().saturating_add(ttl);
         let state = StatePayload::new(provider, options.intent, user, options.return_to, exp);
         let sealed = state.seal(&rt.encrypter)?;
 
@@ -228,7 +228,7 @@ impl Social {
         sealed: &str,
     ) -> Result<StatePayload, SocialError> {
         let state = StatePayload::open(&rt.encrypter, sealed)?;
-        let now = rt.now().timestamp();
+        let now = rt.now().as_secs();
         if state.provider != provider || state.exp <= now {
             return Err(SocialError::InvalidState);
         }
@@ -495,7 +495,7 @@ impl Social {
         let access = account.access_token.as_deref().ok_or_else(no_token)?;
         let fresh = account
             .token_expires_at
-            .is_none_or(|at| at > rt.now() + chrono::TimeDelta::seconds(60));
+            .is_none_or(|at| at > rt.now() + navree_datetime::Span::seconds(60));
         if fresh {
             return Ok(Secret::new(rt.encrypter.decrypt_string(access)?));
         }
@@ -556,7 +556,7 @@ impl Social {
         if limit == 0 {
             return Ok(None);
         }
-        let now = rt.now().timestamp();
+        let now = rt.now().as_secs();
         let window = now.div_euclid(THROTTLE_WINDOW_SECS);
         // An IPv6 client is its network (`http.rate_limit_ipv6_prefix`).
         let client = match ip.and_then(|ip| ip.parse::<std::net::IpAddr>().ok()) {
@@ -1021,7 +1021,7 @@ async fn record_token_client(
     uow: &Uow,
     account_id: Uuid,
     social_user: &SocialUser,
-    now: chrono::DateTime<chrono::Utc>,
+    now: navree_datetime::Timestamp,
 ) -> Result<(), SocialError> {
     // Only Sign in with Apple issues tokens to clients other than the
     // configured one (an app's bundle id).
@@ -1055,7 +1055,7 @@ async fn record_token_client(
 struct TokenColumns {
     access: Option<String>,
     refresh: Option<String>,
-    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    expires_at: Option<navree_datetime::Timestamp>,
     scopes: Option<String>,
 }
 

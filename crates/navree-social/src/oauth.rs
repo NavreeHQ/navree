@@ -4,9 +4,9 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::Secret;
 use navree_crypto::jose::{JwkSet, Jws};
+use navree_datetime::{Span, Timestamp};
 use navree_http_client::{HttpClientError, Response};
 use serde_json::{Map, Value, json};
 
@@ -130,7 +130,7 @@ fn client_secret(
     client_id: &str,
 ) -> Result<Option<String>, SocialError> {
     if let Some(key) = &entry.apple_key {
-        let now = rt.now().timestamp();
+        let now = rt.now().as_secs();
         let audience = entry
             .config
             .url
@@ -269,7 +269,7 @@ pub(crate) fn read_token_response(
 pub(crate) fn parse_token(
     entry: &ProviderEntry,
     body: &Value,
-    now: DateTime<Utc>,
+    now: Timestamp,
     previous_refresh: Option<&str>,
 ) -> Result<ProviderToken, SocialError> {
     let access = body
@@ -284,7 +284,7 @@ pub(crate) fn parse_token(
         _ => None,
     };
     if let Some(secs) = expires_in.filter(|s| *s > 0) {
-        token.expires_at = now.checked_add_signed(TimeDelta::seconds(secs));
+        token.expires_at = now.checked_add(Span::seconds(secs));
     }
     match body.get("refresh_token").and_then(Value::as_str) {
         Some(refresh) if !refresh.is_empty() => token = token.refresh_token(refresh),
@@ -443,13 +443,7 @@ pub(crate) async fn verify_id_token(
     nonce: &str,
 ) -> Result<Value, SocialError> {
     let claims = verify_signature(rt, entry, endpoints, id_token).await?;
-    check_claims(
-        entry,
-        &endpoints.issuer,
-        &claims,
-        nonce,
-        rt.now().timestamp(),
-    )?;
+    check_claims(entry, &endpoints.issuer, &claims, nonce, rt.now().as_secs())?;
     Ok(claims)
 }
 
@@ -1046,7 +1040,7 @@ mod tests {
     #[test]
     fn token_responses_parse_numbers_strings_and_scopes() {
         let github = entry("github", |_| {});
-        let now = DateTime::<Utc>::from_timestamp(1_000, 0).unwrap();
+        let now = Timestamp::from_secs(1_000).unwrap();
         let token = parse_token(
             &github,
             &json!({ "access_token": "a", "expires_in": "3600", "scope": "read:user,user:email" }),
@@ -1054,7 +1048,7 @@ mod tests {
             Some("old-refresh"),
         )
         .unwrap();
-        assert_eq!(token.expires_at.unwrap().timestamp(), 4_600);
+        assert_eq!(token.expires_at.unwrap().as_secs(), 4_600);
         assert_eq!(token.scopes, ["read:user", "user:email"]);
         assert_eq!(token.refresh_token.unwrap().expose(), "old-refresh");
         assert!(parse_token(&github, &json!({}), now, None).is_err());

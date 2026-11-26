@@ -80,7 +80,7 @@ impl Social {
         let entry = rt.provider(provider)?;
         native_audiences(rt, entry)?;
         let ttl = rt.options.state_ttl_secs.min(NATIVE_ATTEMPT_SECS);
-        let now = rt.now().timestamp();
+        let now = rt.now().as_secs();
         let mut state = StatePayload::new(
             provider,
             Intent::SignIn,
@@ -130,7 +130,7 @@ impl Social {
                 let endpoints = oauth::endpoints(rt, entry).await?;
                 let claims = oauth::verify_signature(rt, entry, &endpoints, &post.id_token).await?;
                 let audiences: Vec<&str> = audiences.iter().map(String::as_str).collect();
-                let now = rt.now().timestamp();
+                let now = rt.now().as_secs();
                 oauth::check_token(entry, &endpoints.issuer, &claims, &audiences, now)?;
                 check_nonce_and_age(entry, &claims, &state, started, now)?;
                 let client = str_of(&claims, "aud").map(str::to_owned);
@@ -373,7 +373,7 @@ impl Social {
         audiences.extend(rt.apple_apps.iter().map(String::as_str));
         oauth::check_issuer_and_audience(entry, &endpoints.issuer, &claims, &audiences)
             .map_err(as_invalid)?;
-        let now = rt.now().timestamp();
+        let now = rt.now().as_secs();
         let iat = claims
             .get("iat")
             .and_then(Value::as_i64)
@@ -689,7 +689,7 @@ async fn exchange_apple_code(
         &endpoints.issuer,
         &claims,
         &[client],
-        rt.now().timestamp(),
+        rt.now().as_secs(),
     )?;
     if str_of(&claims, "sub") != Some(subject) {
         return Err(invalid_id_token(
@@ -704,7 +704,7 @@ async fn exchange_apple_code(
 async fn forget_tokens(
     uow: &Uow,
     id: Uuid,
-    now: chrono::DateTime<chrono::Utc>,
+    now: navree_datetime::Timestamp,
 ) -> Result<(), SocialError> {
     social_account::update(uow, id, |row| {
         row.access_token = None;

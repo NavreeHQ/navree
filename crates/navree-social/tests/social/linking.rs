@@ -3,9 +3,9 @@
 
 use std::sync::Arc;
 
-use chrono::Utc;
 use navree_auth::{AuthService, JwtService, TokenType, User};
 use navree_contracts::AuditSink;
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_events::{EventBus, EventsModule};
 use navree_orm::Model as _;
@@ -405,7 +405,10 @@ async fn turn_on_two_factor(app: &TestApp, id: uuid::Uuid) {
     let db = app.get::<Db>().await;
     User::query()
         .where_key(id)
-        .update(&*db, [User::TWO_FACTOR_CONFIRMED_AT.set(Some(Utc::now()))])
+        .update(
+            &*db,
+            [User::TWO_FACTOR_CONFIRMED_AT.set(Some(Timestamp::now()))],
+        )
         .await
         .unwrap();
 }

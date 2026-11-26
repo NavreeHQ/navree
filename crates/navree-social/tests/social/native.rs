@@ -8,10 +8,10 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use chrono::{DateTime, Utc};
 use navree_auth::{AuthService, ProviderSheet, ProviderSheets, SheetProvider};
 use navree_contracts::{AuditSink, Clock};
 use navree_crypto::Encrypter;
+use navree_datetime::Timestamp;
 use navree_db::Db;
 use navree_events::{EventBus, EventsModule};
 use navree_orm::Model as _;
@@ -57,7 +57,7 @@ impl Native {
         idp.mount_jwks("/auth/keys").await;
         idp.mount_jwks("/certs").await;
         let clock = Arc::new(FixedClock::new(
-            DateTime::<Utc>::from_timestamp(Utc::now().timestamp(), 0).unwrap(),
+            Timestamp::from_secs(Timestamp::now().as_secs()).unwrap(),
         ));
         let builder = builder()
             .config(
@@ -93,7 +93,7 @@ impl Native {
     }
 
     fn now(&self) -> i64 {
-        self.clock.now().timestamp()
+        self.clock.now().as_secs()
     }
 
     /// A fresh attempt: the nonce and the sealed state.

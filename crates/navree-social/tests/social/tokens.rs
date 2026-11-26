@@ -4,9 +4,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeDelta, TimeZone, Utc};
 use navree_contracts::Clock;
 use navree_crypto::Encrypter;
+use navree_datetime::{Span, Timestamp};
 use navree_db::Db;
 use navree_orm::Model as _;
 use navree_social::{ProviderToken, Social, SocialError, SocialFake, SocialUser, social_account};
@@ -32,7 +32,7 @@ fn user_id(body: &serde_json::Value) -> Uuid {
 
 #[tokio::test]
 async fn tokens_are_stored_encrypted_and_refreshed_when_expired() {
-    let start = Utc.with_ymd_and_hms(2026, 10, 26, 8, 0, 0).unwrap();
+    let start = Timestamp::utc(2026, 10, 26, 8, 0, 0).unwrap();
     let clock = Arc::new(FixedClock::new(start));
     let (app, fake) = fake_app(|b| {
         b.config("social.store_tokens", true)
@@ -47,7 +47,7 @@ async fn tokens_are_stored_encrypted_and_refreshed_when_expired() {
             .token(
                 ProviderToken::new("gho_access")
                     .refresh_token("ghr_refresh")
-                    .expires_at(start + TimeDelta::hours(1))
+                    .expires_at(start + Span::hours(1))
                     .scopes(["read:user", "repo"]),
             ),
     );
@@ -61,7 +61,7 @@ async fn tokens_are_stored_encrypted_and_refreshed_when_expired() {
     let stored = row.access_token.clone().expect("stored");
     assert!(!stored.contains("gho_access"), "encrypted at rest");
     assert!(!row.refresh_token.clone().unwrap().contains("ghr_refresh"));
-    assert_eq!(row.token_expires_at, Some(start + TimeDelta::hours(1)));
+    assert_eq!(row.token_expires_at, Some(start + Span::hours(1)));
     assert_eq!(row.scopes.as_deref(), Some("read:user repo"));
     assert!(
         !format!("{row:?}").contains(&stored),
@@ -88,7 +88,7 @@ async fn tokens_are_stored_encrypted_and_refreshed_when_expired() {
     // The provider refreshes: the new token is stored, the refresh token kept.
     fake.on_refresh(
         "github",
-        ProviderToken::new("gho_new").expires_at(start + TimeDelta::hours(3)),
+        ProviderToken::new("gho_new").expires_at(start + Span::hours(3)),
     );
     assert_eq!(
         social.token(id, "github").await.unwrap().expose(),
@@ -108,7 +108,7 @@ async fn tokens_are_stored_encrypted_and_refreshed_when_expired() {
             .unwrap(),
         "ghr_refresh"
     );
-    assert_eq!(row.token_expires_at, Some(start + TimeDelta::hours(3)));
+    assert_eq!(row.token_expires_at, Some(start + Span::hours(3)));
     // Fresh again: no refresh needed.
     assert_eq!(
         social.token(id, "github").await.unwrap().expose(),
