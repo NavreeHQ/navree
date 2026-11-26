@@ -2,7 +2,7 @@
 //! keeps them in the `settings` table; [`MemorySettingsStore`] in process
 //! (tests).
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::Uow;
 use navree_kernel::BoxFuture;
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,7 @@ pub struct StoredSetting {
     /// The fields set at the level.
     pub values: Map<String, Value>,
     /// When they last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// Who changed them, when a user did.
     pub updated_by: Option<Uuid>,
 }

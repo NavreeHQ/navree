@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_audit::AuditLog;
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditKind, Clock};
@@ -747,10 +747,10 @@ impl Engine {
         self.resolve(entry, scope, uow).await
     }
 
-    fn now(&self) -> chrono::DateTime<Utc> {
+    fn now(&self) -> navree_datetime::Timestamp {
         match &self.clock {
             Some(clock) => clock.now(),
-            None => Utc::now(),
+            None => Timestamp::now(),
         }
     }
 

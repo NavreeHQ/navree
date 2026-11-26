@@ -20,7 +20,7 @@
 
 /// `settings`: the values stored for one key at one level.
 pub mod setting {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use serde::{Deserialize, Serialize};
     use uuid::Uuid;
 
@@ -40,7 +40,7 @@ pub mod setting {
         /// The names of those fields, sorted, as a JSON array.
         pub overridden_fields: serde_json::Value,
         /// When the values last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
         /// Who changed them, when a user did.
         pub updated_by: Option<Uuid>,
     }
