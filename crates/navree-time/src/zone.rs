@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, FixedOffset, LocalResult, NaiveDateTime, Offset, TimeDelta, TimeZone, Utc};
+use navree_datetime::{DateTime, Disambiguation, Offset, Timestamp, Zoned};
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -44,8 +44,8 @@ pub fn tzdata_version() -> &'static str {
 /// ```
 ///
 /// The names, the legacy aliases, the country zones and the rule for a
-/// wall-clock time are navree-datetime's: a `Zone` is its zone of the same
-/// name, with chrono's types at the edges.
+/// wall-clock time are [`navree_datetime::Zone`]'s: a `Zone` is a checked
+/// named zone of the database.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Zone(navree_datetime::Zone);
 
@@ -89,7 +89,12 @@ impl Zone {
         self.0.name()
     }
 
-    /// The [`Tz`], for chrono's own conversions.
+    /// The underlying [`navree_datetime::Zone`].
+    pub const fn as_datetime_zone(&self) -> navree_datetime::Zone {
+        self.0
+    }
+
+    /// The [`Tz`] entry with the same name in the compiled tz database.
     pub fn tz(&self) -> Tz {
         // A zone of this crate is always one of the database.
         Tz::of(self.0).unwrap_or(Tz::UTC)
@@ -128,18 +133,28 @@ impl Zone {
     }
 
     /// `at` on this zone's clock.
-    pub fn local(&self, at: DateTime<Utc>) -> DateTime<Tz> {
-        at.with_timezone(&self.tz())
+    pub fn local(&self, at: Timestamp) -> Zoned {
+        at.in_zone(self.0)
     }
 
     /// The UTC offset in force at `at`.
-    pub fn offset_at(&self, at: DateTime<Utc>) -> FixedOffset {
-        self.tz().offset_from_utc_datetime(&at.naive_utc()).fix()
+    pub fn offset_at(&self, at: Timestamp) -> Offset {
+        self.0.offset_at(at)
     }
 
     /// The UTC offset in force at `at`, written `+05:30` or `-04:00`.
-    pub fn offset_label(&self, at: DateTime<Utc>) -> String {
-        offset_label(self.offset_at(at).local_minus_utc())
+    pub fn offset_label(&self, at: Timestamp) -> String {
+        offset_label(self.offset_at(at).seconds())
+    }
+
+    /// The instant at which this zone's clocks show `local`, using `how` for
+    /// skipped or repeated wall-clock times.
+    pub fn to_timestamp(
+        &self,
+        local: DateTime,
+        how: Disambiguation,
+    ) -> navree_datetime::Result<Timestamp> {
+        self.0.to_timestamp(local, how)
     }
 
     /// The instant at which this zone's clocks show `local`.
@@ -148,25 +163,14 @@ impl Zone {
     /// a time that is skipped (when clocks go forward) moves forward by the
     /// length of the gap, so 02:30 on the night clocks jump from 02:00 to
     /// 03:00 is 03:30.
-    pub fn to_utc(&self, local: NaiveDateTime) -> DateTime<Utc> {
-        // navree-datetime's `Disambiguation::Compatible`, on chrono's types.
-        let tz = self.tz();
-        match tz.from_local_datetime(&local) {
-            LocalResult::Single(at) => at.with_timezone(&Utc),
-            LocalResult::Ambiguous(earlier, _) => earlier.with_timezone(&Utc),
-            LocalResult::None => {
-                // The offset in force before the gap, applied to the wall
-                // clock time, lands as far after the gap as the time was
-                // into it.
-                let before = tz.offset_before_gap(local.and_utc().timestamp());
-                let utc = local - TimeDelta::seconds(i64::from(before));
-                Utc.from_utc_datetime(&utc)
-            }
-        }
+    pub fn to_utc(&self, local: DateTime) -> Timestamp {
+        self.0
+            .to_timestamp(local, Disambiguation::Compatible)
+            .unwrap_or_else(|_| local.in_utc())
     }
 
     /// The local day `now` falls on in this zone.
-    pub fn today(&self, now: DateTime<Utc>) -> LocalDay {
+    pub fn today(&self, now: Timestamp) -> LocalDay {
         LocalDay::of(now, self)
     }
 }
@@ -225,6 +229,18 @@ impl FromStr for Zone {
 impl From<Zone> for Tz {
     fn from(zone: Zone) -> Self {
         zone.tz()
+    }
+}
+
+impl From<Zone> for navree_datetime::Zone {
+    fn from(zone: Zone) -> Self {
+        zone.0
+    }
+}
+
+impl From<&Zone> for navree_datetime::Zone {
+    fn from(zone: &Zone) -> Self {
+        zone.0
     }
 }
 

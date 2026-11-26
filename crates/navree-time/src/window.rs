@@ -4,7 +4,7 @@
 use std::fmt;
 use std::time::Duration;
 
-use chrono::{DateTime, NaiveTime, Utc, Weekday};
+use navree_datetime::{Time, Timestamp, Weekday};
 
 use crate::{Holidays, LocalDay, Zone};
 
@@ -59,9 +59,9 @@ const WEEKENDS: &[(&str, &[u8])] = &[
 pub struct SendWindow {
     /// Open days, indexed from Monday.
     days: [bool; 7],
-    start: NaiveTime,
+    start: Time,
     /// `None`: midnight at the end of the day.
-    end: Option<NaiveTime>,
+    end: Option<Time>,
     holidays: Option<Holidays>,
 }
 
@@ -84,11 +84,11 @@ impl SendWindow {
     /// Monday to Friday, all day.
     pub fn weekdays() -> SendWindow {
         SendWindow::on(&[
-            Weekday::Mon,
-            Weekday::Tue,
-            Weekday::Wed,
-            Weekday::Thu,
-            Weekday::Fri,
+            Weekday::Monday,
+            Weekday::Tuesday,
+            Weekday::Wednesday,
+            Weekday::Thursday,
+            Weekday::Friday,
         ])
     }
 
@@ -118,11 +118,11 @@ impl SendWindow {
         );
         let mut open = [false; 7];
         for day in days {
-            open[day.num_days_from_monday() as usize] = true;
+            open[day.days_from_monday() as usize] = true;
         }
         SendWindow {
             days: open,
-            start: NaiveTime::MIN,
+            start: Time::MIDNIGHT,
             end: None,
             holidays: None,
         }
@@ -157,8 +157,8 @@ impl SendWindow {
     /// Opens at `start` and closes at `end` (`None`: midnight).
     pub fn between_times(
         mut self,
-        start: NaiveTime,
-        end: Option<NaiveTime>,
+        start: Time,
+        end: Option<Time>,
     ) -> Result<SendWindow, WindowError> {
         if end.is_some_and(|end| end <= start) {
             return Err(WindowError(format!(
@@ -182,22 +182,22 @@ impl SendWindow {
         ALL_DAYS
             .iter()
             .copied()
-            .filter(|day| self.days[day.num_days_from_monday() as usize])
+            .filter(|day| self.days[day.days_from_monday() as usize])
             .collect()
     }
 
     /// The opening time.
-    pub fn start(&self) -> NaiveTime {
+    pub fn start(&self) -> Time {
         self.start
     }
 
     /// The closing time; `None` for midnight.
-    pub fn end(&self) -> Option<NaiveTime> {
+    pub fn end(&self) -> Option<Time> {
         self.end
     }
 
     /// Whether `at` is inside the window in `zone`.
-    pub fn contains(&self, at: DateTime<Utc>, zone: &Zone) -> bool {
+    pub fn contains(&self, at: Timestamp, zone: &Zone) -> bool {
         let day = LocalDay::of(at, zone);
         self.span(day, zone)
             .is_some_and(|(open, close)| open <= at && at < close)
@@ -208,7 +208,7 @@ impl SendWindow {
     ///
     /// When no day in the next three years is open (every one of them a
     /// holiday), it logs a warning and returns `now`.
-    pub fn next_slot(&self, now: DateTime<Utc>, zone: &Zone) -> DateTime<Utc> {
+    pub fn next_slot(&self, now: Timestamp, zone: &Zone) -> Timestamp {
         let today = LocalDay::of(now, zone);
         for offset in 0..HORIZON_DAYS {
             let day = today.add_days(offset);
@@ -228,7 +228,7 @@ impl SendWindow {
 
     /// How long to wait from `now` until [`next_slot`](SendWindow::next_slot)
     /// (zero inside the window): the delay for `dispatch_later`.
-    pub fn delay(&self, now: DateTime<Utc>, zone: &Zone) -> Duration {
+    pub fn delay(&self, now: Timestamp, zone: &Zone) -> Duration {
         (self.next_slot(now, zone) - now)
             .to_std()
             .unwrap_or_default()
@@ -236,8 +236,8 @@ impl SendWindow {
 
     /// The opening and closing instants of `day` in `zone`, if the window
     /// opens that day.
-    fn span(&self, day: LocalDay, zone: &Zone) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
-        if !self.days[day.weekday().num_days_from_monday() as usize] {
+    fn span(&self, day: LocalDay, zone: &Zone) -> Option<(Timestamp, Timestamp)> {
+        if !self.days[day.weekday().days_from_monday() as usize] {
             return None;
         }
         if self
@@ -271,17 +271,17 @@ impl fmt::Debug for SendWindow {
 }
 
 const ALL_DAYS: [Weekday; 7] = [
-    Weekday::Mon,
-    Weekday::Tue,
-    Weekday::Wed,
-    Weekday::Thu,
-    Weekday::Fri,
-    Weekday::Sat,
-    Weekday::Sun,
+    Weekday::Monday,
+    Weekday::Tuesday,
+    Weekday::Wednesday,
+    Weekday::Thursday,
+    Weekday::Friday,
+    Weekday::Saturday,
+    Weekday::Sunday,
 ];
 
 /// Parses a 24-hour `HH:MM` (`24:00` when `allow_midnight`, as `None`).
-fn parse_time(text: &str, allow_midnight: bool) -> Result<Option<NaiveTime>, WindowError> {
+fn parse_time(text: &str, allow_midnight: bool) -> Result<Option<Time>, WindowError> {
     let invalid = || WindowError(format!("`{text}` is not a 24-hour HH:MM time"));
     let trimmed = text.trim();
     if allow_midnight && trimmed == "24:00" {
@@ -290,14 +290,14 @@ fn parse_time(text: &str, allow_midnight: bool) -> Result<Option<NaiveTime>, Win
     let (hour, minute) = trimmed.split_once(':').ok_or_else(invalid)?;
     let digits = |s: &str, max_len: usize| {
         (!s.is_empty() && s.len() <= max_len && s.bytes().all(|b| b.is_ascii_digit()))
-            .then(|| s.parse::<u32>().ok())
+            .then(|| s.parse::<u8>().ok())
             .flatten()
     };
     let hour = digits(hour, 2).ok_or_else(invalid)?;
     let minute = digits(minute, 2)
         .filter(|_| minute.len() == 2)
         .ok_or_else(invalid)?;
-    NaiveTime::from_hms_opt(hour, minute, 0)
+    Time::new(hour, minute, 0).ok()
         .map(Some)
         .ok_or_else(invalid)
 }
@@ -326,11 +326,11 @@ mod tests {
     fn times_are_strict_hh_mm() {
         assert_eq!(
             parse_time("09:00", false).unwrap(),
-            NaiveTime::from_hms_opt(9, 0, 0)
+            Time::new(9, 0, 0).ok()
         );
         assert_eq!(
             parse_time("7:05", false).unwrap(),
-            NaiveTime::from_hms_opt(7, 5, 0)
+            Time::new(7, 5, 0).ok()
         );
         assert_eq!(parse_time("24:00", true).unwrap(), None);
         for bad in ["24:00", "12:5", "12", "noon", "", "12:60", "-1:00"] {

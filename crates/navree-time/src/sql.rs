@@ -1,7 +1,7 @@
 //! [`ZoneSql`]: local timestamps and local days in SQL, for reports that
 //! aggregate by the tenant's days in the database.
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_db::{Backend, Statement};
 
 use crate::Zone;
@@ -45,7 +45,7 @@ use crate::Zone;
 pub struct ZoneSql {
     zone: Zone,
     backend: Backend,
-    window: Option<(DateTime<Utc>, DateTime<Utc>)>,
+    window: Option<(Timestamp, Timestamp)>,
 }
 
 impl Zone {
@@ -62,7 +62,7 @@ impl Zone {
 impl ZoneSql {
     /// The span of instants the query covers (a [`DayRange`](crate::DayRange)'s
     /// `utc_bounds`): SQLite and MySQL use the offsets in force within it.
-    pub fn within(mut self, from: DateTime<Utc>, to: DateTime<Utc>) -> Self {
+    pub fn within(mut self, from: Timestamp, to: Timestamp) -> Self {
         self.window = Some((from, to.max(from)));
         self
     }
@@ -131,7 +131,7 @@ impl ZoneSql {
     /// expression, or a `CASE` switching at each transition.
     fn by_offset(&self, apply: impl Fn(i32) -> String) -> String {
         let (from, to) = self.window.unwrap_or_else(|| {
-            let now = Utc::now();
+            let now = Timestamp::now();
             (now, now)
         });
         let periods = offsets_between(&self.zone, from, to);
@@ -179,20 +179,20 @@ const EXPR: &str = "\u{1}";
 /// with the instant it starts (the first starts at `from`).
 pub(crate) fn offsets_between(
     zone: &Zone,
-    from: DateTime<Utc>,
-    to: DateTime<Utc>,
-) -> Vec<(DateTime<Utc>, i32)> {
-    let offset = |at: DateTime<Utc>| zone.offset_at(at).local_minus_utc();
+    from: Timestamp,
+    to: Timestamp,
+) -> Vec<(Timestamp, i32)> {
+    let offset = |at: Timestamp| zone.offset_at(at).seconds();
     let mut periods = vec![(from, offset(from))];
-    let step = TimeDelta::hours(6);
+    let step = Span::hours(6);
     let mut probe = from;
     while probe < to {
         let next = (probe + step).min(to);
         let current = periods[periods.len() - 1].1;
         if offset(next) != current {
             // The first whole second with the new offset.
-            let at = |seconds: i64| DateTime::from_timestamp(seconds, 0).unwrap_or(next);
-            let (mut low, mut high) = (probe.timestamp(), next.timestamp());
+            let at = |seconds: i64| Timestamp::from_secs(seconds).ok().unwrap_or(next);
+            let (mut low, mut high) = (probe.as_secs(), next.as_secs());
             while high - low > 1 {
                 let middle = low + (high - low) / 2;
                 if offset(at(middle)) == current {
@@ -212,7 +212,7 @@ pub(crate) fn offsets_between(
 mod tests {
     use super::*;
 
-    fn utc(text: &str) -> DateTime<Utc> {
+    fn utc(text: &str) -> Timestamp {
         text.parse().unwrap()
     }
 

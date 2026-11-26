@@ -8,8 +8,8 @@
 //!   case and replaces legacy aliases with current names
 //!   (`Asia/Calcutta` is `Asia/Kolkata`), so every PostgreSQL accepts what
 //!   it stores. [`Zone::for_country`] gives a country's primary zone.
-//!   [`Tz`] is the underlying `chrono::TimeZone` over every zone and link of
-//!   the compiled IANA release.
+//!   [`Tz`] knows every zone and link of the compiled IANA release under its
+//!   own name.
 //! - **The request's zone.** [`CurrentZone`] resolves the signed-in
 //!   user's zone, else the workspace's, else the organization's, else
 //!   `time.default_zone`, through the `dyn ZoneSource` multi-bindings of
@@ -81,7 +81,7 @@ pub use module::{ModuleBuilderTimeExt, TimeModule};
 pub use navree_contracts::{ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};
 pub use options::{HolidayOptions, TimeOptions};
 pub use sql::ZoneSql;
-pub use tz::{Tz, TzOffset};
+pub use tz::{LocalTime, Tz, TzOffset};
 pub use window::{SendWindow, WindowError, weekend_days};
 pub use zone::{Zone, ZoneError, tzdata_version};
 pub use zones::Zones;

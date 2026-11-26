@@ -29,7 +29,6 @@ test-postgres = ["navree-db/postgres"]
 test-mysql = ["navree-db/mysql"]
 
 [dependencies]
-chrono = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }

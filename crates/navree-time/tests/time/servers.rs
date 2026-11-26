@@ -9,7 +9,7 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree_datetime::{Date, Timestamp};
 use navree_db::{Backend, Executor, ExecutorExt, Statement};
 use navree_time::{DayRange, LocalDay, Zone};
 
@@ -23,7 +23,7 @@ const RECENT_ZONES: &[&str] = &["America/Coyhaique"];
 
 /// `events(id, created_at)` with the column type each server keeps instants
 /// in, and `instants` inserted with ids from 0.
-async fn events(db: &impl Executor, instants: &[DateTime<Utc>]) {
+async fn events(db: &impl Executor, instants: &[Timestamp]) {
     let column = match db.backend() {
         Backend::Postgres => "TIMESTAMPTZ",
         Backend::MySql => "DATETIME(6)",
@@ -49,9 +49,9 @@ async fn events(db: &impl Executor, instants: &[DateTime<Utc>]) {
 async fn counts_per_local_day(
     db: &impl Executor,
     zone: &Zone,
-    from: DateTime<Utc>,
-    to: DateTime<Utc>,
-) -> Vec<(NaiveDate, i64)> {
+    from: Timestamp,
+    to: Timestamp,
+) -> Vec<(Date, i64)> {
     let sql = zone.sql(db.backend()).within(from, to);
     let local_day = sql.local_date(&sql.column("created_at"));
     // The expression appears in SELECT and GROUP BY: its values go with each.
@@ -74,14 +74,14 @@ async fn counts_per_local_day(
         .iter()
         .map(|row| {
             (
-                row.get::<NaiveDate>("day").unwrap(),
+                row.get::<Date>("day").unwrap(),
                 row.get::<i64>("n").unwrap(),
             )
         })
         .collect()
 }
 
-fn date(text: &str) -> NaiveDate {
+fn date(text: &str) -> Date {
     text.parse().unwrap()
 }
 
@@ -167,7 +167,7 @@ async fn local_dates_agree_with_rust(scratch: Scratch) {
             let id: i32 = row.get("id").unwrap();
             let at = instants[id as usize];
             assert_eq!(
-                LocalDay::from(row.get::<NaiveDate>("day").unwrap()),
+                LocalDay::from(row.get::<Date>("day").unwrap()),
                 LocalDay::of(at, &zone),
                 "{name} {at} on {}",
                 scratch.backend()

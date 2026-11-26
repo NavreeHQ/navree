@@ -4,7 +4,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::{Clock, SystemClock, ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};
 use navree_kernel::BoxError;
 use uuid::Uuid;
@@ -77,7 +77,7 @@ impl Zones {
     }
 
     /// The current time on the app's clock (`dyn Clock`).
-    pub fn now(&self) -> DateTime<Utc> {
+    pub fn now(&self) -> Timestamp {
         self.clock.now()
     }
 
