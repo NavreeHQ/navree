@@ -84,7 +84,7 @@ fn first_code(html: &str) -> String {
 
 /// The code an authenticator app shows for `secret` now.
 fn code_now(secret: &str) -> String {
-    let now = u64::try_from(chrono::Utc::now().timestamp()).expect("a time after 1970");
+    let now = u64::try_from(navree::datetime::Timestamp::now().as_secs()).expect("a time after 1970");
     Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
         .build()
         .expect("a valid TOTP")

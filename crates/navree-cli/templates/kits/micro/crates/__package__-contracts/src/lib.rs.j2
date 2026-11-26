@@ -11,7 +11,7 @@
 //! let invoice: Invoice = client.send(GET_INVOICE, &GetInvoice { id }).await?;
 //! ```
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::events::Event;
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
@@ -41,7 +41,7 @@ pub struct Invoice {
     /// An ISO 4217 code, upper case (`EUR`).
     pub currency: String,
     pub status: InvoiceStatus,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// Where an invoice is in its life.

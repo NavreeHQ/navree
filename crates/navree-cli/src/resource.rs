@@ -353,8 +353,8 @@ fn field_for(column: &Column, columns: &[Column]) -> Option<FieldCode> {
             format!("Field::money(\"{name}\", \"currency\").sortable()")
         }
         _ if is_number(ty) => format!("Field::number(\"{name}\").sortable()"),
-        "Date" | "NaiveDate" => format!("Field::date(\"{name}\").sortable()"),
-        "Timestamp" | "Zoned" | "DateTime" | "NaiveDateTime" | "DateTimeUtc" => {
+        "Date" => format!("Field::date(\"{name}\").sortable()"),
+        "Timestamp" | "Zoned" | "DateTime" => {
             format!("Field::datetime(\"{name}\"){readonly}.sortable()")
         }
         "Uuid" | "Ulid" if name.ends_with("_id") => {

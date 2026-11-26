@@ -8,7 +8,7 @@
 //!
 //! Search, sort, filters and pages run on the server, in the database.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::*;
 use uuid::Uuid;
 
@@ -38,7 +38,7 @@ pub struct CustomerRow {
     #[col(sortable, numeric, filter = range, kind = money, label = "Monthly (₹)")]
     pub monthly_paise: i64,
     #[col(sortable, filter = date, hide_on_mobile, label = "Customer since")]
-    pub since: NaiveDate,
+    pub since: Date,
     #[col(filter = boolean, hidden, label = "Auto-pay")]
     pub autopay: bool,
 }

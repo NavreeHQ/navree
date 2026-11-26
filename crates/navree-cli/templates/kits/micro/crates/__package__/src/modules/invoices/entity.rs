@@ -1,6 +1,6 @@
 //! The `invoices` table as an ORM model.
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::orm::Model;
 use serde::Serialize;
 use uuid::Uuid;
@@ -23,7 +23,7 @@ pub struct StoredInvoice {
     /// `draft`, `sent`, `paid` or `void`.
     pub status: String,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }

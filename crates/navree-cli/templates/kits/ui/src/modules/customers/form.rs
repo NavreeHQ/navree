@@ -2,7 +2,7 @@
 //! labels, its types pick the widgets, and its `#[validate]` rules run in the
 //! browser and again on the server.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::{Form, Money, Validate};
 use serde::Deserialize;
 
@@ -52,7 +52,7 @@ pub struct CustomerForm {
     pub monthly: Money,
     /// Customer since
     #[validate(skip)]
-    pub since: NaiveDate,
+    pub since: Date,
     /// Auto-pay
     #[validate(skip)]
     pub autopay: bool,
@@ -65,7 +65,7 @@ pub struct CustomerForm {
 impl CustomerForm {
     /// The form for a customer that is not there yet: a Growth plan on trial,
     /// joining today.
-    pub fn blank(today: NaiveDate) -> Self {
+    pub fn blank(today: Date) -> Self {
         Self {
             name: String::new(),
             email: String::new(),

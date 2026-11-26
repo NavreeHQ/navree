@@ -2,7 +2,7 @@
 //! workspace (`workspace_id`; row isolation, enforced by the model's
 //! workspace scope and by PostgreSQL row-level security).
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
@@ -26,9 +26,9 @@ pub struct Project {
     /// The user who created it.
     pub created_by: Uuid,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// Every query through `WorkspaceRepo` is filtered by `workspace_id`.

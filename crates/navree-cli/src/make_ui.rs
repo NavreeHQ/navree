@@ -300,7 +300,7 @@ fn is_standard_model(src: &str, pascal: &str) -> bool {
         && has_field(src, "id: Uuid")
         && has_field(src, "name: String")
         && (has_field(src, "created_at: Timestamp")
-            || has_field(src, "created_at: DateTime<Utc>"))
+            || has_field(src, "created_at: navree::datetime::Timestamp"))
 }
 
 /// The path, from `tables/<name>.rs`, of the module's model `entity`, if it

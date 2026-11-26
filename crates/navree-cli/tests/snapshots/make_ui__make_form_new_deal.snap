@@ -9,6 +9,7 @@ expression: files.to_string()
 //! Edit the fields, then serve `page` on a `GET` route and `store` on a `POST`
 //! route (`navree make:page` writes a controller to call them from).
 
+use navree::datetime::Date;
 use navree::http::Response;
 use navree::http::response::IntoResponse;
 use navree::ui::form::{FormView, Money, Rejected};
@@ -45,7 +46,7 @@ pub struct NewDealForm {
     pub stage: Stage,
     /// Expected close
     #[validate(skip)]
-    pub closes_on: Option<chrono::NaiveDate>,
+    pub closes_on: Option<Date>,
     // More fields to copy:
     //
     // /// Email

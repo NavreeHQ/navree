@@ -1,7 +1,7 @@
 //! The `customers` table as an ORM model, and the two choices a customer
 //! carries: a plan and a status.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use navree::datetime::{Date, Timestamp};
 use navree::orm::Model;
 use navree::ui::form::Options as _;
 use navree::ui::table::option_label;
@@ -36,15 +36,15 @@ pub struct Customer {
     /// What the customer pays each month, in paise (100 paise to the rupee).
     pub monthly_paise: i64,
     /// The day the customer joined.
-    pub since: NaiveDate,
+    pub since: Date,
     /// Whether the customer pays by auto-pay.
     pub autopay: bool,
     /// Anything worth remembering.
     pub notes: Option<String>,
     /// When the customer was added.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// Every query through `WorkspaceRepo` is filtered by `workspace_id`.

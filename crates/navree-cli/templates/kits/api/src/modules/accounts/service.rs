@@ -1,8 +1,8 @@
 //! Sessions, read from navree-auth's `refresh_tokens`: every sign-in starts
 //! a token family, and the family's one unspent token keeps it alive.
 
-use chrono::Utc;
 use navree::auth::refresh_token::Model as RefreshToken;
+use navree::datetime::Timestamp;
 use navree::db::Uow;
 use navree::injectable;
 use navree::orm::{Model as _, OrmError};
@@ -20,7 +20,7 @@ impl SessionService {
         let tokens = RefreshToken::query()
             .where_(RefreshToken::USER_ID.eq(user))
             .where_null(RefreshToken::REVOKED_AT)
-            .where_(RefreshToken::EXPIRES_AT.gt(Utc::now()))
+            .where_(RefreshToken::EXPIRES_AT.gt(Timestamp::now()))
             .order_by_desc(RefreshToken::CREATED_AT)
             .get(uow)
             .await?;
@@ -45,7 +45,7 @@ impl SessionService {
             .where_(RefreshToken::USER_ID.eq(user))
             .where_(RefreshToken::FAMILY_ID.eq(id))
             .where_null(RefreshToken::REVOKED_AT)
-            .update(uow, [RefreshToken::REVOKED_AT.set(Utc::now())])
+            .update(uow, [RefreshToken::REVOKED_AT.set(Timestamp::now())])
             .await?;
         Ok(revoked > 0)
     }

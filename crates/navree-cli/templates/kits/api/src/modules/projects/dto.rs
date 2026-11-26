@@ -1,6 +1,6 @@
 //! Request and response bodies of `/api/v1/projects`.
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::openapi::ToSchema;
 use navree::orm::list::{Field, ListResource, ListSpec};
 use navree::validation::Validate;
@@ -111,8 +111,8 @@ pub struct ProjectResource {
     pub description: Option<String>,
     pub status: String,
     pub created_by: Uuid,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 impl From<&Project> for ProjectResource {

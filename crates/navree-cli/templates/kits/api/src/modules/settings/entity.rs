@@ -2,7 +2,7 @@
 //! to hear about, per workspace (one row per user and workspace, created on
 //! the first change).
 
-use chrono::{DateTime, Utc};
+use navree::datetime::Timestamp;
 use navree::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
@@ -25,9 +25,9 @@ pub struct NotificationSetting {
     /// News about the product.
     pub product_updates: bool,
     /// When the row was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When the row last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// Reads and writes go through `WorkspaceRepo`.

@@ -8,9 +8,9 @@
 //! customers is left as it is. `navree db:seed customers` writes them on
 //! demand. Edit the table below to change them; each line is one customer.
 
-use chrono::NaiveDate;
 use navree::BoxFuture;
 use navree::config::Config;
+use navree::datetime::Date;
 use navree::db::{Db, Seeder, Uow};
 use navree::kernel::Lifecycle;
 use navree::prelude::*;
@@ -91,7 +91,7 @@ pub struct Seed {
     /// The monthly fee in rupees.
     pub rupees: i64,
     /// The day the customer joined.
-    pub since: NaiveDate,
+    pub since: Date,
     /// Whether the customer pays by auto-pay.
     pub autopay: bool,
 }
@@ -153,7 +153,8 @@ fn read(index: usize, line: &str) -> Seed {
         rupees: rupees
             .parse()
             .unwrap_or_else(|_| panic!("a whole number of rupees, not `{rupees}`: {line}")),
-        since: NaiveDate::parse_from_str(since, "%Y-%m-%d")
+        since: since
+            .parse()
             .unwrap_or_else(|_| panic!("a day like 2026-11-05, not `{since}`: {line}")),
         autopay: autopay == "yes",
     }

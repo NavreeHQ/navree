@@ -374,7 +374,7 @@ fn a_form_shows_the_widgets_and_the_handlers() {
         "#[validate(length(min = 1, max = 255))]",
         "pub amount: Money,",
         "#[derive(Clone, Copy, Debug, Deserialize, Options)]",
-        "pub closes_on: Option<chrono::NaiveDate>,",
+        "pub closes_on: Option<Date>,",
         // email, number and a checkbox, to copy
         "#[validate(email)]",
         "#[validate(range(min = 1, max = 500))]",
