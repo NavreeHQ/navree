@@ -3,7 +3,7 @@
 //! has none, writes inside the workspace of the record, and keeps working
 //! under PostgreSQL row-level security with a role that does not bypass it.
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt};
 use navree_helm::{
@@ -37,7 +37,7 @@ pub struct Note {
     pub workspace_id: Uuid,
     pub title: String,
     pub body: Option<String>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 struct CreateNotes;

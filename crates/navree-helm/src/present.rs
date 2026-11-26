@@ -1,6 +1,6 @@
 //! Turning [`RawRecord`]s into what the screens and the API show.
 
-use chrono::{DateTime, Duration, Utc};
+use navree_datetime::{Span, Timestamp, Zoned};
 use navree_access::{DELETE, READ, UPDATE};
 use navree_http::AppError;
 use navree_storage::Storage;
@@ -290,7 +290,7 @@ async fn display(
     base: &str,
     related: Option<&(Option<String>, HashMap<String, String>)>,
     storage: Option<&Storage>,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Display {
     let value = record.readable.get(&field.name).unwrap_or(&Value::Null);
     match &field.kind {
@@ -385,9 +385,9 @@ async fn display(
         }
         FieldKind::DateTime => {
             let text = key_text(value).unwrap_or_default();
-            let pretty = DateTime::parse_from_rfc3339(&text)
+            let pretty = Zoned::parse_rfc3339(&text)
                 .map(|d| {
-                    d.with_timezone(&Utc)
+                    d.timestamp()
                         .format("%-d %b %Y %H:%M UTC")
                         .to_string()
                 })
@@ -430,7 +430,7 @@ async fn display(
                 Some(disk) => match disk.url(&path) {
                     Ok(url) => Some(url),
                     Err(_) => disk
-                        .temporary_url(&path, now + Duration::hours(1))
+                        .temporary_url(&path, now + Span::hours(1))
                         .await
                         .ok(),
                 },

@@ -46,7 +46,7 @@ pub struct MixedNote {
     pub id: Uuid,
     pub workspace_id: Uuid,
     pub title: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 struct CreateMixedNotes;

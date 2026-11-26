@@ -499,7 +499,7 @@ async fn filters_on_a_column_the_rules_hide_are_refused() {
             stage: "won",
             amount_cents: 5000,
             company: Some(agra.id),
-            expected_close_date: chrono::NaiveDate::from_ymd_opt(2026, 11, 1),
+            expected_close_date: navree_datetime::Date::new(2026, 11, 1).ok(),
             ..DealSeed::default()
         },
     )

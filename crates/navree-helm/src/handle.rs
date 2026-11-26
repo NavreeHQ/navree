@@ -5,7 +5,7 @@ use std::any::TypeId;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 
-use chrono::{Datelike, Duration, NaiveDate};
+use navree_datetime::Date;
 use navree_access::{CREATE, DELETE, READ, Subject, UPDATE};
 use navree_contracts::Dispatcher;
 use navree_db::{PageMeta, PageQuery};
@@ -793,7 +793,7 @@ impl<R: Resource> Handle<R> {
             (FieldKind::Boolean, value) => values::boolean(&value).map(Json::Bool).unwrap_or(value),
             (FieldKind::DateTime, Json::String(text)) if !text.trim().is_empty() => {
                 match values::datetime(&Json::String(text.clone()), tz_offset) {
-                    Some(at) => Json::String(at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                    Some(at) => Json::String(at.to_rfc3339_with(navree_datetime::Precision::Secs, true)),
                     None => Json::String(text),
                 }
             }
@@ -1283,7 +1283,7 @@ impl<R: Resource> Handle<R> {
                 Ok(f(query, on))
             }
             FilterKind::DateRange => {
-                let today = save::now(&cx.app).await.date_naive();
+                let today = save::now(&cx.app).await.date_time_utc().date();
                 let text = values.last().cloned().unwrap_or_default();
                 let (from, to) = date_range(&text, today).ok_or_else(|| {
                     format!("filter[{name}] must be a range of dates (YYYY-MM-DD..YYYY-MM-DD) or today, week, month or quarter")
@@ -1296,7 +1296,7 @@ impl<R: Resource> Handle<R> {
                     );
                 }
                 if let Some(to) = to {
-                    let end = to + Duration::days(1);
+                    let end = to.add_days(1).unwrap_or(to);
                     query =
                         query.where_(self.col(name).lt(values::date_bound(shape, midnight(end))));
                 }
@@ -1326,7 +1326,7 @@ impl<R: Resource> Handle<R> {
         cx: &Cx,
         column: &str,
         shape: Shape,
-        buckets: &[(String, NaiveDate, NaiveDate)],
+        buckets: &[(String, Date, Date)],
     ) -> Expr {
         let quote = if navree_db::Executor::backend(&cx.uow) == navree_db::Backend::MySql {
             '`'
@@ -1463,7 +1463,7 @@ impl<R: Resource> Handle<R> {
                     return Err(AppError::internal("a trend metric without a period"));
                 };
                 let shape = self.shape(column);
-                let today = now.date_naive();
+                let today = now.date_time_utc().date();
                 let buckets = buckets(*interval, *count, today);
                 let start = buckets.first().map(|b| b.1).unwrap_or(today);
                 let end = buckets.last().map(|b| b.2).unwrap_or(today);
@@ -1701,7 +1701,7 @@ fn group_key(row: &Row, column: &str, shape: Shape) -> String {
             .flatten()
             .map(|n| n.to_string()),
         Shape::Date => row
-            .get::<Option<NaiveDate>>(column)
+            .get::<Option<Date>>(column)
             .ok()
             .flatten()
             .map(|d| d.format("%Y-%m-%d").to_string()),
@@ -1722,42 +1722,42 @@ fn group_key(row: &Row, column: &str, shape: Shape) -> String {
 /// `from..to` (either end optional) or a preset, relative to `today`.
 pub(crate) fn date_range(
     text: &str,
-    today: NaiveDate,
-) -> Option<(Option<NaiveDate>, Option<NaiveDate>)> {
+    today: Date,
+) -> Option<(Option<Date>, Option<Date>)> {
     let text = text.trim();
-    let parse = |s: &str| -> Option<Option<NaiveDate>> {
+    let parse = |s: &str| -> Option<Option<Date>> {
         let s = s.trim();
         if s.is_empty() {
             Some(None)
         } else {
-            NaiveDate::parse_from_str(s, "%Y-%m-%d").ok().map(Some)
+            Date::parse("%Y-%m-%d", s).ok().map(Some)
         }
     };
-    let first_of = |year: i32, month: u32| NaiveDate::from_ymd_opt(year, month, 1);
+    let first_of = |year: i32, month: u8| Date::new(year, month, 1).ok();
     match text {
         "today" => Some((Some(today), Some(today))),
         "week" => {
-            let monday = today - Duration::days(i64::from(today.weekday().num_days_from_monday()));
-            Some((Some(monday), Some(monday + Duration::days(6))))
+            let monday = today.add_days(-i64::from(today.weekday().days_from_monday()))?;
+            Some((Some(monday), monday.add_days(6)))
         }
         "month" => {
-            let start = first_of(today.year(), today.month())?;
-            let next = if today.month() == 12 {
+            let start = first_of(today.year(), today.month_number())?;
+            let next = if today.month_number() == 12 {
                 first_of(today.year() + 1, 1)?
             } else {
-                first_of(today.year(), today.month() + 1)?
+                first_of(today.year(), today.month_number() + 1)?
             };
-            Some((Some(start), Some(next - Duration::days(1))))
+            Some((Some(start), next.add_days(-1)))
         }
         "quarter" => {
-            let first_month = (today.month() - 1) / 3 * 3 + 1;
+            let first_month = (today.month_number() - 1) / 3 * 3 + 1;
             let start = first_of(today.year(), first_month)?;
             let next = if first_month == 10 {
                 first_of(today.year() + 1, 1)?
             } else {
                 first_of(today.year(), first_month + 3)?
             };
-            Some((Some(start), Some(next - Duration::days(1))))
+            Some((Some(start), next.add_days(-1)))
         }
         _ => {
             let (from, to) = text.split_once("..")?;
@@ -2202,8 +2202,8 @@ mod tests {
 
     #[test]
     fn date_ranges_and_presets() {
-        let today = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
-        let d = |y, m, d| NaiveDate::from_ymd_opt(y, m, d);
+        let today = Date::new(2026, 10, 28).unwrap();
+        let d = |y, m, d| Date::new(y, m, d).ok();
         assert_eq!(date_range("today", today), Some((Some(today), Some(today))));
         assert_eq!(
             date_range("week", today),

@@ -2,18 +2,18 @@
 //! converting submitted JSON into the plain form a model field takes and
 //! into the value a condition binds.
 
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use navree_datetime::{Date, DateTime, Disambiguation, Offset, Time, Timestamp, Zone, Zoned};
 use navree_orm::{ColumnMeta, FieldKind, Model, Value};
 use serde_json::Value as Json;
 
 /// How a date-time column holds its instant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Instant {
-    /// `DateTime<Utc>`.
+    /// `Timestamp`.
     Utc,
-    /// `NaiveDateTime` (UTC by convention).
+    /// `DateTime` (UTC by convention).
     Naive,
-    /// `DateTime<FixedOffset>`.
+    /// `Zoned`.
     Offset,
 }
 
@@ -53,9 +53,9 @@ impl Shape {
             FieldKind::Time => Shape::Time,
             FieldKind::DateTime => {
                 let rust_type = meta.rust_type();
-                Shape::DateTime(if rust_type.contains("NaiveDateTime") {
+                Shape::DateTime(if rust_type.contains("DateTime") {
                     Instant::Naive
-                } else if rust_type.contains("FixedOffset") {
+                } else if rust_type.contains("Zoned") {
                     Instant::Offset
                 } else {
                     Instant::Utc
@@ -144,7 +144,7 @@ pub(crate) fn to_input(
         Shape::DateTime(_) => Json::String(
             datetime(input, tz_offset)
                 .ok_or(Invalid("date"))?
-                .to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
+                .to_rfc3339_with(navree_datetime::Precision::Micros, true),
         ),
         Shape::Json | Shape::Other => input.clone(),
     })
@@ -247,29 +247,27 @@ fn uuid(input: &Json) -> Option<uuid::Uuid> {
         .and_then(|s| uuid::Uuid::parse_str(s.trim()).ok())
 }
 
-fn time(input: &Json) -> Option<NaiveTime> {
+fn time(input: &Json) -> Option<Time> {
     let s = input.as_str()?.trim();
-    NaiveTime::parse_from_str(s, "%H:%M:%S")
-        .or_else(|_| NaiveTime::parse_from_str(s, "%H:%M"))
+    Time::parse("%H:%M:%S", s)
+        .or_else(|_| Time::parse("%H:%M", s))
         .ok()
 }
 
 /// A `YYYY-MM-DD` date (or the date part of an RFC 3339 date-time).
-pub(crate) fn date(input: &Json) -> Option<NaiveDate> {
+pub(crate) fn date(input: &Json) -> Option<Date> {
     let s = input.as_str()?.trim();
-    NaiveDate::parse_from_str(s, "%Y-%m-%d").ok().or_else(|| {
-        DateTime::parse_from_rfc3339(s)
-            .ok()
-            .map(|dt| dt.date_naive())
-    })
+    Date::parse("%Y-%m-%d", s)
+        .ok()
+        .or_else(|| Zoned::parse_rfc3339(s).ok().map(|dt| dt.date()))
 }
 
 /// An RFC 3339 date-time, or a `YYYY-MM-DDTHH:MM[:SS]` local time at
 /// `tz_offset_minutes` (UTC when unknown), or a date at midnight.
-pub(crate) fn datetime(input: &Json, tz_offset_minutes: Option<i32>) -> Option<DateTime<Utc>> {
+pub(crate) fn datetime(input: &Json, tz_offset_minutes: Option<i32>) -> Option<Timestamp> {
     let s = input.as_str()?.trim();
-    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-        return Some(dt.with_timezone(&Utc));
+    if let Ok(dt) = Zoned::parse_rfc3339(s) {
+        return Some(dt.timestamp());
     }
     let naive = [
         "%Y-%m-%dT%H:%M:%S%.f",
@@ -277,18 +275,13 @@ pub(crate) fn datetime(input: &Json, tz_offset_minutes: Option<i32>) -> Option<D
         "%Y-%m-%d %H:%M:%S%.f",
     ]
     .iter()
-    .find_map(|format| NaiveDateTime::parse_from_str(s, format).ok())
-    .or_else(|| {
-        NaiveDate::parse_from_str(s, "%Y-%m-%d")
-            .ok()
-            .and_then(|d| d.and_hms_opt(0, 0, 0))
-    })?;
+    .find_map(|format| DateTime::parse(format, s).ok())
+    .or_else(|| Date::parse("%Y-%m-%d", s).ok().map(|d| d.at(Time::MIDNIGHT)))?;
     // `getTimezoneOffset()` is UTC minus local time, in minutes.
-    let offset = FixedOffset::west_opt(tz_offset_minutes.unwrap_or(0).saturating_mul(60))?;
-    offset
-        .from_local_datetime(&naive)
-        .single()
-        .map(|dt| dt.with_timezone(&Utc))
+    let offset = Offset::west(tz_offset_minutes.unwrap_or(0).saturating_mul(60)).ok()?;
+    Zone::fixed(offset)
+        .to_timestamp(naive, Disambiguation::Compatible)
+        .ok()
 }
 
 /// A stored number as `f64` (metrics): integers, floats, decimals and
@@ -314,11 +307,11 @@ pub(crate) fn value_number(value: &Value) -> Option<f64> {
 
 /// The instant `at` as a value of a date or date-time column of `shape`
 /// (bounds of date filters and metric periods; timestamps Helm sets).
-pub(crate) fn date_bound(shape: Shape, at: DateTime<Utc>) -> Value {
+pub(crate) fn date_bound(shape: Shape, at: Timestamp) -> Value {
     match shape {
-        Shape::Date => Value::Date(at.date_naive()),
-        Shape::DateTime(Instant::Naive) => Value::DateTime(at.naive_utc()),
-        Shape::DateTime(Instant::Offset) => Value::TimestampTz(at.fixed_offset()),
+        Shape::Date => Value::Date(at.date_time_utc().date()),
+        Shape::DateTime(Instant::Naive) => Value::DateTime(at.date_time_utc()),
+        Shape::DateTime(Instant::Offset) => Value::TimestampTz(at.in_zone(Zone::fixed(Offset::UTC))),
         Shape::Text | Shape::Other => Value::String(at.to_rfc3339()),
         _ => Value::Timestamp(at),
     }

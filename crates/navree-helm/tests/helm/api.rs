@@ -1,6 +1,6 @@
 //! The JSON API: routing, authorization, CRUD, search, sorting, filters.
 
-use chrono::NaiveDate;
+use navree_datetime::Date;
 use navree_audit::AuditModule;
 use navree_db::Db;
 use navree_helm::FormData;
@@ -248,7 +248,7 @@ async fn filters_narrow_the_list() {
     let (_, rep) = user(&app, "rep").await;
     let gulati = company(&app, "Gulati", Some("Springfield")).await;
     let ilaichi = company(&app, "Ilaichi", None).await;
-    let day = |d| NaiveDate::from_ymd_opt(2026, 10, d);
+    let day = |d| Date::new(2026, 10, d).ok();
     deal(
         &app,
         DealSeed {
@@ -517,7 +517,7 @@ async fn a_record_shows_its_values_display_and_permissions() {
             stage: "qualified",
             owner: Some(rep_id),
             company: Some(gulati.id),
-            expected_close_date: NaiveDate::from_ymd_opt(2026, 11, 30),
+            expected_close_date: Date::new(2026, 11, 30).ok(),
             ..DealSeed::default()
         },
     )
@@ -646,7 +646,7 @@ async fn creating_validates_and_saves_through_the_resource() {
     assert!(saved.priority);
     assert_eq!(
         saved.expected_close_date,
-        NaiveDate::from_ymd_opt(2026, 12, 1)
+        Date::new(2026, 12, 1).ok()
     );
     assert_eq!(body["data"]["display"]["amount_cents"], "$1,250.50");
 

@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use navree_datetime::{Date, Timestamp};
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, ActionMarker, CREATE, DELETE, READ,
     Rules, UPDATE, field,
@@ -34,8 +34,8 @@ use uuid::Uuid;
 pub const ADMIN: &str = "admin";
 
 /// "Now" in every test app.
-pub fn now() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, 26, 12, 0, 0).unwrap()
+pub fn now() -> Timestamp {
+    Timestamp::utc(2026, 10, 26, 12, 0, 0).unwrap()
 }
 
 /// A company. Its API token is a secret: hidden from serialized records
@@ -55,8 +55,8 @@ pub struct Company {
     pub owner_id: Option<Uuid>,
     #[model(hidden)]
     pub api_token: Option<String>,
-    pub deleted_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+    pub deleted_at: Option<Timestamp>,
+    pub created_at: Timestamp,
 }
 
 /// A deal.
@@ -70,13 +70,13 @@ pub struct Deal {
     pub stage: String,
     pub company_id: Option<Uuid>,
     pub owner_id: Option<Uuid>,
-    pub expected_close_date: Option<NaiveDate>,
+    pub expected_close_date: Option<Date>,
     pub notes: Option<String>,
     pub priority: bool,
-    pub closed_at: Option<DateTime<Utc>>,
+    pub closed_at: Option<Timestamp>,
     pub lost_reason: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// The `move` action on deals.
@@ -243,7 +243,7 @@ pub struct NewDeal {
     #[validate(skip)]
     pub company_id: Option<Uuid>,
     #[validate(skip)]
-    pub expected_close_date: Option<NaiveDate>,
+    pub expected_close_date: Option<Date>,
     #[validate(skip)]
     pub notes: Option<String>,
     #[validate(skip)]
@@ -555,8 +555,8 @@ pub struct DealSeed {
     pub stage: &'static str,
     pub owner: Option<Uuid>,
     pub company: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-    pub expected_close_date: Option<NaiveDate>,
+    pub created_at: Timestamp,
+    pub expected_close_date: Option<Date>,
     pub closed: bool,
 }
 

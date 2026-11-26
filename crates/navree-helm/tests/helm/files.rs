@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{MigrationSet, ModuleBuilderDbExt};
 use navree_helm::{Field, ModuleBuilderHelmExt, Resource};
@@ -32,9 +32,9 @@ pub struct Document {
     pub id: Uuid,
     pub name: String,
     pub scan: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option<Timestamp>,
 }
 
 struct CreateDocuments;

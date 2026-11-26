@@ -3,7 +3,7 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use chrono::Duration;
+use navree_datetime::Span;
 use navree_db::Db;
 use navree_helm::{Field, ModuleBuilderHelmExt, Resource};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
@@ -50,7 +50,7 @@ async fn many(app: &TestApp, count: usize, owner: Option<Uuid>) {
             currency: "USD".to_owned(),
             stage: "lead".to_owned(),
             owner_id: owner,
-            created_at: now() - Duration::seconds((count - i) as i64),
+            created_at: now() - Span::seconds((count - i) as i64),
             updated_at: now(),
             ..Deal::default()
         })
@@ -585,7 +585,7 @@ async fn a_typed_in_filter_and_a_range_of_dates_read_the_tables_spelling() {
             DealSeed {
                 title,
                 amount_cents: cents,
-                expected_close_date: chrono::NaiveDate::from_ymd_opt(close.0, close.1, close.2),
+                expected_close_date: navree_datetime::Date::new(close.0, close.1, close.2).ok(),
                 ..DealSeed::default()
             },
         )
@@ -898,7 +898,7 @@ async fn a_delta_shows_only_where_a_previous_period_has_something_to_compare() {
         deal(
             &app,
             DealSeed {
-                created_at: now() - Duration::days(days),
+                created_at: now() - Span::days(days),
                 ..DealSeed::default()
             },
         )

@@ -119,8 +119,8 @@ pub(crate) fn row(item: &Item) -> String {
                 iso,
                 date_only: false,
                 ..
-            } => chrono::DateTime::parse_from_rfc3339(iso)
-                .map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+            } => navree_datetime::Zoned::parse_rfc3339(iso)
+                .map(|at| at.to_rfc3339_with(navree_datetime::Precision::Secs, true))
                 .unwrap_or_else(|_| iso.clone()),
             Display::Time { iso, .. } => iso.clone(),
             display => match (cell.kind, item.values.get(&cell.name)) {
@@ -132,7 +132,7 @@ pub(crate) fn row(item: &Item) -> String {
 }
 
 /// `deals-2026-11-02.csv`.
-pub(crate) fn filename(info: &ResourceInfo, day: chrono::NaiveDate) -> String {
+pub(crate) fn filename(info: &ResourceInfo, day: navree_datetime::Date) -> String {
     format!("{}-{}.csv", info.slug, day.format("%Y-%m-%d"))
 }
 
@@ -367,7 +367,7 @@ async fn send(
     let mut finished =
         cx.entry_of_client(AuditEntry::new(AuditKind::Custom, "helm.export.finished"));
     finished.subject_type = Some(info.subject.to_owned());
-    let day = crate::save::now(&cx.app).await.date_naive();
+    let day = crate::save::now(&cx.app).await.date_time_utc().date();
     let sending = Sending {
         plan: Plan {
             app: cx.app.clone(),

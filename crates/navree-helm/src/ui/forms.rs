@@ -63,9 +63,9 @@ fn input_text(
                 .map(|cents| money::to_major(cents, currency))
                 .unwrap_or_else(|| n.to_string())
         }
-        (FieldKind::DateTime, Value::String(text)) => chrono::DateTime::parse_from_rfc3339(text)
+        (FieldKind::DateTime, Value::String(text)) => navree_datetime::Zoned::parse_rfc3339(text)
             .map(|d| {
-                zone.local(d.with_timezone(&chrono::Utc))
+                zone.local(d.timestamp())
                     .format("%Y-%m-%dT%H:%M")
                     .to_string()
             })
