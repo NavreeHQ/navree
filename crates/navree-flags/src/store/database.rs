@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_db::{Db, Uow};
 use navree_kernel::BoxFuture;
 use navree_orm::{Executor, Model as _, table};
@@ -110,7 +110,7 @@ async fn save_state_in<E: Executor + ?Sized>(
         everyone: state.everyone,
         rollout,
         killed: state.killed,
-        updated_at: state.updated_at.unwrap_or_else(Utc::now),
+        updated_at: state.updated_at.unwrap_or_else(Timestamp::now),
         updated_by: state.updated_by,
     };
     feature_flag::Model::query()

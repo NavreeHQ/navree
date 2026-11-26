@@ -245,7 +245,7 @@ async fn checks_are_cached_and_changes_clear_the_cache() {
             everyone: Some(true),
             rollout: None,
             killed: false,
-            updated_at: chrono::Utc::now(),
+            updated_at: navree_datetime::Timestamp::now(),
             updated_by: None,
         }],
     )

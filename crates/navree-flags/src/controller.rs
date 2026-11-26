@@ -4,9 +4,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use http::header::{CACHE_CONTROL, HeaderValue};
 use http::{Method, StatusCode};
+use navree_datetime::Timestamp;
 use navree_http::{
     ApiMeta, AppError, Controller, IntoResponse, Json, NoContent, Path, Query, Response, RouteDef,
     schema_fn,
@@ -49,7 +49,7 @@ pub struct FlagResource {
     /// How many users and workspaces have an override.
     pub overrides: u64,
     /// When the state last changed.
-    pub updated_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<Timestamp>,
     /// Who changed it last.
     pub updated_by: Option<Uuid>,
 }
