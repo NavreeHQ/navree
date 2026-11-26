@@ -126,7 +126,7 @@ mod models {
     }
 
     pub mod company {
-        use chrono::{DateTime, Utc};
+        use navree_datetime::Timestamp;
         use serde::Serialize;
         use uuid::Uuid;
 
@@ -135,7 +135,7 @@ mod models {
         pub struct Company {
             pub id: Uuid,
             pub name: String,
-            pub deleted_at: Option<DateTime<Utc>>,
+            pub deleted_at: Option<Timestamp>,
         }
     }
 }
