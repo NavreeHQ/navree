@@ -33,7 +33,6 @@ test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 bytes = { workspace = true }
-chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
@@ -41,6 +40,7 @@ http-body-util = { workspace = true }
 navree-auth = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-glob = { workspace = true }
 navree-http = { workspace = true }

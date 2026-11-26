@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use http::header::{CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
 use http::request::Parts;
 use http::{HeaderName, HeaderValue, Method, StatusCode};
+use navree_datetime::Timestamp;
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, ClientIp, Controller, Guard, Json, Path, Query, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
@@ -1518,9 +1518,9 @@ fn timeline(head: &Entry, entries: &[Entry]) -> (Vec<Bar>, f64) {
     (bars, total)
 }
 
-fn offset_ms(start: DateTime<Utc>, at: DateTime<Utc>) -> f64 {
+fn offset_ms(start: Timestamp, at: Timestamp) -> f64 {
     (at - start)
-        .num_microseconds()
+        .as_micros()
         .map_or(0.0, |us| us as f64 / 1000.0)
         .max(0.0)
 }

@@ -4,8 +4,8 @@
 
 use std::time::Duration;
 
-use chrono::Utc;
 use http::StatusCode;
+use navree_datetime::Timestamp;
 use navree_logbook::{EntryKind, Logbook, LogbookModule};
 use navree_telemetry::{
     AiCall, EventContext, JobProcessed, MailSent, SignInEvent, SignInMethod, StorageOp,
@@ -37,7 +37,7 @@ async fn busy() -> navree_testing::TestApp {
         .assert_status(200);
     let logbook = app.get::<Logbook>().await;
     logbook.record(&TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context: EventContext::default(),
         event: TelemetryEvent::MailSent(MailSent {
             to: vec!["anu@example.com".into()],
@@ -507,7 +507,7 @@ async fn the_mail_view_keeps_its_sandbox() {
     let app = app().await;
     let logbook = app.get::<Logbook>().await;
     logbook.record(&TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context: EventContext::default(),
         event: TelemetryEvent::MailSent(MailSent {
             to: vec!["anu@example.com".into()],

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_logbook::{Content, EntryKind, Filter, JobOutcome, ListQuery, Term};
 use navree_telemetry::{
     AiCall, BroadcastSent, CacheEvent, CacheOperation, EventContext, EventEmitted, EventKind,
@@ -424,7 +424,7 @@ async fn scheduled_runs_are_batches_of_their_trace() {
         &context,
         TelemetryEvent::ScheduledTaskRan(ScheduledTaskRan {
             task: "audit:prune".into(),
-            tick: Utc::now(),
+            tick: Timestamp::now(),
             duration: Duration::from_millis(4),
             error: None,
         }),

@@ -5193,7 +5193,6 @@ name = "navree-logbook"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "form_urlencoded",
  "http",
  "http-body",
@@ -5204,6 +5203,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-datetime",
  "navree-db",
  "navree-events",
  "navree-glob",

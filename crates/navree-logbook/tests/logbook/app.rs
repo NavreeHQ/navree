@@ -445,12 +445,16 @@ async fn the_store_is_pruned_at_boot() {
     let file = dir.path().join("logbook.db");
     {
         let store = SqliteStore::open(&file).await.unwrap();
-        let old = chrono::Utc::now() - chrono::Duration::hours(48);
+        let old = navree_datetime::Timestamp::now() - navree_datetime::Span::hours(48);
         navree_logbook::LogbookStore::insert(
             &store,
             vec![
                 crate::support::entry_at(old, None, crate::support::dump("yesterday's")),
-                crate::support::entry_at(chrono::Utc::now(), None, crate::support::dump("today's")),
+                crate::support::entry_at(
+                    navree_datetime::Timestamp::now(),
+                    None,
+                    crate::support::dump("today's"),
+                ),
             ],
         )
         .await

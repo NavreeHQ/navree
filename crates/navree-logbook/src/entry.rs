@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -192,7 +192,7 @@ pub struct Entry {
     /// The batch it belongs to, if any.
     pub batch_id: Option<String>,
     /// When it started.
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
     /// How long it took, when it has a duration.
     pub duration_ms: Option<f64>,
     /// The signed-in user, once known.
@@ -213,7 +213,7 @@ pub struct Entry {
 
 impl Entry {
     /// An entry of `content` at `at`, with a fresh id and nothing else set.
-    pub fn new(at: DateTime<Utc>, content: Content) -> Entry {
+    pub fn new(at: Timestamp, content: Content) -> Entry {
         Entry {
             id: uuid::Uuid::now_v7().to_string(),
             seq: 0,
@@ -773,7 +773,7 @@ pub struct ScheduleEntry {
     /// The task name.
     pub task: String,
     /// The minute it was due at.
-    pub tick: DateTime<Utc>,
+    pub tick: Timestamp,
     /// The error, when it failed.
     pub error: Option<String>,
     /// How long it ran.
@@ -980,7 +980,7 @@ mod tests {
     #[test]
     fn content_serializes_with_a_type_tag() {
         let entry = Entry::new(
-            Utc::now(),
+            Timestamp::now(),
             Content::Dump(DumpEntry {
                 label: "rows".into(),
                 value: serde_json::json!([1, 2]),
