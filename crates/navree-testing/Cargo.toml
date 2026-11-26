@@ -35,5 +35,5 @@ tower = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-chrono = { workspace = true }
+navree-datetime = { workspace = true }
 tokio = { workspace = true }

@@ -6206,12 +6206,12 @@ name = "navree-testing"
 version = "1.6.0"
 dependencies = [
  "bytes",
- "chrono",
  "cookie",
  "http",
  "http-body-util",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-http",
  "navree-kernel",
  "serde",
