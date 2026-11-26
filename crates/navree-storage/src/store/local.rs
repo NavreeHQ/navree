@@ -43,14 +43,13 @@ use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use futures_util::stream::{self, BoxStream};
+use navree_datetime::Timestamp;
 use navree_kernel::BoxFuture;
 
 use super::{Meta, Object, Store, StoreError, StoreResult, Upload};
@@ -848,8 +847,8 @@ fn meta(path: String, metadata: &fs::Metadata) -> Meta {
         size: metadata.len(),
         last_modified: metadata
             .modified()
-            .map(DateTime::<Utc>::from)
-            .unwrap_or_else(|_| DateTime::<Utc>::from(SystemTime::UNIX_EPOCH)),
+            .map(Timestamp::from)
+            .unwrap_or(Timestamp::UNIX_EPOCH),
     }
 }
 

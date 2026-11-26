@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use chrono::{Duration as ChronoDuration, Utc};
 use futures_util::{StreamExt, TryStreamExt, stream};
+use navree_datetime::{Span, Timestamp};
 use navree_storage::store::{HeaderName, HeaderValue, Method, PrefixedStore, Store, StoreError};
 
 /// One isolated store instance connected to a live emulator, plus the raw
@@ -68,7 +68,7 @@ async fn cleanup(subject: &Subject) {
 pub async fn put_head_and_read_round_trip_bytes_and_metadata(subject: Subject) {
     let store = &subject.store;
     let driver = subject.driver;
-    let before = Utc::now() - ChronoDuration::minutes(5);
+    let before = Timestamp::now() - Span::minutes(5);
 
     let first = Bytes::from_static("চালान 1101 — Ludhiana depot, ₹1,25,000\n".as_bytes());
     store

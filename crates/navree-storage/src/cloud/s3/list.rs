@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use ::http::Method;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 
 use super::{S3Store, enrich_error, sigv4};
 use crate::cloud::http::Request;
@@ -101,15 +101,14 @@ pub(super) async fn list_objects(store: &S3Store, prefix: &str) -> Result<Vec<Me
                 Error::new(ErrorKind::Answer, "a listed S3 object has an invalid Size")
             })?;
             let last_modified = match item.value("LastModified").map(str::trim) {
-                Some(text) if !text.is_empty() => DateTime::parse_from_rfc3339(text)
-                    .map(|dt| dt.with_timezone(&Utc))
+                Some(text) if !text.is_empty() => Timestamp::parse_rfc3339(text)
                     .map_err(|_| {
                         Error::new(
                             ErrorKind::Answer,
                             "a listed S3 object has an invalid LastModified timestamp",
                         )
                     })?,
-                _ => DateTime::UNIX_EPOCH,
+                _ => Timestamp::UNIX_EPOCH,
             };
             files.push(Meta {
                 path: key.to_owned(),

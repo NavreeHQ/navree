@@ -15,8 +15,8 @@ use std::time::{Duration, SystemTime};
 use ::http::header::{HeaderName, HeaderValue};
 use ::http::{Method, StatusCode};
 use bytes::Bytes;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use futures_util::TryStreamExt;
+use navree_datetime::{DateTime, Timestamp};
 use navree_kernel::BoxFuture;
 use url::Url;
 
@@ -120,8 +120,8 @@ impl S3Store {
     }
 
     /// Current UTC timestamp from the store's clock.
-    pub(super) fn now(&self) -> DateTime<Utc> {
-        DateTime::<Utc>::from((self.clock)())
+    pub(super) fn now(&self) -> Timestamp {
+        Timestamp::from((self.clock)())
     }
 }
 
@@ -317,7 +317,7 @@ impl Store for S3Store {
             let size = answer.declared_length().unwrap_or(0);
             let last_modified = match answer.header("last-modified") {
                 Some(header) => parse_http_date(header).map_err(StoreError::from)?,
-                None => DateTime::UNIX_EPOCH,
+                None => Timestamp::UNIX_EPOCH,
             };
             Ok(Meta {
                 path: path.to_owned(),
@@ -550,16 +550,16 @@ fn resolve_address(config: &S3Config, env: &BTreeMap<String, String>) -> Result<
 }
 
 /// Parses an HTTP `Last-Modified` date (RFC 2822 / IMF-fixdate / RFC 3339).
-fn parse_http_date(header: &str) -> Result<DateTime<Utc>> {
+fn parse_http_date(header: &str) -> Result<Timestamp> {
     let text = header.trim();
-    if let Ok(dt) = DateTime::parse_from_rfc2822(text) {
-        return Ok(dt.with_timezone(&Utc));
+    if let Ok(ts) = Timestamp::parse_rfc2822(text) {
+        return Ok(ts);
     }
-    if let Ok(naive) = NaiveDateTime::parse_from_str(text, "%a, %d %b %Y %H:%M:%S GMT") {
-        return Ok(naive.and_utc());
+    if let Ok(naive) = DateTime::parse("%a, %d %b %Y %H:%M:%S GMT", text) {
+        return Ok(naive.in_utc());
     }
-    if let Ok(dt) = DateTime::parse_from_rfc3339(text) {
-        return Ok(dt.with_timezone(&Utc));
+    if let Ok(ts) = Timestamp::parse_rfc3339(text) {
+        return Ok(ts);
     }
     Err(Error::new(
         ErrorKind::Answer,

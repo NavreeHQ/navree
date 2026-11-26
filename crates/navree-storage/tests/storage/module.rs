@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::{TimeZone, Utc};
+use navree_datetime::Timestamp;
 use http::{Method, Request};
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::HealthStatus;
@@ -64,7 +64,7 @@ async fn from_config_reads_the_storage_section() {
         "https://cdn.example.com/a%20b.txt"
     );
     assert!(
-        disk.temporary_url("a.txt", Utc::now())
+        disk.temporary_url("a.txt", Timestamp::now())
             .await
             .unwrap()
             .starts_with("https://api.example.com/storage/files/a.txt?")
@@ -124,7 +124,7 @@ async fn signed_url(app_key: Option<&str>, with_crypto: bool) -> String {
         builder = builder.module(CryptoModule::from_config());
     }
     let app = builder.boot().await.unwrap();
-    let expires = Utc.with_ymd_and_hms(2030, 1, 1, 0, 0, 0).unwrap();
+    let expires = Timestamp::utc(2030, 1, 1, 0, 0, 0).unwrap();
     app.ctx()
         .get::<Disk>()
         .await
@@ -168,7 +168,7 @@ async fn crypto_module_key_signs_without_config() {
             .await
             .unwrap()
     };
-    let expires = Utc.with_ymd_and_hms(2030, 1, 1, 0, 0, 0).unwrap();
+    let expires = Timestamp::utc(2030, 1, 1, 0, 0, 0).unwrap();
     let first = boot().await;
     let second = boot().await;
     let url = |app: &navree_kernel::App| {

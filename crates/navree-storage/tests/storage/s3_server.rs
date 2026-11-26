@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use chrono::{DateTime, NaiveDateTime, SecondsFormat, Utc};
+use navree_datetime::{DateTime, Precision, Timestamp};
 use http::{HeaderMap, Method, StatusCode};
 use navree_crypto::sha256_hex;
 use navree_crypto::sigv4;
@@ -80,7 +80,7 @@ struct ServerState {
 struct Object {
     body: Bytes,
     content_type: Option<String>,
-    last_modified: DateTime<Utc>,
+    last_modified: Timestamp,
     etag: String,
 }
 
@@ -595,7 +595,7 @@ fn gcs_object_json(key: &str, object: &Object) -> serde_json::Value {
     json!({
         "name": key,
         "size": object.body.len().to_string(),
-        "updated": object.last_modified.to_rfc3339_opts(SecondsFormat::Millis, true),
+        "updated": object.last_modified.to_rfc3339_with(Precision::Millis, true),
     })
 }
 
@@ -641,7 +641,7 @@ fn store(
             Object {
                 body,
                 content_type,
-                last_modified: Utc::now(),
+                last_modified: Timestamp::now(),
                 etag: tag.clone(),
             },
         );
@@ -769,10 +769,10 @@ fn authorize(
             let expires: i64 = get("X-Amz-Expires")
                 .and_then(|value| value.parse().ok())
                 .ok_or("no X-Amz-Expires")?;
-            let signed_at = NaiveDateTime::parse_from_str(amz_date, "%Y%m%dT%H%M%SZ")
+            let signed_at = DateTime::parse("%Y%m%dT%H%M%SZ", amz_date)
                 .map_err(|_| "bad X-Amz-Date")?
-                .and_utc();
-            if Utc::now() > signed_at + chrono::Duration::seconds(expires) {
+                .in_utc();
+            if Timestamp::now() > signed_at + navree_datetime::Span::seconds(expires) {
                 return Err("Request has expired".into());
             }
             (
@@ -929,10 +929,10 @@ fn authorize_gcs(
     let expires: i64 = get("X-Goog-Expires")
         .and_then(|value| value.parse().ok())
         .ok_or("no X-Goog-Expires")?;
-    let signed_at = NaiveDateTime::parse_from_str(date, "%Y%m%dT%H%M%SZ")
+    let signed_at = DateTime::parse("%Y%m%dT%H%M%SZ", date)
         .map_err(|_| "bad X-Goog-Date")?
-        .and_utc();
-    if Utc::now() > signed_at + chrono::Duration::seconds(expires) {
+        .in_utc();
+    if Timestamp::now() > signed_at + navree_datetime::Span::seconds(expires) {
         return Err("Request has expired".into());
     }
     let credential = get("X-Goog-Credential").ok_or("no credential")?;

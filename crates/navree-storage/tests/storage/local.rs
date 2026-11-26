@@ -384,14 +384,14 @@ async fn listing_covers_hidden_files_and_skips_empty_directories() {
 async fn metadata_has_the_size_and_the_modification_time() {
     let sandbox = Sandbox::new();
     let disk = sandbox.disk();
-    let before = chrono::Utc::now() - chrono::Duration::seconds(5);
+    let before = navree_datetime::Timestamp::now() - navree_datetime::Span::seconds(5);
     disk.put("m/file.bin", vec![7u8; 1234]).await.unwrap();
     let meta = disk.metadata("m/file.bin").await.unwrap();
     assert_eq!(meta.path, "m/file.bin");
     assert_eq!(meta.size, 1234);
     assert!(meta.last_modified >= before, "{meta:?}");
     assert!(
-        meta.last_modified <= chrono::Utc::now() + chrono::Duration::seconds(5),
+        meta.last_modified <= navree_datetime::Timestamp::now() + navree_datetime::Span::seconds(5),
         "{meta:?}"
     );
     let listed = disk.files("m").await.unwrap();

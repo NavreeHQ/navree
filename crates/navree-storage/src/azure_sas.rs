@@ -10,7 +10,7 @@ use std::fmt;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, SecondsFormat, Utc};
+use navree_datetime::{Precision, Timestamp};
 use navree_crypto::hmac_sha256;
 use url::Url;
 
@@ -68,11 +68,11 @@ impl SharedKeySas {
         blob: &str,
         url: &mut Url,
         permissions: &str,
-        start: DateTime<Utc>,
-        expiry: DateTime<Utc>,
+        start: Timestamp,
+        expiry: Timestamp,
     ) {
-        let start = start.to_rfc3339_opts(SecondsFormat::Secs, true);
-        let expiry = expiry.to_rfc3339_opts(SecondsFormat::Secs, true);
+        let start = start.to_rfc3339_with(Precision::Secs, true);
+        let expiry = expiry.to_rfc3339_with(Precision::Secs, true);
         let resource = canonical_resource(&self.account, container, blob);
         let protocol = signed_protocol(url);
         let signature = STANDARD.encode(hmac_sha256(
@@ -199,11 +199,11 @@ impl UserDelegationKey {
         blob: &str,
         url: &mut Url,
         permissions: &str,
-        start: DateTime<Utc>,
-        expiry: DateTime<Utc>,
+        start: Timestamp,
+        expiry: Timestamp,
     ) {
-        let start_text = start.to_rfc3339_opts(SecondsFormat::Secs, true);
-        let expiry_text = expiry.to_rfc3339_opts(SecondsFormat::Secs, true);
+        let start_text = start.to_rfc3339_with(Precision::Secs, true);
+        let expiry_text = expiry.to_rfc3339_with(Precision::Secs, true);
         let protocol = signed_protocol(url);
         let to_sign =
             self.string_to_sign(account, container, blob, url, permissions, start, expiry);
@@ -241,11 +241,11 @@ impl UserDelegationKey {
         blob: &str,
         url: &Url,
         permissions: &str,
-        start: DateTime<Utc>,
-        expiry: DateTime<Utc>,
+        start: Timestamp,
+        expiry: Timestamp,
     ) -> String {
-        let start = start.to_rfc3339_opts(SecondsFormat::Secs, true);
-        let expiry = expiry.to_rfc3339_opts(SecondsFormat::Secs, true);
+        let start = start.to_rfc3339_with(Precision::Secs, true);
+        let expiry = expiry.to_rfc3339_with(Precision::Secs, true);
         let resource = canonical_resource(account, container, blob);
         let protocol = signed_protocol(url);
         [
@@ -302,7 +302,7 @@ pub(crate) fn canonical_resource(account: &str, container: &str, blob: &str) -> 
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use navree_datetime::Timestamp;
 
     use super::*;
 
@@ -323,8 +323,8 @@ mod tests {
         // A container named like the account on a custom domain never drops
         // the container segment even if the blob key starts with another name.
         let custom_signer = SharedKeySas::new("acmefiles", KEY).unwrap();
-        let start = Utc.with_ymd_and_hms(2026, 11, 5, 6, 18, 21).unwrap();
-        let expiry = Utc.with_ymd_and_hms(2026, 11, 5, 6, 23, 21).unwrap();
+        let start = Timestamp::utc(2026, 11, 5, 6, 18, 21).unwrap();
+        let expiry = Timestamp::utc(2026, 11, 5, 6, 23, 21).unwrap();
         let mut custom =
             Url::parse("https://blobs.amritsar.example/acmefiles/other-container/secret.pdf")
                 .unwrap();
@@ -371,8 +371,8 @@ mod tests {
 
     #[test]
     fn links_carry_the_signature_of_the_sixteen_fields() {
-        let start = Utc.with_ymd_and_hms(2026, 11, 5, 6, 18, 21).unwrap();
-        let expiry = Utc.with_ymd_and_hms(2026, 11, 5, 6, 23, 21).unwrap();
+        let start = Timestamp::utc(2026, 11, 5, 6, 18, 21).unwrap();
+        let expiry = Timestamp::utc(2026, 11, 5, 6, 23, 21).unwrap();
         let mut url = Url::parse(
             "http://127.0.0.1:10000/devstoreaccount1/navree-test/reports/q1%20final.csv?sp=r&sig=old",
         )

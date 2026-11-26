@@ -5,7 +5,7 @@ use std::pin::pin;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use futures_util::stream::BoxStream;
 use futures_util::{Stream, StreamExt, TryStreamExt};
 use navree_contracts::HealthStatus;
@@ -33,7 +33,7 @@ pub struct FileMeta {
     /// The size in bytes.
     pub size: u64,
     /// When the file was last written.
-    pub last_modified: DateTime<Utc>,
+    pub last_modified: Timestamp,
 }
 
 /// One named file store: a local directory, memory, or a bucket of S3,
@@ -345,7 +345,7 @@ impl Disk {
     pub async fn temporary_url(
         &self,
         path: &str,
-        expires_at: DateTime<Utc>,
+        expires_at: Timestamp,
     ) -> Result<String, StorageError> {
         let path = normalize(path, false)?;
         if let Some(provider) = &self.inner.provider {
@@ -355,7 +355,7 @@ impl Disk {
                 .await
                 .map_err(|error| self.backend_error(error));
         }
-        let expires = expires_at.timestamp();
+        let expires = expires_at.as_secs();
         let signature = self.inner.signer.sign(&self.inner.name, &path, expires);
         Ok(format!(
             "{}/storage/{}/{}?expires={expires}&signature={signature}",
@@ -390,9 +390,9 @@ impl Disk {
     pub(crate) fn provider_ttl(
         &self,
         provider: &Provider,
-        expires_at: DateTime<Utc>,
+        expires_at: Timestamp,
     ) -> Result<std::time::Duration, StorageError> {
-        let millis = (expires_at - Utc::now()).num_milliseconds();
+        let millis = (expires_at - Timestamp::now()).as_millis();
         if millis <= 0 {
             return Err(StorageError::Signing {
                 disk: self.inner.name.clone(),

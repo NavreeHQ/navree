@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use bytes::Bytes;
-use chrono::{Duration, Utc};
+use navree_datetime::{Span, Timestamp};
 use futures_util::{TryStreamExt, stream};
 use http::Request;
 use http_body_util::BodyExt;
@@ -282,10 +282,10 @@ async fn rejects_traversal(subject: &Subject) {
         invalid(disk.get(path).await.map(drop));
         invalid(disk.delete(path).await);
         invalid(disk.metadata(path).await.map(drop));
-        invalid(disk.temporary_url(path, Utc::now()).await.map(drop));
+        invalid(disk.temporary_url(path, Timestamp::now()).await.map(drop));
         let rules = UploadRules::new(10, ["text/plain"]);
         invalid(
-            disk.presigned_put(path, Duration::minutes(1), &rules)
+            disk.presigned_put(path, Span::minutes(1), &rules)
                 .content_type("text/plain")
                 .await
                 .map(drop),
@@ -340,7 +340,7 @@ async fn lists_by_directory(subject: &Subject) {
 
 async fn metadata(subject: &Subject) {
     let disk = &subject.disk;
-    let before = Utc::now() - Duration::minutes(5);
+    let before = Timestamp::now() - Span::minutes(5);
     disk.put("a/one.txt", "1").await.unwrap();
     disk.put("a/three.txt", "333").await.unwrap();
     let meta = disk.metadata("a/three.txt").await.unwrap();
@@ -360,7 +360,7 @@ async fn temporary_url_downloads(subject: &Subject) {
         .await
         .unwrap();
     let url = disk
-        .temporary_url("reports/q1 final.csv", Utc::now() + Duration::minutes(5))
+        .temporary_url("reports/q1 final.csv", Timestamp::now() + Span::minutes(5))
         .await
         .unwrap();
     let reply = subject.http.get(&url).await;
@@ -380,7 +380,7 @@ async fn presigned_put_uploads(subject: &Subject) {
     let path = upload_path("avatars", "image/png");
     let body = png(2000);
     let upload = disk
-        .presigned_put(&path, Duration::minutes(10), &rules)
+        .presigned_put(&path, Span::minutes(10), &rules)
         .content_type("image/png")
         .size(body.len() as u64)
         .await
@@ -392,7 +392,7 @@ async fn presigned_put_uploads(subject: &Subject) {
         upload.headers.get("content-type").map(String::as_str),
         Some("image/png")
     );
-    assert!(upload.expires_at > Utc::now() + Duration::minutes(9));
+    assert!(upload.expires_at > Timestamp::now() + Span::minutes(9));
 
     let reply = subject
         .http
@@ -419,7 +419,7 @@ async fn presigned_put_uploads(subject: &Subject) {
     let signed = |content_type: Option<&'static str>, size: Option<u64>| {
         let rules = &rules;
         async move {
-            let mut request = disk.presigned_put("x.png", Duration::minutes(1), rules);
+            let mut request = disk.presigned_put("x.png", Span::minutes(1), rules);
             if let Some(content_type) = content_type {
                 request = request.content_type(content_type);
             }
@@ -460,7 +460,7 @@ async fn presigned_put_binds_the_declared_size(subject: &Subject) {
     }
     let rules = UploadRules::new(64 * 1024, ["image/png"]);
     let upload = disk
-        .presigned_put("sized.png", Duration::minutes(10), &rules)
+        .presigned_put("sized.png", Span::minutes(10), &rules)
         .content_type("image/png")
         .size(100)
         .await
@@ -497,7 +497,7 @@ async fn presigned_put_binds_the_content_type(subject: &Subject) {
     let disk = &subject.disk;
     let rules = UploadRules::new(1024, ["image/png"]);
     let upload = disk
-        .presigned_put("bound.png", Duration::minutes(10), &rules)
+        .presigned_put("bound.png", Span::minutes(10), &rules)
         .content_type("image/png")
         .await
         .unwrap();

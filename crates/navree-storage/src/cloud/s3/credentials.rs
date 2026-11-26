@@ -28,7 +28,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use ::http::{Method, StatusCode};
-use chrono::DateTime;
+use navree_datetime::Timestamp;
 use navree_kernel::BoxFuture;
 use serde::Deserialize;
 use url::{Host, Url};
@@ -449,14 +449,14 @@ async fn read_token_file(path: PathBuf, label: &'static str) -> Result<String> {
 
 /// Parses an RFC 3339 expiration timestamp into a [`SystemTime`].
 fn parse_expiration(text: &str) -> Result<SystemTime> {
-    let parsed = DateTime::parse_from_rfc3339(text.trim()).map_err(|_| {
+    let parsed = Timestamp::parse_rfc3339(text.trim()).map_err(|_| {
         Error::new(
             ErrorKind::Answer,
             "the credential expiration timestamp is not RFC 3339",
         )
     })?;
-    let secs = parsed.timestamp();
-    let nanos = parsed.timestamp_subsec_nanos();
+    let secs = parsed.as_secs();
+    let nanos = parsed.subsec_nanos();
     if secs >= 0 {
         SystemTime::UNIX_EPOCH
             .checked_add(Duration::new(secs as u64, nanos))
