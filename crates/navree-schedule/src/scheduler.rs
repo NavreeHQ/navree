@@ -493,10 +493,7 @@ impl Scheduler {
             telemetry.emit_with(EventKind::ScheduledTaskRan, || {
                 TelemetryEvent::ScheduledTaskRan(ScheduledTaskRan {
                     task: name.clone(),
-                    tick: tick
-                        .to_rfc3339()
-                        .parse()
-                        .expect("a Timestamp formats as RFC 3339"),
+                    tick,
                     duration: elapsed,
                     error: error.clone(),
                 })
