@@ -4,7 +4,7 @@
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_contracts::{Dispatcher, Job as _, JobEnvelope, Secret};
 use navree_crypto::{random_token, sha256_hex};
 use navree_db::Uow;
@@ -650,7 +650,7 @@ impl Directory {
             .into_models();
         let mut runs = Vec::new();
         for row in rows {
-            let next = now + TimeDelta::minutes(i64::from(row.sync_interval_mins.max(1)));
+            let next = now + Span::minutes(i64::from(row.sync_interval_mins.max(1)));
             models::Connection::query()
                 .where_(models::Connection::ID.eq(row.id))
                 .update(&*rt.db, [models::Connection::NEXT_SYNC_AT.set(Some(next))])
@@ -706,7 +706,7 @@ impl Directory {
             .await?
             .into_models();
         let stale_before =
-            rt.now() - TimeDelta::minutes(i64::from(rt.options.sync.stale_after_mins));
+            rt.now() - Span::minutes(i64::from(rt.options.sync.stale_after_mins));
         for run in going {
             if run.created_at > stale_before {
                 return Err(DirectoryError::SyncRunning);
@@ -779,7 +779,7 @@ impl Directory {
     /// `directory.sync.keep_runs_days`; returns how many runs.
     pub async fn prune_runs(&self) -> Result<u64, DirectoryError> {
         let rt = self.rt()?;
-        let cutoff = rt.now() - TimeDelta::days(i64::from(rt.options.sync.keep_runs_days));
+        let cutoff = rt.now() - Span::days(i64::from(rt.options.sync.keep_runs_days));
         let ids: Vec<Uuid> = models::Run::query()
             .where_(models::Run::CREATED_AT.lt(cutoff))
             .where_(

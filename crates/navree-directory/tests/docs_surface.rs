@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree_config::{Config, ConfigSources};
 use navree_contracts::Secret;
@@ -224,7 +224,7 @@ fn the_normalized_directory_has_the_documented_fields() {
 
 #[test]
 fn the_service_values_have_their_documented_fields() {
-    let now: DateTime<Utc> = Utc::now();
+    let now: Timestamp = Timestamp::now();
     let connection = DirectoryConnection {
         id: Uuid::nil(),
         owner_type: navree_integrations::OwnerType::Workspace,
@@ -388,7 +388,7 @@ fn the_service_values_have_their_documented_fields() {
     }
     fn synced_user(u: &SyncedUser) {
         let _: (Uuid, &DirectoryUser, &Option<String>) = (u.id, &u.user, &u.local_id);
-        let _: Option<DateTime<Utc>> = u.deactivated_at;
+        let _: Option<Timestamp> = u.deactivated_at;
     }
     fn synced_group(g: &SyncedGroup) {
         let _: (Uuid, &DirectoryGroup, &Option<String>) = (g.id, &g.group, &g.local_id);
@@ -431,7 +431,7 @@ fn the_service_values_have_their_documented_fields() {
     assert!(format!("{update:?}").contains("***"));
 }
 
-fn sample_run(now: DateTime<Utc>) -> SyncRun {
+fn sample_run(now: Timestamp) -> SyncRun {
     SyncRun {
         id: Uuid::nil(),
         connection_id: Uuid::nil(),

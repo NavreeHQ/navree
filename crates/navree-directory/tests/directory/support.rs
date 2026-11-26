@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, MANAGE, Rules};
 use navree_contracts::{AuthVia, Clock, FixedClock, Principal};
 use navree_crypto::{CryptoModule, generate_key};
@@ -30,10 +30,9 @@ pub const ADMIN: Uuid = Uuid::from_u128(1);
 pub const OTHER: Uuid = Uuid::from_u128(2);
 
 /// 2026-10-28T08:00:00Z.
-pub fn start() -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339("2026-10-28T08:00:00Z")
+pub fn start() -> Timestamp {
+    Timestamp::parse_rfc3339("2026-10-28T08:00:00Z")
         .unwrap()
-        .with_timezone(&Utc)
 }
 
 pub fn principal(user_id: Uuid) -> Principal {

@@ -4,7 +4,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_integrations::{Owner, OwnerType};
 use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
@@ -56,15 +56,15 @@ pub struct DirectoryConnection {
     /// The last run.
     pub last_run_id: Option<Uuid>,
     /// When a sync last finished applying.
-    pub last_synced_at: Option<DateTime<Utc>>,
+    pub last_synced_at: Option<Timestamp>,
     /// When the scheduler queues the next sync.
-    pub next_sync_at: Option<DateTime<Utc>>,
+    pub next_sync_at: Option<Timestamp>,
     /// The user who created it.
     pub created_by: Option<Uuid>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl DirectoryConnection {
@@ -329,11 +329,11 @@ pub struct SyncRun {
     /// The user who started it.
     pub created_by: Option<Uuid>,
     /// When it was queued.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When a worker started it.
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
     /// When it finished.
-    pub finished_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<Timestamp>,
 }
 
 /// What a change does.
@@ -469,11 +469,11 @@ pub struct SyncedUser {
     /// The id of your record, as your sink returned it.
     pub local_id: Option<String>,
     /// When it was first seen.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// When it was deactivated.
-    pub deactivated_at: Option<DateTime<Utc>>,
+    pub deactivated_at: Option<Timestamp>,
 }
 
 /// A group as the directory holds it for a connection (members as user
@@ -489,9 +489,9 @@ pub struct SyncedGroup {
     /// The id of your record, as your sink returned it.
     pub local_id: Option<String>,
     /// When it was first seen.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 #[cfg(test)]

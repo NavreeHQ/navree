@@ -99,13 +99,13 @@ async fn a_first_sync_creates_users_and_groups_through_the_sink() {
 }
 
 trait ClockExt {
-    fn now_plus_minutes(&self, minutes: i64) -> chrono::DateTime<chrono::Utc>;
+    fn now_plus_minutes(&self, minutes: i64) -> navree_datetime::Timestamp;
 }
 
 impl ClockExt for navree_contracts::FixedClock {
-    fn now_plus_minutes(&self, minutes: i64) -> chrono::DateTime<chrono::Utc> {
+    fn now_plus_minutes(&self, minutes: i64) -> navree_datetime::Timestamp {
         use navree_contracts::Clock;
-        self.now() + chrono::TimeDelta::minutes(minutes)
+        self.now() + navree_datetime::Span::minutes(minutes)
     }
 }
 

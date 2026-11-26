@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::Model;
 use serde::Serialize;
 use uuid::Uuid;
@@ -52,15 +52,15 @@ pub struct Connection {
     /// The last run.
     pub last_run_id: Option<Uuid>,
     /// When a run last finished applying.
-    pub last_synced_at: Option<DateTime<Utc>>,
+    pub last_synced_at: Option<Timestamp>,
     /// When the scheduler queues the next run.
-    pub next_sync_at: Option<DateTime<Utc>>,
+    pub next_sync_at: Option<Timestamp>,
     /// Who created it.
     pub created_by: Option<Uuid>,
     /// When it was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 impl fmt::Debug for Connection {
@@ -105,11 +105,11 @@ pub struct User {
     /// Your record's id, as your sink returned it.
     pub local_id: Option<String>,
     /// When it was first seen.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// When it was deactivated.
-    pub deactivated_at: Option<DateTime<Utc>>,
+    pub deactivated_at: Option<Timestamp>,
 }
 
 /// A row of `directory_groups`: a group of one connection.
@@ -135,9 +135,9 @@ pub struct Group {
     /// Your record's id, as your sink returned it.
     pub local_id: Option<String>,
     /// When it was first seen.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// A row of `directory_memberships`: a user in a group.
@@ -190,11 +190,11 @@ pub struct Run {
     /// Who started it.
     pub created_by: Option<Uuid>,
     /// When it was queued.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it started.
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
     /// When it finished.
-    pub finished_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<Timestamp>,
 }
 
 /// A row of `directory_run_changes`: one recorded change of a run.
@@ -224,7 +224,7 @@ pub struct RunChange {
     /// Why it failed.
     pub error: Option<String>,
     /// When it was recorded.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 #[cfg(test)]

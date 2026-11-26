@@ -210,8 +210,8 @@ pub(crate) fn group_from_resource(
 pub(crate) struct Meta<'a> {
     pub(crate) id: &'a str,
     pub(crate) resource_type: &'static str,
-    pub(crate) created: chrono::DateTime<chrono::Utc>,
-    pub(crate) last_modified: chrono::DateTime<chrono::Utc>,
+    pub(crate) created: navree_datetime::Timestamp,
+    pub(crate) last_modified: navree_datetime::Timestamp,
     pub(crate) location: String,
     pub(crate) version: &'a str,
 }
@@ -244,8 +244,8 @@ pub(crate) fn render(stored: &Value, meta: &Meta<'_>, extra: Vec<(&'static str, 
         "meta".to_owned(),
         json!({
             "resourceType": meta.resource_type,
-            "created": meta.created.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            "lastModified": meta.last_modified.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            "created": meta.created.to_rfc3339_with(navree_datetime::Precision::Millis, true),
+            "lastModified": meta.last_modified.to_rfc3339_with(navree_datetime::Precision::Millis, true),
             "location": meta.location,
             "version": format!("W/\"{}\"", meta.version),
         }),
@@ -665,7 +665,7 @@ fn contacts(resource: &Value, key: &str) -> Result<Vec<ContactValue>, ScimError>
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
+    use navree_datetime::Timestamp;
 
     use super::*;
 
@@ -807,7 +807,7 @@ mod tests {
     #[test]
     fn rendered_resources_carry_id_meta_and_their_schemas() {
         let stored = stored_resource(&entra_user()).unwrap();
-        let at = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
+        let at = Timestamp::utc(2026, 10, 27, 8, 0, 0).unwrap();
         let meta = Meta {
             id: "2819c223-7f76-453a-919d-413861904646",
             resource_type: "User",

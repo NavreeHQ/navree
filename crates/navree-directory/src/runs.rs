@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_contracts::{Job, JobContext, JobOptions};
 use navree_db::Uow;
 use navree_kernel::BoxError;
@@ -89,7 +89,7 @@ fn change_row(
     step: &Step,
     status: ChangeStatus,
     error: Option<String>,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> models::RunChange {
     let (action, external_id, label, fields, added, removed) = match step {
         Step::User(step) => (
@@ -615,7 +615,7 @@ impl Runtime {
                     }
                     if connection.sync_interval_mins > 0 && !dry_run {
                         let next =
-                            now + TimeDelta::minutes(i64::from(connection.sync_interval_mins));
+                            now + Span::minutes(i64::from(connection.sync_interval_mins));
                         assignments.push(models::Connection::NEXT_SYNC_AT.set(Some(next)));
                     }
                     models::Connection::query()
@@ -708,7 +708,7 @@ mod tests {
 
     #[test]
     fn change_rows_record_labels_fields_and_member_counts() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let step = Step::Group(Box::new(GroupStep {
             action: ChangeAction::Update,
             group: DirectoryGroup::new("g1", "Engineering"),
