@@ -30,8 +30,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use chrono::{DateTime, TimeDelta, Utc};
 use http::HeaderMap;
+use navree_datetime::{Span as TimeSpan, Timestamp};
 use navree_telemetry::{
     EventContext, ExceptionReported, HttpClientRequest, JobFailed, JobProcessed, QueryExecuted,
     RequestHandled, ScheduledTaskRan, TelemetryEvent, TelemetryRecord,
@@ -118,7 +118,7 @@ pub(crate) enum Input {
     /// A telemetry record.
     Record(Box<TelemetryRecord>),
     /// A report from [`Lighthouse::capture`](crate::Lighthouse::capture).
-    Report(Box<(Report, EventContext, DateTime<Utc>)>),
+    Report(Box<(Report, EventContext, Timestamp)>),
     /// A tag on the current request or job.
     Tag(UnitKey, String, String),
     /// The headers (and body) of a request, from the HTTP layer.
@@ -171,7 +171,7 @@ pub struct Span {
 struct RawSpan {
     kind: &'static str,
     label: String,
-    end: DateTime<Utc>,
+    end: Timestamp,
     duration_ms: f64,
     failed: bool,
 }
@@ -179,7 +179,7 @@ struct RawSpan {
 /// An exception waiting for its unit to end.
 #[derive(Clone, Debug)]
 struct PendingException {
-    at: DateTime<Utc>,
+    at: Timestamp,
     context: EventContext,
     message: String,
     chain: Vec<String>,
@@ -197,7 +197,7 @@ struct PendingException {
 /// A query waiting for its unit to end.
 #[derive(Clone, Debug)]
 struct PendingQuery {
-    at: DateTime<Utc>,
+    at: Timestamp,
     context: EventContext,
     statement: String,
     duration_ms: f64,
@@ -207,7 +207,7 @@ struct PendingQuery {
 /// An outgoing call waiting for its unit to end.
 #[derive(Clone, Debug)]
 struct PendingCall {
-    at: DateTime<Utc>,
+    at: Timestamp,
     context: EventContext,
     call: HttpClientRequest,
 }
@@ -234,7 +234,7 @@ impl Unit {
         }
     }
 
-    fn spans_from(&self, start: DateTime<Utc>) -> Vec<Span> {
+    fn spans_from(&self, start: Timestamp) -> Vec<Span> {
         let mut spans: Vec<Span> = self
             .spans
             .iter()
@@ -243,7 +243,7 @@ impl Unit {
                 Span {
                     kind: span.kind.to_owned(),
                     label: span.label.clone(),
-                    start_ms: ((begin - start).num_microseconds().unwrap_or(0) as f64 / 1000.0)
+                    start_ms: ((begin - start).as_micros().unwrap_or(0) as f64 / 1000.0)
                         .max(0.0),
                     duration_ms: span.duration_ms,
                     failed: span.failed,
@@ -270,7 +270,7 @@ pub(crate) struct Labels {
 #[derive(Clone, Debug)]
 pub(crate) struct NewOccurrence {
     pub(crate) id: Uuid,
-    pub(crate) at: DateTime<Utc>,
+    pub(crate) at: Timestamp,
     pub(crate) level: Level,
     pub(crate) message: String,
     pub(crate) chain: Vec<String>,
@@ -302,7 +302,7 @@ pub(crate) struct Hit {
     pub(crate) chain: Vec<String>,
     pub(crate) location: Option<String>,
     pub(crate) error_type: Option<String>,
-    pub(crate) at: DateTime<Utc>,
+    pub(crate) at: Timestamp,
     pub(crate) failed_job: bool,
     pub(crate) occurrence: Option<NewOccurrence>,
 }
@@ -313,7 +313,7 @@ pub(crate) struct NewSample {
     pub(crate) id: Uuid,
     pub(crate) kind: &'static str,
     pub(crate) name: String,
-    pub(crate) at: DateTime<Utc>,
+    pub(crate) at: Timestamp,
     pub(crate) duration_ms: f64,
     pub(crate) status: Option<u16>,
     pub(crate) outcome: &'static str,
@@ -396,7 +396,7 @@ impl Counts {
 
     fn observe(
         &self,
-        now: DateTime<Utc>,
+        now: Timestamp,
         kind: &'static str,
         key: &str,
         observation: &Observation,
@@ -406,7 +406,7 @@ impl Counts {
             .observe(now, kind, key, observation);
     }
 
-    fn add(&self, now: DateTime<Utc>, kind: &'static str, key: &str, n: u64) {
+    fn add(&self, now: Timestamp, kind: &'static str, key: &str, n: u64) {
         self.shards.of(&(kind, key)).add(now, kind, key, n);
     }
 
@@ -425,7 +425,7 @@ impl Counts {
         }
     }
 
-    fn evict(&self, now: DateTime<Utc>) {
+    fn evict(&self, now: Timestamp) {
         self.shards.each(|aggregates| aggregates.evict(now));
     }
 }
@@ -508,7 +508,7 @@ impl Engine {
     /// Records `input` now, on the caller's thread: counts and aggregates
     /// at once, details into the bounded queue. Never waits on I/O.
     pub(crate) fn send(&self, input: Input) {
-        self.handle(input, Utc::now());
+        self.handle(input, Timestamp::now());
     }
 
     /// Details this process sampled out because the queue was full (or
@@ -517,7 +517,7 @@ impl Engine {
         self.sampled_out.load(Ordering::Relaxed)
     }
 
-    fn count_sampled_out(&self, n: u64, now: DateTime<Utc>) {
+    fn count_sampled_out(&self, n: u64, now: Timestamp) {
         if n == 0 {
             return;
         }
@@ -550,7 +550,7 @@ impl Engine {
     /// are written in order.
     pub(crate) async fn flush(&self, writer: &dyn BatchWriter) {
         let _flushing = self.flushing.lock().await;
-        let now = Utc::now();
+        let now = Timestamp::now();
         self.sweep(now);
         let (hits, samples) = {
             let mut pending = lock(&self.pending);
@@ -598,19 +598,19 @@ impl Engine {
     }
 
     /// Drops units that never ended and old occurrence budgets.
-    fn sweep(&self, now: DateTime<Utc>) {
+    fn sweep(&self, now: Timestamp) {
         self.units.each(|units| {
             units.retain(|_, unit| {
                 unit.created
                     .is_none_or(|created| created.elapsed() < STALE_AFTER)
             });
         });
-        let hour = now.timestamp() / 3600;
+        let hour = now.as_secs() / 3600;
         lock(&self.budgets).retain(|_, (budget_hour, _)| *budget_hour >= hour - 1);
     }
 
     /// Handles one input.
-    pub(crate) fn handle(&self, input: Input, now: DateTime<Utc>) {
+    pub(crate) fn handle(&self, input: Input, now: Timestamp) {
         match input {
             Input::Record(record) => self.record(*record, now),
             Input::Report(report) => {
@@ -652,7 +652,7 @@ impl Engine {
         self.units.of(key).remove(key).unwrap_or_default()
     }
 
-    fn record(&self, record: TelemetryRecord, now: DateTime<Utc>) {
+    fn record(&self, record: TelemetryRecord, now: Timestamp) {
         let TelemetryRecord { at, context, event } = record;
         if context.job_id.as_deref() == Some(INTERNAL_UNIT) {
             return;
@@ -703,7 +703,7 @@ impl Engine {
         }
     }
 
-    fn report(&self, report: Report, context: EventContext, at: DateTime<Utc>, now: DateTime<Utc>) {
+    fn report(&self, report: Report, context: EventContext, at: Timestamp, now: Timestamp) {
         let exception = PendingException {
             at,
             context,
@@ -724,10 +724,10 @@ impl Engine {
 
     fn exception(
         &self,
-        at: DateTime<Utc>,
+        at: Timestamp,
         context: EventContext,
         exception: ExceptionReported,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) {
         let pending = PendingException {
             at,
@@ -748,7 +748,7 @@ impl Engine {
     }
 
     /// Keeps an exception for its unit, or records it now outside one.
-    fn pend_exception(&self, exception: PendingException, now: DateTime<Utc>) {
+    fn pend_exception(&self, exception: PendingException, now: Timestamp) {
         let mut exception = Some(exception);
         if let Some(key) = exception.as_ref().and_then(|e| UnitKey::of(&e.context)) {
             self.with_unit(&key, |unit| unit.exceptions.extend(exception.take()));
@@ -766,10 +766,10 @@ impl Engine {
 
     fn query(
         &self,
-        at: DateTime<Utc>,
+        at: Timestamp,
         context: EventContext,
         query: &QueryExecuted,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) {
         // Lighthouse's own tables are read and written by Lighthouse: the
         // dashboard, the API, the commands and the settings, as well as the
@@ -846,10 +846,10 @@ impl Engine {
 
     fn call(
         &self,
-        at: DateTime<Utc>,
+        at: Timestamp,
         context: EventContext,
         call: HttpClientRequest,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) {
         let pending = PendingCall {
             at,
@@ -888,10 +888,10 @@ impl Engine {
 
     fn scheduled(
         &self,
-        at: DateTime<Utc>,
+        at: Timestamp,
         context: &EventContext,
         task: &ScheduledTaskRan,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) {
         let Some(error) = &task.error else {
             return;
@@ -928,10 +928,10 @@ impl Engine {
 
     fn finish_request(
         &self,
-        at: DateTime<Utc>,
+        at: Timestamp,
         context: &EventContext,
         request: &RequestHandled,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) {
         let unit = self.take_unit(&UnitKey::Request(request.request_id.clone()));
         if self.ignored_path(&request.path) {
@@ -1074,10 +1074,10 @@ impl Engine {
 
     fn finish_job(
         &self,
-        at: DateTime<Utc>,
+        at: Timestamp,
         context: &EventContext,
         job: JobEnd,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) {
         let unit = self.take_unit(&UnitKey::Job(job.job_id.clone()));
         if job.job_type == ALERT_JOB || self.options.ignore.jobs.contains(&job.job_type) {
@@ -1181,7 +1181,7 @@ impl Engine {
     }
 
     /// The queries, calls and exceptions of a finished unit.
-    fn finish_children(&self, unit: &Unit, culprit: &str, origin: &Origin, now: DateTime<Utc>) {
+    fn finish_children(&self, unit: &Unit, culprit: &str, origin: &Origin, now: Timestamp) {
         for query in &unit.queries {
             self.query_done(query.clone(), culprit, origin, now);
         }
@@ -1201,7 +1201,7 @@ impl Engine {
     }
 
     /// Counts a statement: its figures for the Queries page.
-    fn count_query(&self, query: &PendingQuery, origin_name: &str, now: DateTime<Utc>) {
+    fn count_query(&self, query: &PendingQuery, origin_name: &str, now: Timestamp) {
         self.counts.observe(
             now,
             kind::QUERY,
@@ -1222,7 +1222,7 @@ impl Engine {
         query: PendingQuery,
         origin_name: &str,
         origin: &Origin,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) {
         self.count_query(&query, origin_name, now);
         if query.duration_ms < self.tuning.slow_query_ms() as f64 {
@@ -1264,7 +1264,7 @@ impl Engine {
         pending: PendingCall,
         origin_name: &str,
         origin: &Origin,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) {
         let call = &pending.call;
         let host = url_host(&call.url);
@@ -1358,7 +1358,7 @@ impl Engine {
         culprit: &str,
         origin: &Origin,
         _unit: Option<&Unit>,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) {
         let fingerprint = match (&exception.fingerprint, exception.panic, &exception.location) {
             (Some(parts), _, _) => custom_fingerprint(parts),
@@ -1435,7 +1435,7 @@ impl Engine {
     fn occurrence(
         &self,
         fingerprint: &str,
-        at: DateTime<Utc>,
+        at: Timestamp,
         context: &EventContext,
         level: Level,
         message: String,
@@ -1444,7 +1444,7 @@ impl Engine {
         extra: Value,
     ) -> Option<NewOccurrence> {
         let id = Uuid::now_v7();
-        let hour = at.timestamp() / 3600;
+        let hour = at.as_secs() / 3600;
         {
             let mut budgets = lock(&self.budgets);
             let budget = budgets.entry(fingerprint.to_owned()).or_insert((hour, 0));
@@ -1496,7 +1496,7 @@ impl Engine {
     /// Queues a hit. The hit itself (a count) is always kept; when the
     /// queue is full its occurrence takes the place of a sample, or is
     /// sampled out when there is none.
-    fn push_hit(&self, mut hit: Hit, now: DateTime<Utc>) {
+    fn push_hit(&self, mut hit: Hit, now: Timestamp) {
         self.counts
             .observe(now, kind::ISSUE, &hit.fingerprint, &Observation::default());
         let mut sampled_out = 0;
@@ -1539,7 +1539,7 @@ impl Engine {
             }
         };
         match wake {
-            None => self.count_sampled_out(1, Utc::now()),
+            None => self.count_sampled_out(1, Timestamp::now()),
             Some(true) => self.wake.notify_one(),
             Some(false) => {}
         }
@@ -1645,8 +1645,8 @@ pub(crate) fn millis(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1000.0
 }
 
-fn duration_delta(ms: f64) -> TimeDelta {
-    TimeDelta::microseconds((ms * 1000.0) as i64)
+fn duration_delta(ms: f64) -> TimeSpan {
+    TimeSpan::micros((ms * 1000.0) as i64)
 }
 
 /// Whether `key` falls in the sampled fraction `rate` (deterministic: the
@@ -1698,7 +1698,7 @@ mod tests {
 
     fn record(context: EventContext, event: TelemetryEvent) -> Input {
         Input::Record(Box::new(TelemetryRecord {
-            at: Utc::now(),
+            at: Timestamp::now(),
             context,
             event,
         }))
@@ -1749,7 +1749,7 @@ mod tests {
     #[test]
     fn a_slow_request_keeps_its_trace_and_its_slow_queries() {
         let p = processor(LighthouseOptions::default());
-        let now = Utc::now();
+        let now = Timestamp::now();
         for _ in 0..3 {
             p.handle(
                 record(
@@ -1805,7 +1805,7 @@ mod tests {
     #[test]
     fn exceptions_take_the_route_of_their_request() {
         let p = processor(LighthouseOptions::default());
-        let now = Utc::now();
+        let now = Timestamp::now();
         p.handle(
             record(in_request("r2"), exception("deal 42 not found")),
             now,
@@ -1830,7 +1830,7 @@ mod tests {
     #[test]
     fn ignored_routes_and_the_dashboard_are_left_out() {
         let p = processor(LighthouseOptions::default());
-        let now = Utc::now();
+        let now = Timestamp::now();
         p.handle(record(in_request("a"), exception("boom")), now);
         p.handle(
             record(in_request("a"), request("a", "/health/live", 500, 5)),
@@ -1853,7 +1853,7 @@ mod tests {
         let mut options = LighthouseOptions::default();
         options.sample.requests = 0.0;
         let p = processor(options);
-        let now = Utc::now();
+        let now = Timestamp::now();
         for i in 0..50 {
             let id = format!("q{i}");
             p.handle(record(in_request(&id), request(&id, "/x", 200, 3)), now);
@@ -1872,7 +1872,7 @@ mod tests {
         let mut options = LighthouseOptions::default();
         options.sample.exceptions = 0.0;
         let p = processor(options);
-        let now = Utc::now();
+        let now = Timestamp::now();
         for _ in 0..150 {
             p.handle(record(EventContext::default(), exception("disk full")), now);
         }
@@ -1896,7 +1896,7 @@ mod tests {
             },
             ..LighthouseOptions::default()
         });
-        let now = Utc::now();
+        let now = Timestamp::now();
         for i in 0..100 {
             let id = format!("s{i}");
             p.handle(record(in_request(&id), request(&id, "/x", 200, 3)), now);
@@ -1913,7 +1913,7 @@ mod tests {
     #[test]
     fn jobs_record_failures_and_failed_jobs() {
         let p = processor(LighthouseOptions::default());
-        let now = Utc::now();
+        let now = Timestamp::now();
         let in_job = EventContext {
             job_id: Some("j1".into()),
             ..EventContext::default()
@@ -1982,7 +1982,7 @@ mod tests {
     fn one_off_commands_record_no_statements_or_calls_of_their_own() {
         for process in ["migrate", "migrate:fresh", "db:seed", "system", "fleet"] {
             let p = processor_of(process, LighthouseOptions::default());
-            let now = Utc::now();
+            let now = Timestamp::now();
             p.handle(
                 record(
                     EventContext::default(),
@@ -2014,7 +2014,7 @@ mod tests {
         let p = processor_of("migrate", LighthouseOptions::default());
         p.handle(
             record(EventContext::default(), exception("column already exists")),
-            Utc::now(),
+            Timestamp::now(),
         );
         assert_eq!(p.pending_hits().len(), 1);
     }
@@ -2031,7 +2031,7 @@ mod tests {
                     EventContext::default(),
                     query("UPDATE jobs SET reserved_at = ?", 900),
                 ),
-                Utc::now(),
+                Timestamp::now(),
             );
             assert!(p.pending_hits().is_empty(), "{process}: no issue");
             assert!(!p.take_rows().is_empty(), "{process}: still counted");
@@ -2072,7 +2072,7 @@ mod tests {
         };
         p.handle(
             record(in_task, query("SELECT prices FROM feed", 900)),
-            Utc::now(),
+            Timestamp::now(),
         );
         let hits = p.pending_hits();
         assert_eq!(hits.len(), 1);
@@ -2089,7 +2089,7 @@ mod tests {
         };
         p.handle(
             record(internal, query("INSERT INTO lighthouse_issues", 900)),
-            Utc::now(),
+            Timestamp::now(),
         );
         assert!(p.pending_hits().is_empty());
         assert!(p.take_rows().is_empty());
@@ -2111,7 +2111,7 @@ mod tests {
                         900,
                     ),
                 ),
-                Utc::now(),
+                Timestamp::now(),
             );
         }
         assert!(p.pending_hits().is_empty());
@@ -2128,7 +2128,7 @@ mod tests {
             },
             ..LighthouseOptions::default()
         });
-        let now = Utc::now();
+        let now = Timestamp::now();
         for i in 0..100_000 {
             let id = format!("b{i}");
             p.handle(record(in_request(&id), query("SELECT 1", 1)), now);
@@ -2179,7 +2179,7 @@ mod tests {
             failed: std::sync::atomic::AtomicBool::new(false),
             written: Mutex::new(Vec::new()),
         };
-        let now = Utc::now();
+        let now = Timestamp::now();
         for i in 0..10 {
             let id = format!("f{i}");
             p.handle(record(in_request(&id), exception("boom")), now);

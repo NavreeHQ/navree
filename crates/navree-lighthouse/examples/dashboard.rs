@@ -26,7 +26,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
 use http::Method;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
 use navree_auth::{AuthModule, AuthPages, AuthService};
@@ -36,6 +35,7 @@ use navree_contracts::{
     ModuleBuilderJobsExt,
 };
 use navree_crypto::CryptoModule;
+use navree_datetime::{Span, Timestamp};
 use navree_db::{DatabaseModule, Db, Executor, Statement};
 use navree_http::{AppError, Controller, HttpModule, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_http_client::{HttpClient, HttpClientModule, HttpClientOptions};
@@ -320,12 +320,8 @@ async fn user(
 /// Copies the aggregates of the hour recorded so far into the 167 hours
 /// before it, scaled by a working-day shape with noise.
 async fn back_date(db: &Db) -> Result<usize, BoxError> {
-    let now = Utc::now();
-    let this_hour: DateTime<Utc> = now
-        .with_minute(0)
-        .and_then(|t| t.with_second(0))
-        .and_then(|t| t.with_nanosecond(0))
-        .ok_or("no hour")?;
+    let now = Timestamp::now();
+    let this_hour = Timestamp::from_secs(now.as_secs().div_euclid(3600) * 3600)?;
     let rows = aggregate::Model::query()
         .where_(aggregate::Model::RESOLUTION.eq(3600))
         .where_(aggregate::Model::BUCKET.gte(this_hour))
@@ -334,8 +330,8 @@ async fn back_date(db: &Db) -> Result<usize, BoxError> {
         .into_models();
     let mut copies = Vec::new();
     for ago in 1..168i64 {
-        let bucket = this_hour - TimeDelta::hours(ago);
-        let hour = bucket.hour() as f64;
+        let bucket = this_hour - Span::hours(ago);
+        let hour = f64::from(bucket.date_time_utc().time().hour());
         let weekend = matches!(bucket.format("%a").to_string().as_str(), "Sat" | "Sun");
         // A working day peaks in the afternoon; the night is quiet.
         let shape = 0.18 + 0.82 * (-((hour - 14.0).powi(2)) / 30.0).exp();
@@ -406,7 +402,7 @@ async fn traffic(ctx: navree_kernel::AppContext, history: bool) -> Result<(), Bo
                 .commit("3f2a9c1")
                 .url("https://git.example.com/crm/commit/3f2a9c1")
                 .notes("Stage probability is validated before saving")
-                .deployed_at(Utc::now() - TimeDelta::minutes(18)),
+                .deployed_at(Timestamp::now() - Span::minutes(18)),
         )
         .await?;
     let started = std::time::Instant::now();

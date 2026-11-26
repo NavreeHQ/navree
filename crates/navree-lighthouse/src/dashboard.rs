@@ -10,6 +10,7 @@ use http::request::Parts;
 use http::{HeaderMap, HeaderValue, Method};
 use navree_access::{Abilities, Subject as _};
 use navree_auth::{AuthService, SIGN_OUT_PATH};
+use navree_datetime::Timestamp;
 use navree_http::extract::FromRequestParts;
 use navree_http::response::Response;
 use navree_http::{AppError, ClientIp, Controller, CurrentPrincipal, Form, Path, Query, RouteDef};
@@ -487,8 +488,8 @@ fn fragment(body: Node) -> Response {
 }
 
 /// `Nm ago` style age for a table: `now`, `6s`, `4 min`, `3 h`, `2 d`.
-pub(crate) fn age_short(at: chrono::DateTime<chrono::Utc>) -> String {
-    let seconds = (chrono::Utc::now() - at).num_seconds().max(0);
+pub(crate) fn age_short(at: Timestamp) -> String {
+    let seconds = (Timestamp::now() - at).as_seconds().max(0);
     match seconds {
         0..=4 => "now".to_owned(),
         5..=59 => format!("{seconds}s"),
@@ -499,8 +500,8 @@ pub(crate) fn age_short(at: chrono::DateTime<chrono::Utc>) -> String {
 }
 
 /// `18 min ago`, `3 h ago`: when something happened, in a sentence.
-pub(crate) fn ago(at: chrono::DateTime<chrono::Utc>) -> String {
-    let seconds = (chrono::Utc::now() - at).num_seconds();
+pub(crate) fn ago(at: Timestamp) -> String {
+    let seconds = (Timestamp::now() - at).as_seconds();
     if seconds < 60 {
         return "just now".to_owned();
     }
@@ -514,6 +515,7 @@ pub(crate) fn encode(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use navree_datetime::Span;
     use navree_http::handler::Endpoint;
 
     use super::*;
@@ -526,7 +528,7 @@ mod tests {
 
     #[test]
     fn ages_are_short_and_whole() {
-        let ago_secs = |s: i64| age_short(chrono::Utc::now() - chrono::TimeDelta::seconds(s));
+        let ago_secs = |s: i64| age_short(Timestamp::now() - Span::seconds(s));
         assert_eq!(ago_secs(1), "now");
         assert_eq!(ago_secs(30), "30s");
         assert_eq!(ago_secs(300), "5 min");

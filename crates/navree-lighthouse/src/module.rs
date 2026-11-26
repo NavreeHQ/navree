@@ -5,6 +5,7 @@ use std::sync::Arc;
 use navree_access::{AccessModule, Subject};
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::ModuleBuilderJobsExt;
+use navree_datetime::Timestamp;
 use navree_db::navree_schema::{Schema, SchemaOptions};
 use navree_db::{Db, DbOptions, ModuleBuilderDbExt};
 use navree_http::{AppError, ModuleBuilderHttpExt};
@@ -190,10 +191,10 @@ async fn prune_if_due(ctx: AppContext) -> Result<(), BoxError> {
     // The scheduler's clock: the app's `dyn Clock`, else the system's.
     let now = match ctx.try_get::<dyn navree_contracts::Clock>().await {
         Some(clock) => clock.now(),
-        None => chrono::Utc::now(),
+        None => Timestamp::now(),
     };
-    use chrono::Timelike as _;
-    if now.hour() != hour || now.minute() != minute {
+    let time = now.date_time_utc().time();
+    if u32::from(time.hour()) != hour || u32::from(time.minute()) != minute {
         return Ok(());
     }
     if let Some(store) = lighthouse.store() {

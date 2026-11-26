@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use chrono::{DateTime, DurationRound, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -125,7 +125,7 @@ impl Values {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct RowKey {
     pub(crate) resolution: i32,
-    pub(crate) bucket: DateTime<Utc>,
+    pub(crate) bucket: Timestamp,
     pub(crate) kind: &'static str,
     pub(crate) key: String,
 }
@@ -157,7 +157,7 @@ impl Aggregates {
     /// Adds one observation of `kind`/`key` at `now` to its minute and hour.
     pub(crate) fn observe(
         &mut self,
-        now: DateTime<Utc>,
+        now: Timestamp,
         kind: &'static str,
         key: &str,
         observation: &Observation,
@@ -193,7 +193,7 @@ impl Aggregates {
 
     /// Adds `n` to the count of `kind`/`key` at `now` (minute and hour),
     /// without a duration.
-    pub(crate) fn add(&mut self, now: DateTime<Utc>, kind: &'static str, key: &str, n: u64) {
+    pub(crate) fn add(&mut self, now: Timestamp, kind: &'static str, key: &str, n: u64) {
         for resolution in [MINUTE, HOUR] {
             let row = RowKey {
                 resolution,
@@ -233,12 +233,12 @@ impl Aggregates {
 
     /// Forgets clean rows whose bucket ended more than two minutes before
     /// `now` (they are written; no new observation can land in them).
-    pub(crate) fn evict(&mut self, now: DateTime<Utc>) {
+    pub(crate) fn evict(&mut self, now: Timestamp) {
         self.rows.retain(|key, (_, dirty)| {
             *dirty
                 || key.bucket
-                    + TimeDelta::seconds(i64::from(key.resolution))
-                    + TimeDelta::minutes(2)
+                    + Span::seconds(i64::from(key.resolution))
+                    + Span::minutes(2)
                     > now
         });
     }
@@ -251,9 +251,9 @@ impl Aggregates {
 }
 
 /// The start of the bucket holding `at`.
-pub(crate) fn bucket_start(at: DateTime<Utc>, resolution: i32) -> DateTime<Utc> {
-    at.duration_trunc(TimeDelta::seconds(i64::from(resolution)))
-        .unwrap_or(at)
+pub(crate) fn bucket_start(at: Timestamp, resolution: i32) -> Timestamp {
+    let res = i64::from(resolution).max(1);
+    Timestamp::from_secs(at.as_secs().div_euclid(res) * res).unwrap_or(at)
 }
 
 /// The hash rows are matched by: 16 hex characters of the key's SHA-256.
@@ -263,12 +263,10 @@ pub(crate) fn key_hash(key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
-
     use super::*;
 
-    fn at(h: u32, m: u32, s: u32) -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 10, 27, h, m, s).unwrap()
+    fn at(h: u8, m: u8, s: u8) -> Timestamp {
+        Timestamp::utc(2026, 10, 27, h, m, s).unwrap()
     }
 
     #[test]

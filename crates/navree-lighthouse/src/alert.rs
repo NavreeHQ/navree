@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, Utc};
 use hmac::{KeyInit as _, Mac as _};
 use navree_contracts::{Backoff, Job, JobContext, JobOptions};
+use navree_datetime::Timestamp;
 use navree_http_client::HttpClient;
 use navree_kernel::{
     BoxError, BoxFuture, Factory, Injectable, ModuleBuilder, ProviderKey, Resolver,
@@ -101,7 +101,7 @@ pub struct Alert {
     /// The release label.
     pub release: String,
     /// When it was raised.
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
     /// Whether it is a test alert (`lighthouse:test-alerts`).
     #[serde(default)]
     pub test: bool,
@@ -378,7 +378,7 @@ impl AlertChannel for WebhookChannel {
         Box::pin(async move {
             let body = serde_json::to_vec(&alert.payload())?;
             let id = format!("msg_{}", alert.id.simple());
-            let timestamp = Utc::now().timestamp();
+            let timestamp = Timestamp::now().as_secs();
             let signature = webhook_signature(&self.key, &id, timestamp, &body);
             let response = self
                 .client
@@ -452,13 +452,13 @@ mod tests {
                 culprit: "POST /api/v1/invoices/{id}/charge".into(),
                 count: 1,
                 users: 1,
-                first_seen: DateTime::UNIX_EPOCH,
-                last_seen: DateTime::UNIX_EPOCH,
+                first_seen: Timestamp::UNIX_EPOCH,
+                last_seen: Timestamp::UNIX_EPOCH,
                 url: "https://api.crm.example.com/_lighthouse/issues/x".into(),
             },
             environment: "production".into(),
             release: "20261026-091512-3f2a9c1".into(),
-            at: DateTime::UNIX_EPOCH,
+            at: Timestamp::UNIX_EPOCH,
             test: false,
         }
     }

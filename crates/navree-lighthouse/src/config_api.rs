@@ -10,10 +10,10 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use chrono::{TimeDelta, Utc};
 use http::{HeaderMap, Method};
 use navree_access::Subject as _;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink};
+use navree_datetime::{Span, Timestamp};
 use navree_http::{
     ApiMeta, AppError, ClientIp, Controller, CurrentPrincipal, Json, Path, Query, RouteDef,
 };
@@ -539,7 +539,7 @@ impl Configure {
             }
             Some(Value::Bool(true)) => {
                 state.muted = true;
-                state.muted_until = minutes.map(|m| Utc::now() + TimeDelta::minutes(m as i64));
+                state.muted_until = minutes.map(|m| Timestamp::now() + Span::minutes(m as i64));
             }
             Some(Value::Bool(false)) => {
                 if minutes.is_some() {

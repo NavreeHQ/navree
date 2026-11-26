@@ -2,7 +2,7 @@
 //! the issues each introduced and the ones that came back in it, and the
 //! release the header shows.
 
-use chrono::{TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_lighthouse::{IssueFilter, ReleaseReport};
 use navree_testing::TestApp;
 use serde_json::{Value, json};
@@ -84,7 +84,7 @@ async fn a_deploy_reports_the_real_deploy_time_and_the_newest_deploy_is_the_one_
     let app = builder().build().await;
     operators(&app).await;
     let deploy = token(&app, "deploy@acme.test").await;
-    let at = Utc::now() - TimeDelta::minutes(18);
+    let at = Timestamp::now() - Span::minutes(18);
 
     // The process booted a moment ago with the label r1; the deploy knows
     // better when r1 went out.
@@ -433,7 +433,7 @@ async fn a_new_report_is_current_after_an_old_one_with_a_date() {
     let app = builder().build().await;
     operators(&app).await;
     let deploy = token(&app, "deploy@acme.test").await;
-    let soon = Utc::now() + TimeDelta::hours(1);
+    let soon = Timestamp::now() + Span::hours(1);
     let (status, answer) = report(
         &app,
         &deploy,
@@ -444,7 +444,7 @@ async fn a_new_report_is_current_after_an_old_one_with_a_date() {
     let (status, answer) = report(
         &app,
         &deploy,
-        json!({ "release": "soon", "deployed_at": Utc::now() }),
+        json!({ "release": "soon", "deployed_at": Timestamp::now() }),
     )
     .await;
     assert_eq!(status, 200, "{answer}");

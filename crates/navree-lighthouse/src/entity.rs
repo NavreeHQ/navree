@@ -19,7 +19,7 @@
 
 /// `lighthouse_issues`.
 pub mod issue {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     /// An issue row.
@@ -51,9 +51,9 @@ pub mod issue {
         /// Occurrences, exact.
         pub count: i64,
         /// The first occurrence.
-        pub first_seen: DateTime<Utc>,
+        pub first_seen: Timestamp,
         /// The latest occurrence.
-        pub last_seen: DateTime<Utc>,
+        pub last_seen: Timestamp,
         /// The release of the first occurrence.
         pub first_release: Option<String>,
         /// The release of the latest occurrence.
@@ -61,29 +61,29 @@ pub mod issue {
         /// The environment of the latest occurrence.
         pub environment: Option<String>,
         /// When it was resolved.
-        pub resolved_at: Option<DateTime<Utc>>,
+        pub resolved_at: Option<Timestamp>,
         /// The release current when it was resolved in the next release.
         pub resolved_in_release: Option<String>,
         /// Ignored until then.
-        pub ignored_until: Option<DateTime<Utc>>,
+        pub ignored_until: Option<Timestamp>,
         /// Ignored for this many more occurrences.
         pub ignore_remaining: Option<i64>,
         /// When it last came back after being resolved.
-        pub regressed_at: Option<DateTime<Utc>>,
+        pub regressed_at: Option<Timestamp>,
         /// The release it last came back in.
         pub regressed_in_release: Option<String>,
         /// The comment of the last status change.
         pub comment: Option<String>,
         /// When the row was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the row last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
 /// `lighthouse_occurrences`.
 pub mod occurrence {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     /// A stored occurrence.
@@ -95,7 +95,7 @@ pub mod occurrence {
         /// The issue (`lighthouse_issues.id`, cascading delete).
         pub issue_id: Uuid,
         /// When it happened.
-        pub at: DateTime<Utc>,
+        pub at: Timestamp,
         /// Its level.
         pub level: String,
         /// The message.
@@ -142,7 +142,7 @@ pub mod occurrence {
 
 /// `lighthouse_samples`.
 pub mod sample {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     /// A request or job sample with its spans.
@@ -156,7 +156,7 @@ pub mod sample {
         /// The endpoint (`GET /api/v1/deals/board`) or the job type.
         pub name: String,
         /// When it finished.
-        pub at: DateTime<Utc>,
+        pub at: Timestamp,
         /// How long it took, in milliseconds.
         pub duration_ms: f64,
         /// The response status (requests).
@@ -196,7 +196,7 @@ pub mod sample {
 
 /// `lighthouse_aggregates`.
 pub mod aggregate {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     /// Counts and a latency histogram of one key in one bucket, written by
@@ -209,7 +209,7 @@ pub mod aggregate {
         /// The bucket size in seconds: 60 or 3600.
         pub resolution: i32,
         /// The bucket's start.
-        pub bucket: DateTime<Utc>,
+        pub bucket: Timestamp,
         /// `request`, `query`, `job`, `outgoing`, `exception` or `issue`.
         pub kind: String,
         /// A hash of the key (what rows are matched by).
@@ -239,7 +239,7 @@ pub mod aggregate {
 
 /// `lighthouse_alerts`.
 pub mod alert {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     /// One alert through one channel.
@@ -265,15 +265,15 @@ pub mod alert {
         /// The alert (JSON).
         pub payload: String,
         /// When it was raised.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When it was delivered.
-        pub delivered_at: Option<DateTime<Utc>>,
+        pub delivered_at: Option<Timestamp>,
     }
 }
 
 /// `lighthouse_releases`.
 pub mod release {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     /// A release Lighthouse has seen.
@@ -296,21 +296,21 @@ pub mod release {
         /// by a deploy, or by the app's code).
         pub source: String,
         /// When it was deployed: as reported, else when it was first seen.
-        pub deployed_at: DateTime<Utc>,
+        pub deployed_at: Timestamp,
         /// When a process first reported it.
-        pub first_seen: DateTime<Utc>,
+        pub first_seen: Timestamp,
         /// When a process last reported it.
-        pub last_seen: DateTime<Utc>,
+        pub last_seen: Timestamp,
         /// When the row was created.
-        pub created_at: DateTime<Utc>,
+        pub created_at: Timestamp,
         /// When the row last changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }
 
 /// `lighthouse_settings`.
 pub mod setting {
-    use chrono::{DateTime, Utc};
+    use navree_datetime::Timestamp;
     use uuid::Uuid;
 
     /// One setting changed from the dashboard.
@@ -326,6 +326,6 @@ pub mod setting {
         /// The user who changed it.
         pub updated_by: Option<String>,
         /// When it changed.
-        pub updated_at: DateTime<Utc>,
+        pub updated_at: Timestamp,
     }
 }

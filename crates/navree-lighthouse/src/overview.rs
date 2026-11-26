@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::Model as _;
 use serde::Serialize;
 
@@ -43,15 +43,15 @@ impl LighthouseStore {
         &self,
         kind: &str,
         period: Period,
-        start: DateTime<Utc>,
-    ) -> Result<BTreeMap<DateTime<Utc>, Values>, LighthouseError> {
+        start: Timestamp,
+    ) -> Result<BTreeMap<Timestamp, Values>, LighthouseError> {
         let rows = aggregate::Model::query()
             .where_(aggregate::Model::KIND.eq(kind))
             .where_(aggregate::Model::RESOLUTION.eq(period.resolution()))
             .where_(aggregate::Model::BUCKET.gte(start))
             .get(&self.db)
             .await?;
-        let mut buckets: BTreeMap<DateTime<Utc>, Values> = BTreeMap::new();
+        let mut buckets: BTreeMap<Timestamp, Values> = BTreeMap::new();
         for row in rows {
             buckets.entry(row.bucket).or_default().merge(&Values {
                 count: row.count,

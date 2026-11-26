@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{PoisonError, RwLock};
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -231,12 +231,12 @@ pub struct ChannelState {
     pub muted: bool,
     /// Muted until then, when the mute has an end.
     #[serde(default)]
-    pub muted_until: Option<DateTime<Utc>>,
+    pub muted_until: Option<Timestamp>,
 }
 
 impl ChannelState {
     /// Whether the channel is muted at `now`.
-    pub fn muted_at(&self, now: DateTime<Utc>) -> bool {
+    pub fn muted_at(&self, now: Timestamp) -> bool {
         self.muted && self.muted_until.is_none_or(|until| now < until)
     }
 
@@ -540,7 +540,7 @@ mod tests {
             "an invalid stored value is ignored"
         );
         let slack = tuning.channel("slack");
-        assert!(slack.muted_at(Utc::now()));
+        assert!(slack.muted_at(Timestamp::now()));
         assert_eq!(slack.on, Some(vec![AlertKind::Spike]));
         assert_eq!(tuning.current("thresholds.slow_query_ms"), json!(750));
         assert_eq!(tuning.configured("thresholds.slow_query_ms"), json!(200));
@@ -552,14 +552,14 @@ mod tests {
 
     #[test]
     fn a_mute_can_end() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let state = ChannelState {
             muted: true,
-            muted_until: Some(now + chrono::TimeDelta::hours(1)),
+            muted_until: Some(now + navree_datetime::Span::hours(1)),
             ..ChannelState::default()
         };
         assert!(state.muted_at(now));
-        assert!(!state.muted_at(now + chrono::TimeDelta::hours(2)));
+        assert!(!state.muted_at(now + navree_datetime::Span::hours(2)));
         assert!(!ChannelState::default().muted_at(now));
     }
 }

@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_orm::{ConflictUpdate, Model as _, Record, col, table};
 use serde::Serialize;
 use serde_json::Value;
@@ -28,7 +28,7 @@ pub struct StoredSetting {
     /// Who changed it (a user id).
     pub updated_by: Option<String>,
     /// When.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// One alert delivery as the Alerts page lists it.
@@ -53,9 +53,9 @@ pub struct AlertHistoryRow {
     /// The last delivery error.
     pub error: Option<String>,
     /// When it was raised.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it was delivered.
-    pub delivered_at: Option<DateTime<Utc>>,
+    pub delivered_at: Option<Timestamp>,
 }
 
 /// How many alerts were delivered, are waiting and failed in a window.
@@ -110,7 +110,7 @@ impl LighthouseStore {
         if name.trim().is_empty() || name == UNKNOWN_RELEASE {
             return Ok(());
         }
-        let now = Utc::now();
+        let now = Timestamp::now();
         self.insert_release_if_missing(name, environment, "process", now)
             .await?;
         let mut sets = vec![
@@ -137,9 +137,9 @@ impl LighthouseStore {
         name: &str,
         environment: &str,
         source: &str,
-        deployed_at: DateTime<Utc>,
+        deployed_at: Timestamp,
     ) -> Result<(), LighthouseError> {
-        let now = Utc::now();
+        let now = Timestamp::now();
         release::Model::query()
             .upsert(
                 &self.db,
@@ -192,7 +192,7 @@ impl LighthouseStore {
             .environment
             .clone()
             .unwrap_or_else(|| default_environment.to_owned());
-        let now = Utc::now();
+        let now = Timestamp::now();
         let deployed_at = report.deployed_at.map(|at| at.min(now));
         self.insert_release_if_missing(
             &report.release,
@@ -297,7 +297,7 @@ impl LighthouseStore {
     /// in its environment. Every page's header reads it.
     pub(crate) async fn current_release_label(
         &self,
-    ) -> Result<Option<(String, DateTime<Utc>)>, LighthouseError> {
+    ) -> Result<Option<(String, Timestamp)>, LighthouseError> {
         let environment = self.options.environment_label();
         Ok(self
             .newest_release(&environment)
@@ -322,7 +322,7 @@ impl LighthouseStore {
     /// marks on a chart.
     pub async fn release_markers(
         &self,
-        since: DateTime<Utc>,
+        since: Timestamp,
     ) -> Result<Vec<ReleaseMarker>, LighthouseError> {
         let environment = self.options.environment_label();
         Ok(release::Model::query()
@@ -421,7 +421,7 @@ impl LighthouseStore {
         changes: BTreeMap<String, Option<Value>>,
         by: Option<String>,
     ) -> Result<(), LighthouseError> {
-        let now = Utc::now();
+        let now = Timestamp::now();
         for (key, value) in changes {
             match value {
                 Some(value) => {
@@ -513,7 +513,7 @@ impl LighthouseStore {
 
     /// Alerts raised in the last `hours`, by how their delivery stands.
     pub async fn alert_counts(&self, hours: i64) -> Result<AlertCounts, LighthouseError> {
-        let since = Utc::now() - TimeDelta::hours(hours);
+        let since = Timestamp::now() - Span::hours(hours);
         let count = |status: &'static str| async move {
             alert::Model::query()
                 .where_(alert::Model::CREATED_AT.gte(since))

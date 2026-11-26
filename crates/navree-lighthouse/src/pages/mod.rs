@@ -2,6 +2,7 @@
 //! store and how it is laid out. The shell, the routes and the sign-in are
 //! in `dashboard.rs`.
 
+use navree_datetime::Timestamp;
 use navree_ui::form::csrf_field;
 use navree_ui::{
     Badge, BadgeVariant, Button, ButtonGroup, ButtonVariant, Card, Element, Empty, IntoNodes, Node,
@@ -40,12 +41,12 @@ pub(crate) fn percent(rate: f64) -> String {
 }
 
 /// A time as `2026-11-02 10:15`, in UTC.
-pub(crate) fn when(at: chrono::DateTime<chrono::Utc>) -> String {
+pub(crate) fn when(at: Timestamp) -> String {
     at.format("%Y-%m-%d %H:%M").to_string()
 }
 
 /// A time as `2026-11-02 10:15:30`, in UTC.
-pub(crate) fn when_exact(at: chrono::DateTime<chrono::Utc>) -> String {
+pub(crate) fn when_exact(at: Timestamp) -> String {
     at.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 

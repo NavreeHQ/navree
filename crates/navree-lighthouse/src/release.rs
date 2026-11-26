@@ -1,19 +1,19 @@
 //! Releases: what an app (or its deploy) reports about the release it runs,
 //! and how Lighthouse lists the releases it has seen.
 
-use chrono::{DateTime, TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use serde::{Deserialize, Serialize};
 
 /// The longest link a report can carry.
 pub(crate) const MAX_URL_CHARS: usize = 255;
 /// How far ahead of this machine's clock a deploy time may be: another
 /// machine's clock, a little ahead. It counts as deployed now.
-const DEPLOY_CLOCK_SKEW: TimeDelta = TimeDelta::days(1);
+const DEPLOY_CLOCK_SKEW: Span = Span::days(1);
 
 /// The earliest deploy time, a day into 1970 so that it stays in range in
 /// every time zone (MySQL's `TIMESTAMP` starts with 1970).
-fn earliest_deploy() -> DateTime<Utc> {
-    DateTime::UNIX_EPOCH + TimeDelta::days(1)
+fn earliest_deploy() -> Timestamp {
+    Timestamp::UNIX_EPOCH + Span::days(1)
 }
 
 /// A release an app reports: [`Lighthouse::report_release`](crate::Lighthouse::report_release)
@@ -44,7 +44,7 @@ pub struct ReleaseReport {
     pub notes: Option<String>,
     /// When it was deployed; now when not given. Between 1970 and a day from
     /// now; a time ahead of now counts as now.
-    pub deployed_at: Option<DateTime<Utc>>,
+    pub deployed_at: Option<Timestamp>,
 }
 
 impl ReleaseReport {
@@ -81,7 +81,7 @@ impl ReleaseReport {
     }
 
     /// When it was deployed.
-    pub fn deployed_at(mut self, at: DateTime<Utc>) -> ReleaseReport {
+    pub fn deployed_at(mut self, at: Timestamp) -> ReleaseReport {
         self.deployed_at = Some(at);
         self
     }
@@ -136,7 +136,7 @@ impl ReleaseReport {
             );
         }
         if let Some(at) = self.deployed_at
-            && (at < earliest_deploy() || at > Utc::now() + DEPLOY_CLOCK_SKEW)
+            && (at < earliest_deploy() || at > Timestamp::now() + DEPLOY_CLOCK_SKEW)
         {
             return Err("deployed_at must be between 1970 and a day from now".to_owned());
         }
@@ -160,11 +160,11 @@ pub struct ReleaseSummary {
     /// `process` (a process booted with this label) or `api` (reported).
     pub source: String,
     /// When it was deployed: as reported, else when first seen.
-    pub deployed_at: DateTime<Utc>,
+    pub deployed_at: Timestamp,
     /// When a process first reported it.
-    pub first_seen: DateTime<Utc>,
+    pub first_seen: Timestamp,
     /// When a process last reported it.
-    pub last_seen: DateTime<Utc>,
+    pub last_seen: Timestamp,
     /// Issues whose first occurrence was in this release.
     pub introduced: i64,
     /// Issues that came back (after being resolved) in this release.
@@ -181,7 +181,7 @@ pub struct ReleaseMarker {
     /// The release label.
     pub name: String,
     /// When it was deployed.
-    pub at: DateTime<Utc>,
+    pub at: Timestamp,
 }
 
 #[cfg(test)]

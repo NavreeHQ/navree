@@ -2,7 +2,7 @@
 //! deploys on it, the top issues and the live panel; and that no page needs
 //! an inline style or script.
 
-use chrono::{TimeDelta, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_lighthouse::ReleaseReport;
 use navree_testing::TestApp;
 use serde_json::Value;
@@ -33,7 +33,7 @@ async fn the_tiles_carry_the_figures_the_chart_and_the_deploy() {
     flushed(&app).await;
     lighthouse(&app)
         .await
-        .report_release(ReleaseReport::new("r2").deployed_at(Utc::now() - TimeDelta::minutes(30)))
+        .report_release(ReleaseReport::new("r2").deployed_at(Timestamp::now() - Span::minutes(30)))
         .await
         .unwrap();
     let client = sign_in(&app, "ops@acme.test").await;
@@ -102,7 +102,7 @@ async fn a_deploy_outside_the_period_draws_no_line() {
     flushed(&app).await;
     lighthouse(&app)
         .await
-        .report_release(ReleaseReport::new("old").deployed_at(Utc::now() - TimeDelta::days(3)))
+        .report_release(ReleaseReport::new("old").deployed_at(Timestamp::now() - Span::days(3)))
         .await
         .unwrap();
     let client = sign_in(&app, "ops@acme.test").await;

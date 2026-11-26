@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_lighthouse::{IssueFilter, IssueKind, IssueStatus, Level, Period, REDACTED};
 use navree_telemetry::{
     EventContext, HttpClientRequest, JobFailed, ScheduledTaskRan, Telemetry, TelemetryEvent,
@@ -358,7 +358,7 @@ async fn failed_jobs_scheduled_tasks_and_outgoing_calls_become_issues() {
     let app = builder().build().await;
     let telemetry = Telemetry::from_app(app.ctx()).await;
     let record = |context: EventContext, event: TelemetryEvent| TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context,
         event,
     };
@@ -394,7 +394,7 @@ async fn failed_jobs_scheduled_tasks_and_outgoing_calls_become_issues() {
         EventContext::default(),
         TelemetryEvent::ScheduledTaskRan(ScheduledTaskRan {
             task: "reports.refresh".into(),
-            tick: Utc::now(),
+            tick: Timestamp::now(),
             duration: Duration::from_millis(5),
             error: Some("disk full".into()),
         }),
