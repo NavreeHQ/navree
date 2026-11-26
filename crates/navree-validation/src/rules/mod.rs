@@ -40,7 +40,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use chrono::NaiveDate;
+use navree_datetime::Date;
 use unicode_properties::{GeneralCategoryGroup, UnicodeGeneralCategory};
 
 use crate::{Violation, rule_error};
@@ -259,7 +259,7 @@ fn is_date_ymd(text: &str) -> bool {
             4 | 7 => *b == b'-',
             _ => b.is_ascii_digit(),
         });
-    shaped && NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
+    shaped && Date::parse("%Y-%m-%d", text).is_ok()
 }
 
 /// One of `allowed` (message key `in`, with `:values` = the allowed

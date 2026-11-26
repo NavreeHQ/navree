@@ -38,13 +38,13 @@ test-postgres = ["navree-db/postgres"]
 test-mysql = ["navree-db/mysql"]
 
 [dependencies]
-chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 html5ever = { workspace = true, optional = true }
 http = { workspace = true }
 icu_locale_core = { workspace = true }
 memchr = { workspace = true, optional = true }
 navree-config = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
