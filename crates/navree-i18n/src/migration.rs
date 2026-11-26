@@ -61,6 +61,6 @@ navree_db::record! {
         /// The locale's tag (`fr`, `pt-BR`).
         pub locale: String,
         /// When it was saved.
-        pub updated_at: chrono::DateTime<chrono::Utc>,
+        pub updated_at: navree_datetime::Timestamp,
     }
 }

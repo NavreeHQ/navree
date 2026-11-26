@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use chrono::NaiveDate;
+use navree_datetime::Date;
 use navree_i18n::{
     Arg, Args, BidiIsolation, DateStyle, I18N_MIGRATIONS, I18n, I18nController, I18nError,
     I18nModule, I18nOptions, IntoLocale, Locale, LocaleFiles, LocaleInput, LocaleListResource,
@@ -87,7 +87,7 @@ async fn locale_and_i18n_methods() {
     );
 
     let locale: Locale = i18n.locale("fr");
-    let day = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
+    let day = Date::new(2026, 10, 26).unwrap();
     let _: (&str, &str) = (locale.tag(), locale.language());
     let _: String = locale.format_money(4_200_000, "EUR");
     let _: String = locale.format_date(day);

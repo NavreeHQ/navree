@@ -2,7 +2,7 @@
 //! toolkit's date names against ICU, and the form's own words.
 #![cfg(feature = "ui")]
 
-use chrono::NaiveDate;
+use navree_datetime::Date;
 use navree_i18n::ui::{FromLocale, LocaleUi, MoneyIn};
 use navree_i18n::{DateStyle, I18n, I18nOptions};
 use navree_ui::charts::{ChartLabels, Grouping};
@@ -225,10 +225,10 @@ fn the_toolkits_month_names_are_icus() {
         if dates.tag.split('-').next() != tag.split('-').next() {
             continue;
         }
-        for month in 1..=12u32 {
-            let day = NaiveDate::from_ymd_opt(2026, month, 15).unwrap();
+        for month in 1..=12_u8 {
+            let day = Date::new(2026, month, 15).unwrap();
             let written = locale.format_date_with(day, DateStyle::Long).to_lowercase();
-            let name = dates.month_in_date(month).to_lowercase();
+            let name = dates.month_in_date(u32::from(month)).to_lowercase();
             if !written.contains(&name) {
                 disagreements.push(format!(
                     "{tag} month {month}: `{name}` is not in `{written}`"
@@ -249,7 +249,7 @@ fn the_date_locale_follows_the_tag() {
     let i18n = i18n();
     assert_eq!(i18n.locale("hi").date_locale().month_name(10), "अक्टूबर");
     let india = i18n.locale("en-IN").date_locale();
-    assert_eq!(india.first_day, chrono::Weekday::Sun);
+    assert_eq!(india.first_day, navree_datetime::Weekday::Sunday);
     assert_eq!(india.month_name(3), "March");
 }
 

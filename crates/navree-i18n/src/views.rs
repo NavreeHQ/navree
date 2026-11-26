@@ -1,11 +1,9 @@
 //! Templates in the current locale: the `t` and `locale` functions and the
 //! locale-aware `money` and `date` filters navree-i18n adds to navree-view.
 
-use std::fmt::Write as _;
 use std::sync::{Arc, OnceLock};
 
-use chrono::format::StrftimeItems;
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
+use navree_datetime::{Date, DateTime, Offset, Timestamp, Zone, Zoned, pattern};
 use navree_template::{Environment, Error, ErrorKind, Kwargs, Value, ValueKind};
 
 use crate::locale::Locale;
@@ -32,7 +30,7 @@ pub(crate) fn current(slot: &Slot) -> Locale {
 ///   in `fr`);
 /// - `date(format?)`: a date, a date-time, an RFC 3339 string or a Unix
 ///   timestamp in the locale's medium style (`26 oct. 2026`), or with a
-///   chrono `strftime` format.
+///   `strftime` format.
 pub(crate) fn configure(env: &mut Environment, slot: &Slot) {
     let for_t = slot.clone();
     env.add_function(
@@ -109,35 +107,35 @@ fn money(locale: &Locale, value: &Value, currency: &str) -> Result<String, Error
 
 /// A value the `date` filter understands.
 enum Moment {
-    Zoned(DateTime<FixedOffset>),
-    Naive(NaiveDateTime),
-    Date(NaiveDate),
+    Zoned(Zoned),
+    Naive(DateTime),
+    Date(Date),
 }
 
 impl Moment {
     fn parse(value: &Value) -> Option<Moment> {
         if let Some(text) = value.as_str() {
             let text = text.trim();
-            return DateTime::parse_from_rfc3339(text)
+            return Zoned::parse_rfc3339(text)
                 .map(Moment::Zoned)
                 .or_else(|_| {
-                    NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f").map(Moment::Naive)
+                    DateTime::parse("%Y-%m-%dT%H:%M:%S%.f", text).map(Moment::Naive)
                 })
                 .or_else(|_| {
-                    NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S%.f").map(Moment::Naive)
+                    DateTime::parse("%Y-%m-%d %H:%M:%S%.f", text).map(Moment::Naive)
                 })
-                .or_else(|_| NaiveDate::parse_from_str(text, "%Y-%m-%d").map(Moment::Date))
+                .or_else(|_| Date::parse("%Y-%m-%d", text).map(Moment::Date))
                 .ok();
         }
         let seconds = (value.kind() == ValueKind::Number && value.is_integer())
             .then(|| value.as_i64())
             .flatten()?;
-        DateTime::from_timestamp(seconds, 0).map(|at| Moment::Zoned(at.fixed_offset()))
+        Timestamp::from_secs(seconds).ok().map(|at| Moment::Zoned(at.in_zone(Zone::fixed(Offset::UTC))))
     }
 
-    fn date(&self) -> NaiveDate {
+    fn date(&self) -> Date {
         match self {
-            Moment::Zoned(at) => at.date_naive(),
+            Moment::Zoned(at) => at.date(),
             Moment::Naive(at) => at.date(),
             Moment::Date(day) => *day,
         }
@@ -155,19 +153,15 @@ fn date(locale: &Locale, value: &Value, format: Option<&str>) -> Result<String, 
     let Some(format) = format else {
         return Ok(locale.format_date(moment.date()));
     };
-    let items = StrftimeItems::new(format)
-        .parse()
-        .map_err(|_| invalid("date filter: invalid format string"))?;
-    let mut out = String::new();
+    pattern::check(format).map_err(|_| invalid("date filter: invalid format string"))?;
     let written = match moment {
-        Moment::Zoned(at) => write!(out, "{}", at.format_with_items(items.iter())),
-        Moment::Naive(at) => write!(out, "{}", at.format_with_items(items.iter())),
-        Moment::Date(day) => write!(out, "{}", day.format_with_items(items.iter())),
+        Moment::Zoned(at) => at.format(format).to_text(),
+        Moment::Naive(at) => at.format(format).to_text(),
+        Moment::Date(day) => day.format(format).to_text(),
     };
     written.map_err(|_| {
         invalid(
             "date filter: the format asks for fields the value does not have (a time or offset)",
         )
-    })?;
-    Ok(out)
+    })
 }

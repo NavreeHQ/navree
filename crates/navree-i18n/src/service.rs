@@ -5,7 +5,7 @@ use std::fmt;
 use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
-use chrono::Utc;
+use navree_datetime::Timestamp;
 use navree_db::{Db, Record as _, Uow, record};
 use uuid::Uuid;
 
@@ -176,7 +176,7 @@ impl Shared {
             scope_type: owner.as_str().to_owned(),
             scope_id: id,
             locale: tag.clone(),
-            updated_at: Utc::now(),
+            updated_at: Timestamp::now(),
         };
         record::upsert(
             uow,

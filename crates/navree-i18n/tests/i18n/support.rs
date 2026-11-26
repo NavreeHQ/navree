@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use chrono::NaiveDate;
+use navree_datetime::Date;
 use navree_access::{AccessModule, AccessOptions};
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, Executor, MigrationSet, ModuleBuilderDbExt, Statement, Uow};
@@ -52,7 +52,7 @@ impl DealsController {
     #[get("/summary")]
     #[public]
     async fn summary(&self, locale: Locale) -> Json<Value> {
-        let updated = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
+        let updated = Date::new(2026, 10, 26).unwrap();
         Json(json!({
             "locale": locale.tag(),
             "headline": t!("deal-created", count = 3),

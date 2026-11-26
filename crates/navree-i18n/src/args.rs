@@ -4,10 +4,10 @@
 use std::borrow::Cow;
 use std::fmt;
 
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
 use fluent_bundle::types::{FluentNumber, FluentNumberOptions, FluentType};
 use fluent_bundle::{FluentArgs, FluentValue};
 use intl_memoizer::Memoizable;
+use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned};
 use unic_langid::LanguageIdentifier;
 
 use crate::format::{DateStyle, Formats, TimeStyle};
@@ -68,7 +68,7 @@ impl fmt::Debug for Args {
 }
 
 /// One argument value: a number (any integer or float type), a string, a
-/// [`Money`] amount, a chrono date or date-time, a `bool` (as `"true"` or
+/// [`Money`] amount, a [`Date`], [`DateTime`], [`Timestamp`] or [`Zoned`], a `bool` (as `"true"` or
 /// `"false"`, for selectors), or an `Option` of those (`None` prints
 /// nothing).
 ///
@@ -136,14 +136,14 @@ impl From<&Money> for Arg {
     }
 }
 
-impl From<NaiveDate> for Arg {
-    fn from(value: NaiveDate) -> Arg {
+impl From<Date> for Arg {
+    fn from(value: Date) -> Arg {
         Arg(FluentValue::Custom(Box::new(FluentDate::new(value, None))))
     }
 }
 
-impl From<NaiveDateTime> for Arg {
-    fn from(value: NaiveDateTime) -> Arg {
+impl From<DateTime> for Arg {
+    fn from(value: DateTime) -> Arg {
         Arg(FluentValue::Custom(Box::new(FluentDate::new(
             value.date(),
             Some(value.time()),
@@ -151,10 +151,17 @@ impl From<NaiveDateTime> for Arg {
     }
 }
 
-impl<Tz: TimeZone> From<DateTime<Tz>> for Arg {
+impl From<Timestamp> for Arg {
+    /// The date and time in UTC.
+    fn from(value: Timestamp) -> Arg {
+        Arg::from(value.date_time_utc())
+    }
+}
+
+impl From<Zoned> for Arg {
     /// The date and time in the value's own time zone.
-    fn from(value: DateTime<Tz>) -> Arg {
-        Arg::from(value.naive_local())
+    fn from(value: Zoned) -> Arg {
+        Arg::from(value.date_time())
     }
 }
 
@@ -229,14 +236,14 @@ impl Money {
 /// chose.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FluentDate {
-    date: NaiveDate,
-    time: Option<NaiveTime>,
+    date: Date,
+    time: Option<Time>,
     style: DateStyle,
     time_style: Option<TimeStyle>,
 }
 
 impl FluentDate {
-    fn new(date: NaiveDate, time: Option<NaiveTime>) -> FluentDate {
+    fn new(date: Date, time: Option<Time>) -> FluentDate {
         FluentDate {
             date,
             time,
@@ -319,7 +326,7 @@ pub(crate) fn datetime<'a>(positional: &[FluentValue<'a>], named: &FluentArgs) -
             None => return FluentValue::Error,
         }
         if date.time.is_none() {
-            date.time = Some(NaiveTime::MIN);
+            date.time = Some(Time::MIDNIGHT);
         }
     }
     FluentValue::Custom(Box::new(date))
@@ -333,8 +340,10 @@ fn to_date(value: &FluentValue<'_>) -> Option<FluentDate> {
         FluentValue::Number(number) => {
             #[allow(clippy::cast_possible_truncation)]
             let seconds = number.value as i64;
-            DateTime::from_timestamp(seconds, 0)
-                .map(|at| FluentDate::new(at.date_naive(), Some(at.time())))
+            Timestamp::from_secs(seconds).ok().map(|at| {
+                let dt = at.date_time_utc();
+                FluentDate::new(dt.date(), Some(dt.time()))
+            })
         }
         _ => None,
     }
@@ -344,16 +353,16 @@ fn to_date(value: &FluentValue<'_>) -> Option<FluentDate> {
 /// or a `YYYY-MM-DD` date.
 pub(crate) fn parse_date(text: &str) -> Option<FluentDate> {
     let text = text.trim();
-    if let Ok(at) = DateTime::<FixedOffset>::parse_from_rfc3339(text) {
-        let local = at.naive_local();
+    if let Ok(at) = Zoned::parse_rfc3339(text) {
+        let local = at.date_time();
         return Some(FluentDate::new(local.date(), Some(local.time())));
     }
     for format in ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%d %H:%M:%S%.f"] {
-        if let Ok(at) = NaiveDateTime::parse_from_str(text, format) {
+        if let Ok(at) = DateTime::parse(format, text) {
             return Some(FluentDate::new(at.date(), Some(at.time())));
         }
     }
-    NaiveDate::parse_from_str(text, "%Y-%m-%d")
+    Date::parse("%Y-%m-%d", text)
         .ok()
         .map(|day| FluentDate::new(day, None))
 }
@@ -374,15 +383,15 @@ mod tests {
             Arg::from(Money::new(1, "EUR")).0,
             FluentValue::Custom(_)
         ));
-        let day = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
+        let day = Date::new(2026, 10, 26).unwrap();
         assert!(matches!(Arg::from(day).0, FluentValue::Custom(_)));
     }
 
     #[test]
     fn dates_parse_from_strings_and_timestamps() {
         let date = parse_date("2026-10-26T14:30:00+02:00").unwrap();
-        assert_eq!(date.date, NaiveDate::from_ymd_opt(2026, 10, 26).unwrap());
-        assert_eq!(date.time, NaiveTime::from_hms_opt(14, 30, 0));
+        assert_eq!(date.date, Date::new(2026, 10, 26).unwrap());
+        assert_eq!(date.time, Time::new(14, 30, 0).ok());
         assert_eq!(parse_date("2026-10-26").unwrap().time, None);
         assert!(parse_date("26/10/2026").is_none());
         let from_number = to_date(&FluentValue::Number(FluentNumber::new(
@@ -392,7 +401,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             from_number.date,
-            NaiveDate::from_ymd_opt(1970, 1, 1).unwrap()
+            Date::new(1970, 1, 1).unwrap()
         );
     }
 
@@ -408,7 +417,7 @@ mod tests {
         let date = custom.as_any().downcast_ref::<FluentDate>().unwrap();
         assert_eq!(date.style, DateStyle::Long);
         assert_eq!(date.time_style, Some(TimeStyle::Short));
-        assert_eq!(date.time, Some(NaiveTime::MIN));
+        assert_eq!(date.time, Some(Time::MIDNIGHT));
 
         let mut bad = FluentArgs::new();
         bad.set("dateStyle", "huge");

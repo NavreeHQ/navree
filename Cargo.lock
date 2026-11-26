@@ -5022,7 +5022,6 @@ dependencies = [
 name = "navree-i18n"
 version = "1.6.0"
 dependencies = [
- "chrono",
  "fixed_decimal",
  "fluent-bundle",
  "fluent-syntax",
@@ -5037,6 +5036,7 @@ dependencies = [
  "navree-access",
  "navree-config",
  "navree-contracts",
+ "navree-datetime",
  "navree-db",
  "navree-http",
  "navree-i18n",
