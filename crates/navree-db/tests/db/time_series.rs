@@ -2,14 +2,14 @@
 //! cutoff (on TimescaleDB it drops whole chunks first; see
 //! `tests/postgres_time_series.rs`).
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{Db, Executor, ExecutorExt, Statement, TimePoint, prune_time_series};
 use navree_schema::Schema;
 
 use crate::support::TempDb;
 
-fn day(n: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, n, 12, 0, 0).unwrap()
+fn day(n: u8) -> Timestamp {
+    Timestamp::utc(2026, 10, n, 12, 0, 0).unwrap()
 }
 
 /// `events(kind, occurred_at)`, a hypertable on TimescaleDB, with one

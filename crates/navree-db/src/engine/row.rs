@@ -10,7 +10,7 @@ use crate::engine::{Backend, DbError, ErrorKind, FromValue, Value};
 ///
 /// [`get`](Row::get) reads a column as any [`FromValue`] type (tolerantly:
 /// an `i64` from any integer column, a `Uuid` from text or bytes, a
-/// `DateTime<Utc>` from SQLite's text); [`value`](Row::value) reads it as a
+/// [`Timestamp`](navree_datetime::Timestamp) from SQLite's text); [`value`](Row::value) reads it as a
 /// [`Value`] by the column's type; [`to_json`](Row::to_json) gives the whole
 /// row as a JSON object.
 ///

@@ -133,11 +133,11 @@ fn bind_null(
         Kind::Bytes => args.add(None::<Vec<u8>>),
         Kind::Json => args.add(None::<serde_json::Value>),
         Kind::Uuid => args.add(None::<uuid::Uuid>),
-        Kind::Date => args.add(None::<chrono::NaiveDate>),
-        Kind::Time => args.add(None::<chrono::NaiveTime>),
-        Kind::DateTime => args.add(None::<chrono::NaiveDateTime>),
-        Kind::Timestamp => args.add(None::<chrono::DateTime<chrono::Utc>>),
-        Kind::TimestampTz => args.add(None::<chrono::DateTime<chrono::FixedOffset>>),
+        Kind::Date => args.add(None::<navree_datetime::Date>),
+        Kind::Time => args.add(None::<navree_datetime::Time>),
+        Kind::DateTime => args.add(None::<navree_datetime::DateTime>),
+        Kind::Timestamp => args.add(None::<navree_datetime::Timestamp>),
+        Kind::TimestampTz => args.add(None::<navree_datetime::Zoned>),
         Kind::Enum => args.add(None::<String>),
         Kind::Vector => args.add(PgVector(None)),
     }
@@ -209,7 +209,7 @@ fn decode(raw: PgValueRef<'_>, type_name: &str) -> Result<Value, sqlx::error::Bo
         "TEXT[]" | "VARCHAR[]" | "NAME[]" | "CHAR[]" => json_array::<String>(raw)?,
         "UUID[]" => json_array::<uuid::Uuid>(raw)?,
         "JSON[]" | "JSONB[]" => json_array::<serde_json::Value>(raw)?,
-        "TIMESTAMPTZ[]" => json_array::<chrono::DateTime<chrono::Utc>>(raw)?,
+        "TIMESTAMPTZ[]" => json_array::<navree_datetime::Timestamp>(raw)?,
         "vector" | "VECTOR" => vector(raw)?,
         // Enums, domains over text and other types whose binary form is
         // their text.
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn statements_are_keyed_by_the_types_their_values_bind() {
-        use chrono::{NaiveDate, TimeZone, Utc};
+        use navree_datetime::{Date, Offset, Time, Zone};
 
         // Nothing bound: the SQL as written.
         assert_eq!(keyed("SELECT 1;", vec![]), "SELECT 1;");
@@ -319,8 +319,8 @@ mod tests {
             keyed("SELECT $1, $2 ;\n", vec![1_i64.into(), "a".into()]),
             "SELECT $1, $2 /* params: INT8, TEXT */ ;\n"
         );
-        let date = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap();
-        let at = date.and_hms_opt(1, 2, 3).unwrap();
+        let date = Date::new(2026, 10, 29).unwrap();
+        let at = date.at(Time::new(1, 2, 3).unwrap());
         let every = vec![
             Value::Bool(true),
             Value::I8(1),
@@ -342,8 +342,8 @@ mod tests {
             Value::Date(date),
             Value::Time(at.time()),
             Value::DateTime(at),
-            Value::Timestamp(Utc.from_utc_datetime(&at)),
-            Value::TimestampTz(Utc.from_utc_datetime(&at).fixed_offset()),
+            Value::Timestamp(at.in_utc()),
+            Value::TimestampTz(at.in_utc().in_zone(Zone::fixed(Offset::UTC))),
             Value::Enum {
                 type_name: "mood".into(),
                 value: "happy".into(),

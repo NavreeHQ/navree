@@ -1,7 +1,7 @@
 //! Values bound and read back on every backend: every kind, typed NULLs,
 //! typed reads and the dynamic `Row::value`.
 
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use navree_datetime::{Date, DateTime, Time, Timestamp, Zoned};
 use navree_db::{Backend, Executor, ExecutorExt, FromValue, Kind, Row, Statement, Value};
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -79,13 +79,13 @@ fn sample() -> Vec<Value> {
         Value::Bytes(vec![0, 1, 254, 255]),
         Value::Json(serde_json::json!({"stage": "won", "tags": ["a", "b"], "n": 3})),
         Value::Uuid(Uuid::from_u128(0x0199_a7a0_0000_7000_8000_0000_0000_0042)),
-        Value::Date(NaiveDate::from_ymd_opt(2026, 10, 28).unwrap()),
-        Value::Time(NaiveTime::from_hms_micro_opt(9, 30, 15, 250_000).unwrap()),
+        Value::Date(Date::new(2026, 10, 28).unwrap()),
+        Value::Time(Time::new(9, 30, 15).and_then(|t| t.with_nanos(250000000)).unwrap()),
         Value::DateTime(
-            NaiveDateTime::parse_from_str("2026-10-28 09:30:15.123456", "%Y-%m-%d %H:%M:%S%.f")
+            DateTime::parse("%Y-%m-%d %H:%M:%S%.f", "2026-10-28 09:30:15.123456")
                 .unwrap(),
         ),
-        Value::Timestamp(Utc.with_ymd_and_hms(2026, 10, 28, 9, 30, 15).unwrap()),
+        Value::Timestamp(Timestamp::utc(2026, 10, 28, 9, 30, 15).unwrap()),
     ]
 }
 
@@ -160,21 +160,21 @@ pub async fn every_kind_round_trips(scratch: Scratch) {
         Uuid::from_u128(0x0199_a7a0_0000_7000_8000_0000_0000_0042)
     );
     assert_eq!(
-        row.get::<NaiveDate>("day").unwrap(),
-        NaiveDate::from_ymd_opt(2026, 10, 28).unwrap()
+        row.get::<Date>("day").unwrap(),
+        Date::new(2026, 10, 28).unwrap()
     );
     assert_eq!(
-        row.get::<NaiveTime>("clock").unwrap(),
-        NaiveTime::from_hms_micro_opt(9, 30, 15, 250_000).unwrap(),
+        row.get::<Time>("clock").unwrap(),
+        Time::new(9, 30, 15).and_then(|t| t.with_nanos(250000000)).unwrap(),
         "{backend}"
     );
     assert_eq!(
-        row.get::<NaiveDateTime>("local_at").unwrap().to_string(),
+        row.get::<DateTime>("local_at").unwrap().to_string(),
         "2026-10-28 09:30:15.123456"
     );
     assert_eq!(
-        row.get::<DateTime<Utc>>("at_utc").unwrap(),
-        Utc.with_ymd_and_hms(2026, 10, 28, 9, 30, 15).unwrap()
+        row.get::<Timestamp>("at_utc").unwrap(),
+        Timestamp::utc(2026, 10, 28, 9, 30, 15).unwrap()
     );
 
     let row = &rows[1];
@@ -314,7 +314,7 @@ pub async fn expressions_read_tolerantly(scratch: Scratch) {
 pub fn hand_rows_share_the_decoders() {
     let row = Row::from_values([("at", Value::from("2026-10-28 09:30:00"))]);
     assert_eq!(
-        row.get::<DateTime<FixedOffset>>("at").unwrap().to_rfc3339(),
+        row.get::<Zoned>("at").unwrap().to_rfc3339(),
         "2026-10-28T09:30:00+00:00"
     );
     assert!(<i64 as FromValue>::from_value(Value::Null(Kind::I64)).is_err());

@@ -103,10 +103,10 @@ async fn migrate_is_idempotent_and_status_reports() {
     assert_eq!(pending.len(), 3);
     assert!(pending.iter().all(|s| !s.applied && s.batch.is_none()));
 
-    let before = chrono::Utc::now() - chrono::Duration::seconds(2);
+    let before = navree_datetime::Timestamp::now() - navree_datetime::Span::seconds(2);
     assert_eq!(Migrator::up(app.ctx()).await.unwrap().len(), 3);
     assert!(Migrator::up(app.ctx()).await.unwrap().is_empty());
-    let after = chrono::Utc::now() + chrono::Duration::seconds(2);
+    let after = navree_datetime::Timestamp::now() + navree_datetime::Span::seconds(2);
 
     let status = Migrator::status(app.ctx()).await.expect("status");
     assert_eq!(status.len(), 3);

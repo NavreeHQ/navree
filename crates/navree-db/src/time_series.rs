@@ -1,7 +1,7 @@
 //! Time-series tables: deleting the rows older than a cutoff, by whole
 //! chunks on TimescaleDB ([`prune_time_series`], [`TimePoint`]).
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_schema::{Schema, SchemaError, TimeDimension};
 
 use crate::schema::OnExecutor;
@@ -16,23 +16,23 @@ use crate::{Backend, DbError, Executor, ExecutorExt, Statement, Value};
 /// (Unix milliseconds in the queue's and Fleet's tables).
 ///
 /// ```
-/// use chrono::{TimeZone, Utc};
+/// use navree_datetime::Timestamp;
 /// use navree_db::TimePoint;
 ///
-/// let moment = Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap();
+/// let moment = Timestamp::utc(2026, 10, 1, 0, 0, 0).unwrap();
 /// assert_eq!(TimePoint::from(moment), TimePoint::At(moment));
 /// assert_eq!(TimePoint::from(1_790_000_000_000_i64), TimePoint::Integer(1_790_000_000_000));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TimePoint {
     /// A moment in time.
-    At(DateTime<Utc>),
+    At(Timestamp),
     /// A value of an integer time column.
     Integer(i64),
 }
 
-impl From<DateTime<Utc>> for TimePoint {
-    fn from(moment: DateTime<Utc>) -> TimePoint {
+impl From<Timestamp> for TimePoint {
+    fn from(moment: Timestamp) -> TimePoint {
         TimePoint::At(moment)
     }
 }
@@ -82,11 +82,11 @@ impl TimePoint {
 ///
 /// ```no_run
 /// # async fn prune(db: &navree_db::Db) -> Result<(), navree_db::DbError> {
-/// use chrono::{TimeDelta, Utc};
+/// use navree_datetime::{Span, Timestamp};
 /// use navree_db::prune_time_series;
 ///
 /// let tx = db.begin().await?;
-/// let deleted = prune_time_series(&tx, "events", "occurred_at", Utc::now() - TimeDelta::days(90)).await?;
+/// let deleted = prune_time_series(&tx, "events", "occurred_at", Timestamp::now() - Span::days(90)).await?;
 /// tx.commit().await?;
 /// println!("deleted {deleted} events");
 /// # Ok(()) }
@@ -221,7 +221,7 @@ fn drop_chunks(
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use navree_datetime::Timestamp;
 
     use super::*;
 
@@ -233,8 +233,8 @@ mod tests {
         }
     }
 
-    fn moment() -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap()
+    fn moment() -> Timestamp {
+        Timestamp::utc(2026, 10, 1, 0, 0, 0).unwrap()
     }
 
     #[test]

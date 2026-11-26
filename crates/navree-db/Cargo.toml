@@ -26,21 +26,21 @@ default = []
 ## SQLite; crates whose tests run on SQLite turn it on in their
 ## dev-dependencies, and a SQLite URL without it fails with "enable the
 ## `sqlite` feature of navree-db".
-sqlite = ["sqlx/sqlite-bundled"]
+sqlite = ["sqlx/sqlite-bundled", "navree-datetime/sqlx-sqlite"]
 ## PostgreSQL and TimescaleDB driver (`postgres://` and `postgresql://` URLs),
 ## with pgvector's `vector` values (`Value::Vector`).
-postgres = ["sqlx/postgres"]
+postgres = ["sqlx/postgres", "navree-datetime/sqlx-postgres"]
 ## MySQL and MariaDB driver (`mysql://` and `mariadb://` URLs).
-mysql = ["sqlx/mysql"]
+mysql = ["sqlx/mysql", "navree-datetime/sqlx-mysql"]
 
 [dependencies]
 base64 = { workspace = true }
-chrono = { workspace = true }
 # Rows read one by one (`Executor::fetch`).
 futures-util = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 # The OpenAPI schema of `CursorPage` (`ToSchema`).
@@ -54,7 +54,7 @@ serde_json = { workspace = true }
 # The driver: pools, connections, transactions and statements run on SQLx
 # directly (TLS with rustls and ring). The drivers are this crate's
 # `sqlite`, `postgres` and `mysql` features.
-sqlx = { workspace = true, features = ["chrono", "json", "rust_decimal", "tls-rustls", "uuid"] }
+sqlx = { workspace = true, features = ["json", "rust_decimal", "tls-rustls", "uuid"] }
 sqlx-core = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

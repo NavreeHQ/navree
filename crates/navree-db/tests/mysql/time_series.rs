@@ -1,14 +1,14 @@
 //! `prune_time_series` on a real MySQL server: a hypertable declared in a
 //! migration is a regular table here, pruned with one `DELETE`.
 
-use chrono::{DateTime, TimeZone, Utc};
+use navree_datetime::Timestamp;
 use navree_db::{Executor, ExecutorExt, Statement, prune_time_series};
 use navree_schema::Schema;
 
 use crate::support::Scratch;
 
-fn day(n: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, n, 12, 0, 0).unwrap()
+fn day(n: u8) -> Timestamp {
+    Timestamp::utc(2026, 10, n, 12, 0, 0).unwrap()
 }
 
 #[tokio::test]
@@ -34,7 +34,7 @@ async fn old_rows_are_deleted_and_counted() {
             [
                 uuid::Uuid::now_v7().into(),
                 day(n).into(),
-                day(n).timestamp_millis().into(),
+                day(n).as_millis().into(),
             ],
         ))
         .await
@@ -45,7 +45,7 @@ async fn old_rows_are_deleted_and_counted() {
         .unwrap();
     assert_eq!(deleted, 2);
     let tx = db.begin().await.unwrap();
-    let deleted = prune_time_series(&tx, "events", "at_ms", day(4).timestamp_millis())
+    let deleted = prune_time_series(&tx, "events", "at_ms", day(4).as_millis())
         .await
         .unwrap();
     tx.commit().await.unwrap();
