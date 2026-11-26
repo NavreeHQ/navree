@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_config::{Config, ConfigSources};
 use navree_contracts::Secret;
 use navree_events::Event;
@@ -304,7 +304,7 @@ fn sample_key() -> ServiceAccountKey {
 
 #[test]
 fn connection_info_has_the_documented_members() {
-    let now: DateTime<Utc> = Utc::now();
+    let now: Timestamp = Timestamp::now();
     let info = ConnectionInfo {
         id: Uuid::nil(),
         owner_type: OwnerType::Workspace,
@@ -369,7 +369,7 @@ fn connection_info_has_the_documented_members() {
         error: None,
         checked_at: now,
     };
-    let _: (Uuid, ConnectionStatus, u32, Option<String>, DateTime<Utc>) =
+    let _: (Uuid, ConnectionStatus, u32, Option<String>, Timestamp) =
         (connection_id, status, failures, error, checked_at);
 
     let ProviderInfo {

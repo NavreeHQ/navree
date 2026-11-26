@@ -6,7 +6,7 @@ use std::fmt;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_contracts::Secret;
 use navree_http_client::{HttpClient, HttpClientError, Response};
 use navree_kernel::BoxFuture;
@@ -62,7 +62,7 @@ pub(crate) enum Exchange<'a> {
         key: &'a ServiceAccountKey,
         subject: Option<&'a str>,
         scopes: &'a [String],
-        now: DateTime<Utc>,
+        now: Timestamp,
     },
 }
 
@@ -346,9 +346,9 @@ pub(crate) fn service_account_assertion(
     key: &ServiceAccountKey,
     subject: Option<&str>,
     scopes: &[String],
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<String, IntegrationsError> {
-    let iat = now.timestamp();
+    let iat = now.as_secs();
     let mut claims = json!({
         "iss": key.client_email,
         "scope": scopes.join(" "),
@@ -657,9 +657,8 @@ mod tests {
             client_id: None,
             project_id: None,
         };
-        let now = DateTime::parse_from_rfc3339("2026-10-27T08:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = Timestamp::parse_rfc3339("2026-10-27T08:00:00Z")
+            .unwrap();
         let jwt = service_account_assertion(
             "https://oauth2.googleapis.com/token",
             &key,

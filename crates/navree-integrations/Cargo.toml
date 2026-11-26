@@ -39,7 +39,6 @@ mail = ["dep:navree-mail", "navree-mail/inbound"]
 [dependencies]
 base64 = { workspace = true }
 bytes = { workspace = true }
-chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
 # Token locks and the used-state memory (in-process without CacheModule).
@@ -49,6 +48,7 @@ navree-contracts = { workspace = true }
 # Encrypted credentials, sealed states, and `jose`: service-account JWTs
 # (RS256) signed on ring.
 navree-crypto = { workspace = true }
+navree-datetime = { workspace = true }
 navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }

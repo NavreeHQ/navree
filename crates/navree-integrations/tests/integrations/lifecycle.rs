@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use chrono::TimeDelta;
+use navree_datetime::Span;
 use navree_db::Db;
 use navree_integrations::{
     ConnectCallback, ConnectOptions, ConnectionStatus, CredentialKind, FakeGrant,
@@ -92,7 +92,7 @@ async fn the_connection_lifecycle() {
     assert_eq!(again, hubspot);
     let row = integrations.find(hubspot).await.unwrap();
     assert_eq!(row.created_at, start());
-    assert_eq!(row.updated_at, start() + TimeDelta::seconds(60));
+    assert_eq!(row.updated_at, start() + Span::seconds(60));
     assert_eq!(
         integrations.token(hubspot).await.unwrap().expose(),
         "second"
@@ -107,7 +107,7 @@ async fn the_connection_lifecycle() {
     assert!(!stored.access_token.as_deref().unwrap().contains("second"));
     assert_eq!(
         stored.token_expires_at,
-        Some(start() + TimeDelta::seconds(660))
+        Some(start() + Span::seconds(660))
     );
 
     // An expired token is refreshed once and stored.
@@ -133,7 +133,7 @@ async fn the_connection_lifecycle() {
     h.fake.restore_tokens("microsoft");
     let health = integrations.check(microsoft.id).await.unwrap();
     assert_eq!(health.status, ConnectionStatus::Healthy);
-    let checked_at = start() + TimeDelta::seconds(660);
+    let checked_at = start() + Span::seconds(660);
     assert_eq!(
         integrations
             .find(microsoft.id)

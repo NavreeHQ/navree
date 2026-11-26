@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_orm::Model;
 use serde::Serialize;
 use uuid::Uuid;
@@ -48,7 +48,7 @@ pub struct IntegrationConnection {
     #[model(hidden)]
     pub access_token: Option<String>,
     /// When the cached access token expires.
-    pub token_expires_at: Option<DateTime<Utc>>,
+    pub token_expires_at: Option<Timestamp>,
     /// The granted scopes, space-separated.
     pub scopes: Option<String>,
     /// `healthy` or `unhealthy`.
@@ -58,13 +58,13 @@ pub struct IntegrationConnection {
     /// The last failure.
     pub last_error: Option<String>,
     /// When it was last checked.
-    pub last_checked_at: Option<DateTime<Utc>>,
+    pub last_checked_at: Option<Timestamp>,
     /// The user who connected it.
     pub connected_by: Option<Uuid>,
     /// When it was connected.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
 }
 
 /// The credentials and token are redacted.

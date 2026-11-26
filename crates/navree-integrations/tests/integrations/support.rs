@@ -7,7 +7,7 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::Timestamp;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, MANAGE, Rules};
 use navree_contracts::{AuthVia, Clock, FixedClock, Principal};
 use navree_crypto::{CryptoModule, generate_key};
@@ -42,10 +42,9 @@ pub const DEPUTY: Uuid = Uuid::from_u128(3);
 pub const PEM: &str = include_str!("../fixtures/rsa-2048.pem");
 
 /// 2026-10-27T08:00:00Z.
-pub fn start() -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339("2026-10-27T08:00:00Z")
+pub fn start() -> Timestamp {
+    Timestamp::parse_rfc3339("2026-10-27T08:00:00Z")
         .unwrap()
-        .with_timezone(&Utc)
 }
 
 pub fn principal(user_id: Uuid) -> Principal {
