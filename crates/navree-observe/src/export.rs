@@ -198,7 +198,7 @@ async fn send(exporter: &dyn SpanExport, batch: &mut Vec<RecordedSpan>, timeout:
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use navree_datetime::Timestamp;
     use navree_telemetry::{EventContext, JobProcessed, TelemetryEvent, TraceContext};
     use tokio::sync::oneshot;
 
@@ -224,7 +224,7 @@ mod tests {
 
     fn job(sampled: bool) -> TelemetryRecord {
         TelemetryRecord {
-            at: Utc::now(),
+            at: Timestamp::now(),
             context: EventContext {
                 trace: Some(TraceContext::root(sampled)),
                 ..EventContext::default()

@@ -30,11 +30,11 @@ otel = [
 ]
 
 [dependencies]
-chrono = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-datetime = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }

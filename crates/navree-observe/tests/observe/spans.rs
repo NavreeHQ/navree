@@ -4,9 +4,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
 use http::{Method, Request};
 use navree_config::{ConfigModule, ConfigSources};
+use navree_datetime::Timestamp;
 use navree_http::AppRouter;
 use navree_http::body::Body;
 use navree_http::{
@@ -215,7 +215,7 @@ async fn an_untrusted_caller_is_kept_as_a_link() {
 
 fn record(event: TelemetryEvent, trace: &TraceContext) -> TelemetryRecord {
     TelemetryRecord {
-        at: Utc::now(),
+        at: Timestamp::now(),
         context: EventContext {
             trace: Some(trace.clone()),
             ..EventContext::default()

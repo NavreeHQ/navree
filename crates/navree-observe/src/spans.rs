@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use navree_datetime::{Span, Timestamp};
 use navree_telemetry::{
     CacheOperation, EventKind, Interest, SpanId, SpanLink, TelemetryEvent, TelemetryRecord,
     TraceContext, TraceId,
@@ -55,9 +55,9 @@ pub struct RecordedSpan {
     /// The parent span; `None` for the root of a trace.
     pub parent_span_id: Option<SpanId>,
     /// When it started.
-    pub start: DateTime<Utc>,
+    pub start: Timestamp,
     /// When it ended.
-    pub end: DateTime<Utc>,
+    pub end: Timestamp,
     /// How it ended.
     pub status: SpanStatus,
     /// Its attributes (`http.route`, `db.query.text`, ...).
@@ -251,8 +251,8 @@ impl RecordedSpan {
         };
         let end = record.at;
         let start = end
-            - chrono::Duration::from_std(span.duration)
-                .unwrap_or_else(|_| chrono::Duration::zero());
+            .checked_sub(Span::try_from(span.duration).unwrap_or(Span::ZERO))
+            .unwrap_or(Timestamp::MIN);
         Some(RecordedSpan {
             name: span.name,
             kind: span.kind,
