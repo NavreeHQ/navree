@@ -2,7 +2,7 @@
 //! them with rows from the database, and the website's previews call them with
 //! the seed, so both draw the same thing.
 
-use chrono::{DateTime, NaiveDate};
+use navree::datetime::{Date, Timestamp};
 use navree::ui::flags::CountryCode;
 use navree::ui::*;
 
@@ -104,24 +104,24 @@ pub fn money(paise: i64) -> String {
 
 /// `09:41` in the shop's zone.
 pub fn clock(at: i64) -> String {
-    DateTime::from_timestamp(at + i64::from(OFFSET), 0)
-        .map(|time| time.format("%H:%M").to_string())
+    Timestamp::from_secs(at + i64::from(OFFSET))
+        .map(|time| time.date_time_utc().format("%H:%M").to_string())
         .unwrap_or_default()
 }
 
 /// `4 Nov, 09:41` in the shop's zone.
 pub fn moment(at: i64) -> String {
-    DateTime::from_timestamp(at + i64::from(OFFSET), 0)
-        .map(|time| time.format("%-d %b, %H:%M").to_string())
+    Timestamp::from_secs(at + i64::from(OFFSET))
+        .map(|time| time.date_time_utc().format("%-d %b, %H:%M").to_string())
         .unwrap_or_default()
 }
 
 /// `Today, 09:41`, `Yesterday, 18:02` or `2 Nov, 14:20`.
-pub fn when(at: i64, today: NaiveDate) -> String {
+pub fn when(at: i64, today: Date) -> String {
     let day = crate::data::day_of(at);
     if day == today {
         format!("Today, {}", clock(at))
-    } else if today.pred_opt() == Some(day) {
+    } else if today.yesterday() == Some(day) {
         format!("Yesterday, {}", clock(at))
     } else {
         moment(at)

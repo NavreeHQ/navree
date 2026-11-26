@@ -196,7 +196,7 @@ async fn every_native_page_names_the_same_person_as_the_shell() {
 async fn an_agent_the_visitor_switched_to_is_another_person() {
     let (app, _dir) = boot_desk().await;
     let signer = app.get::<navree::http::UrlSigner>().await;
-    let cookie = inbox_demo::pages::agent_cookie(&signer, 2, chrono::Utc::now());
+    let cookie = inbox_demo::pages::agent_cookie(&signer, 2, navree::datetime::Timestamp::now());
     let other = person_of(&app, "/_navree/native/shell", Some(&cookie)).await;
     assert_eq!(other, Some(inbox_demo::person::person_of(2).to_string()));
     assert_ne!(other, person_of(&app, "/_navree/native/shell", None).await);
@@ -321,7 +321,7 @@ async fn a_cookie_that_is_not_the_one_the_app_signed_for_an_agent_names_the_defa
     let (app, _dir) = boot_desk().await;
     let default = Some(inbox_demo::person::person_of(inbox_demo::data::DEFAULT_AGENT).to_string());
     let signer = app.get::<navree::http::UrlSigner>().await;
-    let now = chrono::Utc::now();
+    let now = navree::datetime::Timestamp::now();
     // What the app signs for agent 2: `2.<expires>.<signature>`.
     let good = inbox_demo::pages::agent_cookie(&signer, 2, now);
     let [agent, expires, signature] = good.splitn(3, '.').collect::<Vec<_>>()[..] else {
@@ -334,7 +334,8 @@ async fn a_cookie_that_is_not_the_one_the_app_signed_for_an_agent_names_the_defa
     );
     let long = "a".repeat(10_000);
     let digits = "7".repeat(10_000);
-    let expired = inbox_demo::pages::agent_cookie(&signer, 2, now - chrono::Duration::days(400));
+    let expired =
+        inbox_demo::pages::agent_cookie(&signer, 2, now - navree::datetime::Span::days(400));
     let bad = [
         // Signed for agent 2, with the number changed to 3.
         ("another agent's number", format!("3.{expires}.{signature}")),

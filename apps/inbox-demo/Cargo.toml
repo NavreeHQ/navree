@@ -23,7 +23,6 @@ unsafe_code = "forbid"
 native-preview = ["navree/ui-native-preview"]
 
 [dependencies]
-chrono = { workspace = true }
 http = { workspace = true }
 # A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo
 # cannot turn off default features that the workspace entry leaves on.

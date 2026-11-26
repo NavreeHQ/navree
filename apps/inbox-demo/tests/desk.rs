@@ -6,12 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use chrono::{Duration, TimeZone, Utc};
 use inbox_demo::data::{Conversation, Message, Status};
 use inbox_demo::live::{Happening, Hub};
 use inbox_demo::pages::{agent_cookie, agent_of_cookie, explain};
 use inbox_demo::queries::{self, Since};
 use inbox_demo::views::{Filters, View};
+use navree::datetime::{Date, Span, Time, Timestamp};
 use navree::db::{Db, DbOptions, ExecutorExt as _, SqliteOptions, Statement, Value};
 use navree::http::UrlSigner;
 use navree::orm::Model as _;
@@ -496,14 +496,15 @@ async fn a_snoozed_conversation_comes_back_on_its_day() {
         .filter_map(|c| c.snoozed_until)
         .min()
         .expect("a day");
-    let at = |date: chrono::NaiveDate| {
-        Utc.from_utc_datetime(&date.and_hms_opt(6, 0, 0).unwrap_or_default())
-            .timestamp()
+    let at = |date: Date| {
+        date.at(Time::new(6, 0, 0).unwrap_or_default())
+            .in_utc()
+            .as_secs()
     };
     // The day before: nothing comes back.
     assert_eq!(
         desk.hub
-            .wake(&desk.db, at(day - Duration::days(1)))
+            .wake(&desk.db, at(day.yesterday().unwrap()))
             .await
             .expect("wake"),
         0
@@ -539,7 +540,7 @@ async fn a_snoozed_conversation_comes_back_on_its_day() {
 #[test]
 fn the_agent_cookie_is_signed_and_a_forged_one_names_nobody() {
     let signer = UrlSigner::new(b"a long random key for the tests");
-    let now = Utc::now();
+    let now = Timestamp::now();
     let value = agent_cookie(&signer, 7, now);
     assert!(value.starts_with("7."), "{value}");
     assert!(
@@ -558,7 +559,7 @@ fn the_agent_cookie_is_signed_and_a_forged_one_names_nobody() {
         None
     );
     assert_eq!(
-        agent_of_cookie(&signer, &value, now + Duration::days(366)),
+        agent_of_cookie(&signer, &value, now + Span::days(366)),
         None
     );
     for bad in [

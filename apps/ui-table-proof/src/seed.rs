@@ -43,8 +43,10 @@ fn deal(id: i64) -> Deal {
         amount: (id % 6 != 0).then_some((id * 7919) % 5_000_000),
         company_id: (id % 8 != 0).then_some(id % 5 + 1),
         closed_on: (id % 5 != 0).then(|| {
-            chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap_or_default()
-                + chrono::Days::new(u64::try_from(id % 90).unwrap_or(0))
+            navree::datetime::Date::new(2026, 1, 1)
+                .unwrap_or_default()
+                .add_days(id % 90)
+                .unwrap_or_default()
         }),
         active: id % 3 != 0,
         notes: notes(id),

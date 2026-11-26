@@ -4,7 +4,7 @@
 //! measures from a wearable, and the gaps between heartbeats. The numbers that are rupees or
 //! counts are written in lakh grouping by the charts themselves.
 
-use chrono::{Duration, NaiveDate};
+use navree::datetime::{Date, Weekday};
 use navree::ui::charts::*;
 use navree::ui::*;
 
@@ -175,14 +175,14 @@ fn bell(values: &mut impl Iterator<Item = f64>) -> f64 {
 
 /// A day's training load for `days` days ending 12 November 2026: heavier at the weekend,
 /// a rest day in the week, a build-up over the months, and a few days the watch was off.
-fn training(days: i64, seed: u64) -> Vec<(NaiveDate, Option<f64>)> {
-    let last = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();
+fn training(days: i64, seed: u64) -> Vec<(Date, Option<f64>)> {
+    let last = Date::new(2026, 11, 12).unwrap_or_default();
     let mut noise = spread(seed);
     (0..days)
         .map(|back| {
-            let date = last - Duration::days(days - 1 - back);
+            let date = last.add_days(-(days - 1 - back)).unwrap_or(last);
             let usual = [62.0, 74.0, 0.0, 88.0, 50.0, 128.0, 96.0]
-                [chrono::Datelike::weekday(&date).num_days_from_monday() as usize];
+                [usize::from(date.weekday().days_from_monday())];
             let (shape, off) = (noise.next().unwrap_or(0.5), noise.next().unwrap_or(0.5));
             let build = 0.7 + 0.5 * (back as f64 / days as f64);
             let load = (usual * build * (0.55 + 0.9 * shape)).round();
@@ -192,12 +192,12 @@ fn training(days: i64, seed: u64) -> Vec<(NaiveDate, Option<f64>)> {
 }
 
 /// A day's steps for `days` days ending 12 November 2026.
-fn walking(days: i64, seed: u64) -> Vec<(NaiveDate, Option<f64>)> {
-    let last = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();
+fn walking(days: i64, seed: u64) -> Vec<(Date, Option<f64>)> {
+    let last = Date::new(2026, 11, 12).unwrap_or_default();
     let mut noise = spread(seed);
     (0..days)
         .map(|back| {
-            let date = last - Duration::days(days - 1 - back);
+            let date = last.add_days(-(days - 1 - back)).unwrap_or(last);
             let steps = 3_500.0 + 11_500.0 * noise.next().unwrap_or(0.5).powf(1.4);
             let missed = noise.next().unwrap_or(0.5) < 0.1;
             (date, (!missed).then_some((steps / 50.0).round() * 50.0))
@@ -234,19 +234,19 @@ fn calendar_heatmap_steps() -> CalendarHeatmap {
         .ink(Ink::tone(Tone::Success))
         .steps(HeatSteps::at(4_000, 8_000, 12_000))
         .unit("steps")
-        .week_start(chrono::Weekday::Sun)
+        .week_start(Weekday::Sunday)
 }
 
 fn calendar_heatmap_short() -> CalendarHeatmap {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 5).unwrap_or_default();
-    let last = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();
+    let first = Date::new(2026, 10, 5).unwrap_or_default();
+    let last = Date::new(2026, 11, 12).unwrap_or_default();
     CalendarHeatmap::new("Meditation")
         .id("calendar-heatmap-short")
         .description("Minutes a day since 5 October, Simran Kaur")
         .locale("en-IN")
         .days((0..24).map(|d| {
             let minutes = [10, 0, 15, 20, 5, 25, 0, 30][(d * 3 % 8) as usize];
-            (first + Duration::days(d + 6), Some(f64::from(minutes)))
+            (first.add_days(d + 6).unwrap_or(first), Some(f64::from(minutes)))
         }))
         .range(first, last)
         .steps(HeatSteps::Quartiles)

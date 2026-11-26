@@ -7,7 +7,7 @@
 //! made-up pattern (`+91 98765 0xxxx`), and card numbers are four digits picked by
 //! the seed.
 
-use chrono::{DateTime, NaiveDate};
+use navree::datetime::{Date, Timestamp};
 use navree::orm::Model;
 use navree::ui::{Tone, icons};
 
@@ -68,7 +68,7 @@ pub struct Customer {
     pub city: String,
     /// The PIN code, or a postcode outside India.
     pub pin: String,
-    pub since: Option<NaiveDate>,
+    pub since: Option<Date>,
 }
 
 /// An order, as stored. Amounts are in paise.
@@ -109,7 +109,7 @@ pub struct Order {
     pub note: String,
     /// Unix seconds.
     pub placed_at: i64,
-    pub placed_on: NaiveDate,
+    pub placed_on: Date,
     /// When the confirmation last went out, in unix seconds.
     pub confirmed_at: i64,
 }
@@ -956,9 +956,9 @@ fn ascii(word: &str) -> String {
 }
 
 /// The date of a unix time, in the shop's zone.
-pub fn day_of(at: i64) -> NaiveDate {
-    DateTime::from_timestamp(at + i64::from(OFFSET), 0)
-        .map(|time| time.date_naive())
+pub fn day_of(at: i64) -> Date {
+    Timestamp::from_secs(at + i64::from(OFFSET))
+        .map(|time| time.date_time_utc().date())
         .unwrap_or_default()
 }
 

@@ -8,13 +8,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
 use http::Method;
+use navree::datetime::{Date, Time, Weekday, Zone};
 use navree::http::extract::Query;
 use navree::http::response::{IntoResponse, Response};
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use navree::time::Tz;
 use navree::ui::dates::{
     Calendar, CalendarMode, CaptionLayout, DateLocale, DatePicker, DatePreset, DateRange,
     DateRangePicker, DateRangeQuery, DateRules, DateTimePicker, PickerStyle, RangeRules,
@@ -26,16 +25,16 @@ use crate::deals::DealRow;
 use navree::ui::*;
 use serde::Deserialize;
 
-fn today() -> NaiveDate {
-    NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or(NaiveDate::MIN)
+fn today() -> Date {
+    Date::new(2026, 11, 3).unwrap_or(Date::MIN)
 }
 
-fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(y, m, d).unwrap_or(NaiveDate::MIN)
+fn day(y: i32, m: u8, d: u8) -> Date {
+    Date::new(y, m, d).unwrap_or(Date::MIN)
 }
 
-fn time(h: u32, m: u32) -> NaiveTime {
-    NaiveTime::from_hms_opt(h, m, 0).unwrap_or(NaiveTime::MIN)
+fn time(h: u8, m: u8) -> Time {
+    Time::new(h, m, 0).unwrap_or(Time::MIDNIGHT)
 }
 
 fn section(title: &'static str, content: impl IntoNodes) -> Element {
@@ -48,7 +47,7 @@ fn rules() -> DateRules {
     DateRules::new()
         .min(day(2026, 10, 15))
         .max(day(2027, 2, 10))
-        .disable_weekdays([Weekday::Sat, Weekday::Sun])
+        .disable_weekdays([Weekday::Saturday, Weekday::Sunday])
         .disable_dates([day(2026, 11, 11)])
         .disable_range(day(2026, 12, 24), day(2026, 12, 26))
         .disable_if(|d| d.day() == 13)
@@ -94,7 +93,7 @@ fn calendars() -> Element {
                     .month(day(2026, 2, 1))
                     .week_numbers()
                     .fixed_weeks()
-                    .week_start(Weekday::Mon)
+                    .week_start(Weekday::Monday)
                     .label("Week numbers"),
                 cal("cal-dob")
                     .name("cal_dob")
@@ -190,7 +189,7 @@ fn pickers() -> Element {
                     DateRules::new()
                         .min(day(2026, 11, 1))
                         .max(day(2026, 12, 31))
-                        .disable_weekdays([Weekday::Sat, Weekday::Sun]),
+                        .disable_weekdays([Weekday::Saturday, Weekday::Sunday]),
                 )
             }),
         )),
@@ -202,7 +201,7 @@ fn ranges() -> Element {
         DateRangePicker::new(from, to)
             .id(format!("dr-{from}"))
             .today(today())
-            .week_start(Weekday::Mon)
+            .week_start(Weekday::Monday)
     };
     section(
         "Range pickers",
@@ -257,7 +256,7 @@ fn times() -> Element {
             }),
             tfield("seconds", "With seconds", |p| {
                 p.seconds()
-                    .value(NaiveTime::from_hms_opt(14, 30, 15).unwrap_or(NaiveTime::MIN))
+                    .value(Time::new(14, 30, 15).unwrap_or(Time::MIDNIGHT))
             }),
             tfield("hours", "Office hours", |p| {
                 p.rules(
@@ -319,11 +318,11 @@ pub struct Booking {
         date_rules = booking_rules,
         help = "A weekday in the next three months."
     )]
-    pub start: NaiveDate,
+    pub start: Date,
     /// End date
     #[validate(skip)]
     #[form(widget = date_picker)]
-    pub end: Option<NaiveDate>,
+    pub end: Option<Date>,
     /// Arrives at
     #[validate(skip)]
     #[form(
@@ -331,7 +330,7 @@ pub struct Booking {
         time_rules = office_hours,
         help = "Between 9:00 and 17:00, not at lunch."
     )]
-    pub arrives: NaiveTime,
+    pub arrives: Time,
     /// Note
     #[validate(length(max = 40))]
     pub note: String,
@@ -341,7 +340,7 @@ fn booking_rules() -> DateRules {
     DateRules::new()
         .min(day(2026, 11, 3))
         .max(day(2027, 2, 3))
-        .disable_weekdays([Weekday::Sat, Weekday::Sun])
+        .disable_weekdays([Weekday::Saturday, Weekday::Sunday])
 }
 
 fn office_hours() -> TimeRules {
@@ -413,7 +412,7 @@ pub fn report(shell: &AppShell, query: &DateRangeQuery) -> AppPage {
         Ok(range) => (range, None),
         Err(error) => (None, Some(error.message(&DateLocale::english()))),
     };
-    let zone: Tz = "America/New_York".parse().unwrap_or(Tz::UTC);
+    let zone = Zone::named("America/New_York").unwrap_or(Zone::UTC);
     let mut facts: Vec<Element> = match range {
         Some(range) => {
             let (start, end) = range.utc_bounds(&zone);
@@ -454,7 +453,7 @@ pub fn report(shell: &AppShell, query: &DateRangeQuery) -> AppPage {
                     DateRangePicker::new("from", "to")
                         .id("report-range")
                         .today(today())
-                        .week_start(Weekday::Mon)
+                        .week_start(Weekday::Monday)
                         .title("Created")
                         .limits(limits)
                         .value_opt(range),
@@ -470,7 +469,7 @@ pub fn report(shell: &AppShell, query: &DateRangeQuery) -> AppPage {
 pub fn month(params: &HashMap<String, String>) -> View {
     let get = |key: &str| params.get(key).map(String::as_str);
     let when = get("month")
-        .and_then(|m| NaiveDate::parse_from_str(&format!("{m}-01"), "%Y-%m-%d").ok())
+        .and_then(|m| Date::parse("%Y-%m-%d", &format!("{m}-01")).ok())
         .unwrap_or(day(2026, 11, 1));
     let mut calendar = Calendar::new("probe")
         .today(today())
@@ -480,13 +479,13 @@ pub fn month(params: &HashMap<String, String>) -> View {
         .selected(day(2026, 11, 12));
     if let Some(start) = get("ws").and_then(|n| n.parse::<u8>().ok()) {
         calendar = calendar.week_start(match start {
-            1 => Weekday::Mon,
-            2 => Weekday::Tue,
-            3 => Weekday::Wed,
-            4 => Weekday::Thu,
-            5 => Weekday::Fri,
-            6 => Weekday::Sat,
-            _ => Weekday::Sun,
+            1 => Weekday::Monday,
+            2 => Weekday::Tuesday,
+            3 => Weekday::Wednesday,
+            4 => Weekday::Thursday,
+            5 => Weekday::Friday,
+            6 => Weekday::Saturday,
+            _ => Weekday::Sunday,
         });
     }
     if get("wn").is_some() {
@@ -583,16 +582,14 @@ fn said_of(name: &str, params: &HashMap<String, String>) -> Option<(String, Stri
     let text = params.get(name)?;
     let english = DateLocale::english();
     let verdict = match name {
-        "due" => match text.parse::<NaiveDate>() {
+        "due" => match text.parse::<Date>() {
             Ok(day) => stale_dates().check(day).map_or_else(
                 |e| format!("refused: {}", e.message(&english)),
                 |()| "ok".to_owned(),
             ),
             Err(_) => "refused: not a date".to_owned(),
         },
-        _ => match NaiveTime::parse_from_str(text, "%H:%M")
-            .or_else(|_| NaiveTime::parse_from_str(text, "%H:%M:%S"))
-        {
+        _ => match Time::parse("%H:%M", text).or_else(|_| Time::parse("%H:%M:%S", text)) {
             Ok(at) => (match name {
                 "at" => stale_time(),
                 "quarter" => quarter_time(),
@@ -686,7 +683,7 @@ pub fn stale(params: &HashMap<String, String>) -> View {
 fn visit_days() -> DateRules {
     DateRules::new()
         .min(today())
-        .disable_weekdays([Weekday::Sat, Weekday::Sun])
+        .disable_weekdays([Weekday::Saturday, Weekday::Sunday])
 }
 
 fn visit_hours() -> TimeRules {
@@ -720,7 +717,7 @@ fn said_of_moment(name: &str, params: &HashMap<String, String>) -> Option<String
 /// server makes of each value. `starts` has a value and is required; `visit` is empty and
 /// held to weekdays from today and office hours; `call` counts on India's clock.
 pub fn datetime(params: &HashMap<String, String>) -> View {
-    let at = day(2026, 11, 12).and_time(time(14, 30));
+    let at = day(2026, 11, 12).at(time(14, 30));
     let results: Vec<Element> = ["starts", "visit", "call"]
         .iter()
         .filter_map(|name| said_of_moment(name, params))
@@ -799,7 +796,7 @@ impl navree::ui::table::FilterBar for Window {
             DateRangePicker::new("from", "to")
                 .id("table-window")
                 .today(today())
-                .week_start(Weekday::Mon)
+                .week_start(Weekday::Monday)
                 .title("Updated")
                 .limits(window_limits())
                 .value_opt(self.range())

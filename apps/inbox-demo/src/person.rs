@@ -9,10 +9,10 @@
 
 use std::sync::Arc;
 
-use chrono::Utc;
 use http::request::Parts;
 use navree::BoxFuture;
 use navree::contracts::{AuthVia, Principal};
+use navree::datetime::Timestamp;
 use navree::http::{AppError, Authenticator, UrlSigner};
 use uuid::Uuid;
 
@@ -54,7 +54,7 @@ impl Authenticator for Agents {
     ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
         // An unsigned, forged or expired cookie names nobody: the default agent.
         let agent = cookie(&parts.headers, AGENT_COOKIE)
-            .and_then(|value| agent_of_cookie(&self.signer, value, Utc::now()))
+            .and_then(|value| agent_of_cookie(&self.signer, value, Timestamp::now()))
             .unwrap_or(DEFAULT_AGENT);
         Box::pin(async move {
             Ok(Some(Principal {

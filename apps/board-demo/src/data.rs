@@ -6,7 +6,7 @@
 //! its dyeing unit and its buyers track orders and shipments in. Addresses are on
 //! `example.com`, and days and times are India's (IST).
 
-use chrono::{DateTime, Days, FixedOffset, NaiveDate};
+use navree::datetime::{Date, Offset, Timestamp, Zone};
 use navree::orm::Model;
 use navree::ui::sortable::RANK_GAP;
 use navree::ui::{Tone, icons};
@@ -210,7 +210,7 @@ pub struct Card {
     pub assignee: Option<i64>,
     /// [`Label`] keys, comma-separated.
     pub labels: String,
-    pub due: Option<NaiveDate>,
+    pub due: Option<Date>,
     /// Unix seconds.
     pub created_at: i64,
     /// How many checklist lines are ticked, and how many there are, kept with the
@@ -269,14 +269,14 @@ pub struct Seed {
 }
 
 /// India's time, five and a half hours ahead of UTC all year.
-pub fn ist() -> FixedOffset {
-    FixedOffset::east_opt(5 * 3600 + 1800).unwrap_or_else(|| FixedOffset::east_opt(0).unwrap())
+pub fn ist() -> Zone {
+    Zone::fixed(Offset::east(5 * 3600 + 1800).unwrap_or(Offset::UTC))
 }
 
 /// The day `at` falls on, in India.
-pub fn day_of(at: i64) -> NaiveDate {
-    DateTime::from_timestamp(at, 0)
-        .map(|time| time.with_timezone(&ist()).date_naive())
+pub fn day_of(at: i64) -> Date {
+    Timestamp::from_secs(at)
+        .map(|time| time.in_zone(ist()).date())
         .unwrap_or_default()
 }
 
@@ -698,13 +698,7 @@ pub fn seed(now: i64) -> Seed {
     // The cards a reader meets first.
     for (at, (column, title, assignee, labels, due, description, lines)) in CARDS.iter().enumerate()
     {
-        let due = due.and_then(|days| {
-            if days >= 0 {
-                today.checked_add_days(Days::new(days.unsigned_abs()))
-            } else {
-                today.checked_sub_days(Days::new(days.unsigned_abs()))
-            }
-        });
+        let due = due.and_then(|days| today.add_days(days));
         let created = now - (9 - (at as i64 % 7)) * 86_400 - at as i64 * 1_800;
         let lines: Vec<(String, bool)> = lines
             .iter()
@@ -745,7 +739,7 @@ pub fn seed(now: i64) -> Seed {
         let assignee = dice.below(PEOPLE.len()) as i64 + 1;
         let created = now - 86_400 * (30 + dice.below(900) as i64) - 60 * dice.below(1_440) as i64;
         let due = (column == Column::Backlog && dice.below(5) == 0)
-            .then(|| today.checked_add_days(Days::new(dice.below(90) as u64)))
+            .then(|| today.add_days(dice.below(90) as i64))
             .flatten();
         let lines: Vec<(String, bool)> = (0..dice.below(5))
             .map(|line| {
@@ -798,7 +792,7 @@ fn add(
     title: &str,
     assignee: i64,
     labels: &str,
-    due: Option<NaiveDate>,
+    due: Option<Date>,
     description: &str,
     lines: &[(String, bool)],
     created: i64,

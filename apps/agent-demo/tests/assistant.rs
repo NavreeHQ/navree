@@ -170,7 +170,7 @@ async fn upi_this_week_is_a_donut_of_the_readers_own_payments() {
     assert!(html.contains(r#"data-genui="surface""#), "{html}");
     assert!(html.contains("Payments this week"), "{html}");
     assert!(html.contains("UPI"), "{html}");
-    let since = shop::period_start("this_week", chrono::Utc::now());
+    let since = shop::period_start("this_week", navree::datetime::Timestamp::now());
     let orders: Vec<Order> = Order::query()
         .get(&*app.get::<Db>().await)
         .await

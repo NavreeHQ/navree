@@ -21,8 +21,8 @@
 
 use std::sync::Arc;
 
-use chrono::NaiveDate;
 use http::{HeaderMap, Method, StatusCode};
+use navree::datetime::Date;
 use navree::db::{Db, Uow};
 use navree::http::extract::{Path, Query};
 use navree::http::response::{IntoResponse, Response};
@@ -67,7 +67,7 @@ pub struct Pages {
 type Result<T> = std::result::Result<T, AppError>;
 
 /// Today in the shop's zone.
-fn today() -> NaiveDate {
+fn today() -> Date {
     day_of(now())
 }
 

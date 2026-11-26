@@ -569,7 +569,7 @@ impl Hub {
                     Conversation::LAST_REV.set(rev),
                     Conversation::SLA_DUE.set(Some(due)),
                     Conversation::SLA_FROM.set(Some(from)),
-                    Conversation::SNOOZED_UNTIL.set(None::<chrono::NaiveDate>),
+                    Conversation::SNOOZED_UNTIL.set(None::<navree::datetime::Date>),
                     Conversation::PREVIEW.set(preview_of(body)),
                     Conversation::REV.set(rev),
                     Conversation::MESSAGES.set_expr(plus_one("messages")),
@@ -719,7 +719,7 @@ impl Hub {
                             [
                                 Conversation::STATUS.set(Status::Open.key().to_owned()),
                                 Conversation::INBOX.set("open".to_owned()),
-                                Conversation::SNOOZED_UNTIL.set(None::<chrono::NaiveDate>),
+                                Conversation::SNOOZED_UNTIL.set(None::<navree::datetime::Date>),
                                 Conversation::LAST_AT.set(now),
                                 Conversation::LAST_REV.set(rev),
                                 Conversation::SLA_DUE.set(Some(now + target)),
@@ -790,7 +790,7 @@ pub fn hold_clock(at: i64) {
 /// Now, in unix seconds.
 pub fn now() -> i64 {
     match HELD.load(std::sync::atomic::Ordering::Relaxed) {
-        0 => chrono::Utc::now().timestamp(),
+        0 => navree::datetime::Timestamp::now().as_secs(),
         held => held,
     }
 }

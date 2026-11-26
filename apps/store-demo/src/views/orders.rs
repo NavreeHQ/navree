@@ -1,7 +1,7 @@
 //! The orders page: a table whose search, filters, sort and pages run on the
 //! server, whose rows open an order in a drawer, and which follows the shop live.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::*;
 
 use crate::data::{Fulfilment, Order, Payment, STATES, Status};
@@ -63,7 +63,7 @@ pub struct OrderRow {
     #[col(skip)]
     pub city: String,
     #[col(sortable, filter = date, label = "Placed")]
-    pub placed_on: NaiveDate,
+    pub placed_on: Date,
     #[col(skip)]
     pub placed_at: i64,
 }
@@ -153,7 +153,7 @@ pub fn orders_table<'a>(
     query: &'a TableQuery<OrderRow>,
     page: &'a TablePage<OrderRow>,
     counts: &[(Status, u64)],
-    today: NaiveDate,
+    today: Date,
 ) -> DataTable<'a, OrderRow> {
     let statuses = counts
         .iter()

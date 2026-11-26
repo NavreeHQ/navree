@@ -9,8 +9,8 @@
 
 use std::sync::Arc;
 
-use chrono::{Duration, NaiveDate, Weekday};
 use http::Method;
+use navree::datetime::{Date, Weekday};
 use navree::http::extract::Query;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
@@ -20,8 +20,8 @@ use serde::Deserialize;
 
 const NASTY: &str = "<script>window.__pwned=1</script><img src=x onerror=\"window.__pwned=1\"> \"quotes\" 'single' javascript:alert(1)";
 
-fn last_day() -> NaiveDate {
-    NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or(NaiveDate::MIN)
+fn last_day() -> Date {
+    Date::new(2026, 11, 12).unwrap_or(Date::MIN)
 }
 
 /// A fixed sequence of numbers in `[0, 1)`.
@@ -42,13 +42,13 @@ impl Seq {
 }
 
 /// A day of training for `n` days ending today: rest on Wednesdays, some days with no data.
-fn load(n: i64, seed: u64) -> Vec<(NaiveDate, Option<f64>)> {
+fn load(n: i64, seed: u64) -> Vec<(Date, Option<f64>)> {
     let mut seq = Seq(seed);
     (0..n)
         .map(|i| {
-            let date = last_day() - Duration::days(n - 1 - i);
+            let date = last_day().add_days(-(n - 1 - i)).unwrap_or(Date::MIN);
             let usual = [60.0, 75.0, 0.0, 90.0, 50.0, 130.0, 95.0]
-                [chrono::Datelike::weekday(&date).num_days_from_monday() as usize];
+                [usize::from(date.weekday().days_from_monday())];
             let (a, b) = (seq.next(), seq.next());
             (date, (b > 0.07).then(|| (usual * (0.55 + 0.9 * a)).round()))
         })
@@ -99,7 +99,7 @@ fn section(name: &'static str, content: impl IntoNodes) -> Element {
 
 /// Every case, by name.
 fn cases() -> Vec<(&'static str, Node)> {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 5).unwrap_or_default();
+    let first = Date::new(2026, 10, 5).unwrap_or_default();
     vec![
         (
             "calendar",
@@ -117,13 +117,13 @@ fn cases() -> Vec<(&'static str, Node)> {
             CalendarHeatmap::new("Meditation")
                 .id("calendar-short")
                 .days([
-                    (first + Duration::days(8), 0.0),
-                    (first + Duration::days(9), 10.0),
-                    (first + Duration::days(10), 20.0),
-                    (first + Duration::days(15), 30.0),
+                    (first.add_days(8).unwrap_or(first), 0.0),
+                    (first.add_days(9).unwrap_or(first), 10.0),
+                    (first.add_days(10).unwrap_or(first), 20.0),
+                    (first.add_days(15).unwrap_or(first), 30.0),
                 ])
                 .range(first, last_day())
-                .week_start(Weekday::Mon)
+                .week_start(Weekday::Monday)
                 .steps(HeatSteps::at(10, 20, 30))
                 .unit("min")
                 .no_weekdays()
@@ -234,7 +234,7 @@ fn cases() -> Vec<(&'static str, Node)> {
                         .locale("en-IN")
                         .days((0..40).map(|d| {
                             (
-                                last_day() - Duration::days(39 - d),
+                                last_day().add_days(-(39 - d)).unwrap_or(Date::MIN),
                                 120_000.0 * (d % 7) as f64 + 250.0,
                             )
                         }))

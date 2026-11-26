@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
 use navree::mongo::{MongoDb, MongoOptions};
@@ -28,7 +28,7 @@ macro_rules! deal {
             #[col(sortable, numeric, filter = range)]
             pub amount: Option<i64>,
             #[col(sortable, filter = date)]
-            pub closed_on: Option<NaiveDate>,
+            pub closed_on: Option<Date>,
             #[col(sortable, filter = boolean)]
             pub active: bool,
             #[col(filter = relation, kind = int)]
@@ -59,8 +59,10 @@ macro_rules! seed {
                 stage: ["lead", "won", "lost"][usize::try_from(id % 3).unwrap_or(0)].to_owned(),
                 amount: (id % 5 != 0).then_some((id % 7) * 100),
                 closed_on: (id % 4 != 0).then(|| {
-                    NaiveDate::from_ymd_opt(2026, 1, 1).unwrap()
-                        + chrono::Days::new(u64::try_from(id % 10).unwrap_or(0))
+                    Date::new(2026, 1, 1)
+                        .unwrap()
+                        .add_days(id % 10)
+                        .unwrap()
                 }),
                 active: id % 2 == 0,
                 company_id: (id % 6 != 0).then_some(id % 3 + 1),
@@ -219,7 +221,7 @@ struct CursorRow {
     #[col(sortable, numeric)]
     amount: Option<i64>,
     #[col(sortable)]
-    closed_on: Option<NaiveDate>,
+    closed_on: Option<Date>,
     #[col(sortable)]
     stage: String,
 }

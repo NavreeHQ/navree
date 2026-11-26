@@ -5,12 +5,11 @@
 //! (`NAVREE_TEST_POSTGRES_URL`, `NAVREE_TEST_MYSQL_URL`, `NAVREE_TEST_MONGODB_URL`) and
 //! uses its own database, dropped afterwards.
 
-use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
+use navree::datetime::{Date, Span, Timestamp, Zone};
 use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
 use navree::mongo::{MongoDb, MongoOptions};
 use navree::orm::{Builder, Executor, Model, Value, col};
-use navree::time::Tz;
 use navree::ui::charts::{Bucketing, Grain, Metric, Report, TimeColumn};
 use navree::ui::dates::DateRange;
 
@@ -22,7 +21,7 @@ macro_rules! event {
             pub id: i64,
             pub kind: String,
             pub amount: i64,
-            pub at: DateTime<Utc>,
+            pub at: Timestamp,
             pub at_s: i64,
         }
     };
@@ -35,7 +34,7 @@ const KINDS: [&str; 4] = ["opened", "clicked", "reported", "bounced"];
 
 /// Rows from 2025-10-20 to 2026-11-10, closer together around 1 November 2026 (New
 /// York's clock goes back that night) and on the very edges of periods.
-fn rows() -> Vec<(i64, &'static str, i64, DateTime<Utc>)> {
+fn rows() -> Vec<(i64, &'static str, i64, Timestamp)> {
     let mut out = Vec::new();
     let mut seed: u64 = 0x2545_f491_4f6c_dd1d;
     let mut next = || {
@@ -44,17 +43,17 @@ fn rows() -> Vec<(i64, &'static str, i64, DateTime<Utc>)> {
         seed ^= seed << 17;
         seed
     };
-    let start = Utc.with_ymd_and_hms(2025, 10, 20, 0, 0, 0).unwrap();
+    let start = Timestamp::utc(2025, 10, 20, 0, 0, 0).unwrap();
     let mut at = start;
     let mut id = 0;
-    while at < Utc.with_ymd_and_hms(2026, 11, 10, 0, 0, 0).unwrap() {
+    while at < Timestamp::utc(2026, 11, 10, 0, 0, 0).unwrap() {
         id += 1;
         let r = next();
         out.push((id, KINDS[(r % 4) as usize], (r % 997) as i64 - 100, at));
-        let dense = (Utc.with_ymd_and_hms(2026, 10, 30, 0, 0, 0).unwrap()
-            ..Utc.with_ymd_and_hms(2026, 11, 4, 0, 0, 0).unwrap())
+        let dense = (Timestamp::utc(2026, 10, 30, 0, 0, 0).unwrap()
+            ..Timestamp::utc(2026, 11, 4, 0, 0, 0).unwrap())
             .contains(&at);
-        at += Duration::seconds(if dense {
+        at += Span::seconds(if dense {
             600 + (r % 1800) as i64
         } else {
             9_000 + (r % 40_000) as i64
@@ -62,17 +61,17 @@ fn rows() -> Vec<(i64, &'static str, i64, DateTime<Utc>)> {
     }
     // The edges of periods: a local midnight to the second, and the second before it.
     for zone in ["America/New_York", "Asia/Kolkata", "UTC"] {
-        let tz: Tz = zone.parse().unwrap();
+        let tz = Zone::named(zone).unwrap();
         for day in [
-            NaiveDate::from_ymd_opt(2026, 11, 1).unwrap(),
-            NaiveDate::from_ymd_opt(2026, 11, 2).unwrap(),
-            NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            Date::new(2026, 11, 1).unwrap(),
+            Date::new(2026, 11, 2).unwrap(),
+            Date::new(2026, 10, 1).unwrap(),
         ] {
             let (midnight, _) = DateRange::single(day).utc_bounds(&tz);
             for at in [
                 midnight,
-                midnight - Duration::seconds(1),
-                midnight + Duration::seconds(1),
+                midnight - Span::seconds(1),
+                midnight + Span::seconds(1),
             ] {
                 id += 1;
                 out.push((id, "edge", 7, at));
@@ -90,7 +89,7 @@ fn sql_rows() -> Vec<SqlEvent> {
             kind: kind.to_owned(),
             amount,
             at,
-            at_s: at.timestamp(),
+            at_s: at.as_secs(),
         })
         .collect()
 }
@@ -103,17 +102,17 @@ fn mongo_rows() -> Vec<MongoEvent> {
             kind: kind.to_owned(),
             amount,
             at,
-            at_s: at.timestamp(),
+            at_s: at.as_secs(),
         })
         .collect()
 }
 
 /// The reports every store is asked: zones, windows and grains.
 fn reports() -> Vec<(String, Report)> {
-    let day = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).unwrap();
+    let day = |y, m, d| Date::new(y, m, d).unwrap();
     let mut out = Vec::new();
     for zone in ["America/New_York", "Asia/Kolkata", "UTC"] {
-        let tz: Tz = zone.parse().unwrap();
+        let tz = Zone::named(zone).unwrap();
         for (range, grain) in [
             (
                 DateRange::new(day(2026, 10, 31), day(2026, 11, 1)),
@@ -330,7 +329,7 @@ macro_rules! sparse {
             pub ws: i64,
             pub kind: Option<String>,
             pub amount: Option<i64>,
-            pub at: DateTime<Utc>,
+            pub at: Timestamp,
         }
 
         #[derive(Model, Clone, Debug, Default, serde::Serialize)]
@@ -340,7 +339,7 @@ macro_rules! sparse {
             pub ws: i64,
             pub kind: Option<String>,
             pub amount: Option<i64>,
-            pub at: DateTime<Utc>,
+            pub at: Timestamp,
         }
 
         impl navree::orm::GlobalScope<$scoped> for Ws1 {
@@ -360,14 +359,10 @@ sparse!(
 );
 
 /// (id, workspace, kind, amount, at)
-type Sparse = (i64, i64, Option<&'static str>, Option<i64>, DateTime<Utc>);
+type Sparse = (i64, i64, Option<&'static str>, Option<i64>, Timestamp);
 
-fn utc(y: i32, m: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
-    NaiveDate::from_ymd_opt(y, m, d)
-        .unwrap()
-        .and_hms_opt(h, mi, 0)
-        .unwrap()
-        .and_utc()
+fn utc(y: i32, m: u8, d: u8, h: u8, mi: u8) -> Timestamp {
+    Timestamp::utc(y, m, d, h, mi, 0).unwrap()
 }
 
 fn sparse_rows() -> Vec<Sparse> {
@@ -378,7 +373,7 @@ fn sparse_rows() -> Vec<Sparse> {
         out.push((id, ws, kind, amount, at));
     };
     // Workspace 1 inside 1 to 3 November 2026, with missing kinds and amounts.
-    for i in 0..12_u32 {
+    for i in 0..12_u8 {
         let kind = [Some("a"), Some("b"), None][(i % 3) as usize];
         let amount = (i % 4 != 0).then_some(10 * i64::from(i));
         push(1, kind, amount, utc(2026, 11, 1 + i % 3, 5 + i, 0));
@@ -401,16 +396,16 @@ fn sparse_rows() -> Vec<Sparse> {
         .into_iter()
         .enumerate()
     {
-        push(1, Some(kind), Some(1), utc(2026, 11, 3, at as u32, 30));
+        push(1, Some(kind), Some(1), utc(2026, 11, 3, at as u8, 30));
     }
     // Zones whose midnight is off UTC by seconds: Kolkata in 1900, Monrovia in 1970.
     for (zone, year, ws) in [("Asia/Kolkata", 1900, 3), ("Africa/Monrovia", 1970, 4)] {
-        let tz: Tz = zone.parse().unwrap();
+        let tz = Zone::named(zone).unwrap();
         for d in 1..=5 {
             let (midnight, _) =
-                DateRange::single(NaiveDate::from_ymd_opt(year, 4, d).unwrap()).utc_bounds(&tz);
-            push(ws, Some("old"), Some(1), midnight + Duration::minutes(3));
-            push(ws, Some("old"), Some(1), midnight - Duration::seconds(1));
+                DateRange::single(Date::new(year, 4, d).unwrap()).utc_bounds(&tz);
+            push(ws, Some("old"), Some(1), midnight + Span::minutes(3));
+            push(ws, Some("old"), Some(1), midnight - Span::seconds(1));
         }
     }
     out
@@ -450,8 +445,8 @@ async fn check_conditions<P: Model, S: Model, E: Executor + ?Sized>(
     scoped: impl Fn() -> Builder<S>,
     bucketings: &[Bucketing],
 ) {
-    let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
-    let window = Report::new(DateRange::new(day(1), day(3)), Grain::Day, &Utc);
+    let day = |d| Date::new(2026, 11, d).unwrap();
+    let window = Report::new(DateRange::new(day(1), day(3)), Grain::Day, &Zone::UTC);
     for bucketing in bucketings {
         // A top-level `or_where` under the workspace scope: (a OR b) AND window AND scope.
         let query = scoped()
@@ -526,10 +521,10 @@ async fn check_conditions<P: Model, S: Model, E: Executor + ?Sized>(
     );
     // Midnights off UTC by seconds: every row in its own day.
     for (zone, year, ws) in [("Asia/Kolkata", 1900, 3_i64), ("Africa/Monrovia", 1970, 4)] {
-        let tz: Tz = zone.parse().unwrap();
-        let from = NaiveDate::from_ymd_opt(year, 4, 1).unwrap();
+        let tz = Zone::named(zone).unwrap();
+        let from = Date::new(year, 4, 1).unwrap();
         let report = Report::new(
-            DateRange::new(from, from + Duration::days(4)),
+            DateRange::new(from, from.add_days(4).unwrap()),
             Grain::Day,
             &tz,
         );

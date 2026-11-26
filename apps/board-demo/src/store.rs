@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::future::Future;
 
-use chrono::{Days, NaiveDate};
+use navree::datetime::Date;
 use navree::db::{DbError, ErrorKind, Uow};
 use navree::orm::{Builder, Model as _, OrmError, Value, raw};
 use navree::ui::ListState;
@@ -82,7 +82,7 @@ pub async fn column_cards(
     uow: &Uow,
     column: Column,
     filters: &Filters,
-    today: NaiveDate,
+    today: Date,
     after: Option<After>,
     limit: usize,
 ) -> Result<(Vec<Card>, bool), OrmError> {
@@ -127,7 +127,7 @@ pub async fn column_cards(
 }
 
 /// `query` narrowed to the cards that pass `filters`.
-fn filtered(mut query: Builder<Card>, filters: &Filters, today: NaiveDate) -> Builder<Card> {
+fn filtered(mut query: Builder<Card>, filters: &Filters, today: Date) -> Builder<Card> {
     if let Some(id) = filters.assignee {
         query = query.where_(Card::ASSIGNEE.eq(id));
     }
@@ -139,7 +139,7 @@ fn filtered(mut query: Builder<Card>, filters: &Filters, today: NaiveDate) -> Bu
         Due::Late => query.where_(Card::DUE.lt(today)),
         Due::Week => query
             .where_(Card::DUE.gte(today))
-            .where_(Card::DUE.lt(today.checked_add_days(Days::new(7)).unwrap_or(today))),
+            .where_(Card::DUE.lt(today.add_days(7).unwrap_or(today))),
         Due::Undated => query.where_(Card::DUE.is_null()),
     };
     query
@@ -194,7 +194,7 @@ pub fn shown(column: Column, show: impl Fn(&str) -> Option<String>) -> usize {
 pub async fn board(
     uow: &Uow,
     filters: &Filters,
-    today: NaiveDate,
+    today: Date,
     show: impl Fn(&str) -> Option<String>,
 ) -> Result<BoardData, OrmError> {
     let mut columns = Vec::with_capacity(Column::ALL.len());

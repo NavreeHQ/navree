@@ -76,7 +76,7 @@ pub struct Deal {
     pub stage: String,
     pub amount: Option<i64>,
     pub company_id: Option<i64>,
-    pub closed_on: Option<chrono::NaiveDate>,
+    pub closed_on: Option<navree::datetime::Date>,
     pub active: bool,
     pub notes: Option<String>,
     pub version: i64,
@@ -123,7 +123,7 @@ pub struct DealRow {
     pub amount: Option<Money>,
     /// Closed
     #[col(sortable, hide_on_mobile, filter = date)]
-    pub closed_on: Option<chrono::NaiveDate>,
+    pub closed_on: Option<navree::datetime::Date>,
     #[col(hide_on_mobile, filter = boolean, align = center)]
     pub active: bool,
     #[col(hidden, wrap)]
@@ -382,7 +382,7 @@ pub struct Big {
     #[col(sortable, numeric, filter = range)]
     pub amount: Option<i64>,
     #[col(sortable, filter = date)]
-    pub created_on: Option<chrono::NaiveDate>,
+    pub created_on: Option<navree::datetime::Date>,
 }
 
 /// The same million, by page number.
@@ -398,7 +398,7 @@ pub struct BigRow {
     #[col(sortable, numeric, filter = range)]
     pub amount: Option<i64>,
     #[col(sortable, filter = date)]
-    pub created_on: Option<chrono::NaiveDate>,
+    pub created_on: Option<navree::datetime::Date>,
 }
 
 /// The million again, a thousand to a page, with everything a row can carry: a box,
@@ -415,7 +415,7 @@ pub struct ThousandRow {
     #[col(sortable, numeric, filter = range)]
     pub amount: Option<i64>,
     #[col(sortable, filter = date)]
-    pub created_on: Option<chrono::NaiveDate>,
+    pub created_on: Option<navree::datetime::Date>,
 }
 
 async fn thousand(
@@ -761,7 +761,7 @@ async fn export_xlsx(uow: Uow, query: TableQuery<DealRow>) -> Result<Response, A
                             .map_or(Cell::Text(text), Cell::Float),
                         // The company column binds as a key but shows a name.
                         ValueKind::Int => text.parse().map_or(Cell::Text(text), Cell::Int),
-                        ValueKind::Date => chrono::NaiveDate::parse_from_str(&text, "%Y-%m-%d")
+                        ValueKind::Date => navree::datetime::Date::parse("%Y-%m-%d", &text)
                             .map_or(Cell::Text(text), Cell::Date),
                         _ => Cell::Text(text),
                     }

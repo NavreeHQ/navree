@@ -4,7 +4,7 @@
 //! The heading and the messages are regions the stream refreshes. The composer is
 //! neither: a new message never touches what an agent is typing.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::dates::DatePicker;
 use navree::ui::*;
 use serde::Deserialize;
@@ -59,7 +59,7 @@ pub struct AssignForm {
 pub struct SnoozeForm {
     /// Snooze until
     #[validate(skip)]
-    pub until: Option<NaiveDate>,
+    pub until: Option<Date>,
     /// Quick choice
     #[validate(skip)]
     pub preset: Option<String>,
@@ -84,7 +84,7 @@ pub struct Open<'a> {
     pub assignee: Option<(i64, String)>,
     pub filters: &'a Filters,
     pub now: i64,
-    pub today: NaiveDate,
+    pub today: Date,
     /// The conversations either side of this one in the view: newer, then older.
     pub neighbours: (Option<i64>, Option<i64>),
     /// Whether the agent has single-key shortcuts on.
@@ -195,11 +195,8 @@ fn priority_menu(conversation: &Conversation) -> DropdownMenu {
 /// Snoozing: a day from a calendar, or a quick choice.
 fn snooze(open: &Open<'_>) -> Popover {
     let id = open.conversation.id;
-    let tomorrow = open.today.succ_opt().unwrap_or(open.today);
-    let last = open
-        .today
-        .checked_add_signed(chrono::Duration::days(SNOOZE_DAYS))
-        .unwrap_or(open.today);
+    let tomorrow = open.today.tomorrow().unwrap_or(open.today);
+    let last = open.today.add_days(SNOOZE_DAYS).unwrap_or(open.today);
     Popover::new("snooze-popover", "Snooze")
         .label("Snooze, put this conversation aside until a day")
         .variant(ButtonVariant::Outline)

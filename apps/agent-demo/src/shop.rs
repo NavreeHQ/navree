@@ -5,9 +5,9 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Datelike, Duration, FixedOffset, NaiveTime, TimeZone, Utc};
 use navree::access::{AbilityCtx, AccessService, Rules};
 use navree::auth::AuthService;
+use navree::datetime::{Offset, Timestamp, Zone};
 use navree::db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree::db::{Db, MigrationSet};
 use navree::orm::Model;
@@ -29,8 +29,8 @@ pub const STAFF: (&str, &str) = ("Arjun Mehta", "arjun.mehta@kesar.example");
 pub const DEMO_PASSWORD: &str = "demo-password-2026";
 
 /// India Standard Time.
-pub fn ist() -> FixedOffset {
-    FixedOffset::east_opt(19_800).expect("a real offset")
+pub fn ist() -> Zone {
+    Zone::fixed(Offset::east(19_800).expect("a real offset"))
 }
 
 /// An order, as stored. Amounts are in paise.
@@ -116,17 +116,17 @@ pub fn rupees(paise: i64) -> String {
 
 /// When a period of days starts, in IST: today, this week (from Monday) or this
 /// month, as unix seconds.
-pub fn period_start(period: &str, now: DateTime<Utc>) -> i64 {
-    let local = now.with_timezone(&ist()).date_naive();
+pub fn period_start(period: &str, now: Timestamp) -> i64 {
+    let local = now.in_zone(ist()).date();
     let day = match period {
         "today" => local,
-        "this_week" => local - Duration::days(i64::from(local.weekday().num_days_from_monday())),
-        _ => local.with_day(1).unwrap_or(local),
+        "this_week" => local
+            .add_days(-i64::from(local.weekday().days_from_monday()))
+            .unwrap_or(local),
+        _ => local.first_of_month(),
     };
-    ist()
-        .from_local_datetime(&day.and_time(NaiveTime::MIN))
-        .single()
-        .map_or(0, |start| start.timestamp())
+    day.start_of_day(ist())
+        .map_or(0, |start| start.timestamp().as_secs())
 }
 
 /// Everyone signed in may read orders; managers may also change them (refund, mark
@@ -209,7 +209,7 @@ impl Seq {
 
 /// The orders of the last 30 days before `now`: about three a day, most paid by UPI,
 /// and order [`SAMPLE_ORDER`] by Harpreet Kaur this morning.
-pub fn orders(now: DateTime<Utc>) -> Vec<Order> {
+pub fn orders(now: Timestamp) -> Vec<Order> {
     let mut seq = Seq(1042);
     let mut orders = Vec::new();
     for n in 0..90_i64 {
@@ -222,7 +222,7 @@ pub fn orders(now: DateTime<Utc>) -> Vec<Order> {
             _ => "cod",
         };
         let total = (349 + seq.next(12_650) as i64) * 100;
-        let placed_at = now.timestamp() - (90 - n) * 8 * 3600 - seq.next(3600) as i64;
+        let placed_at = now.as_secs() - (90 - n) * 8 * 3600 - seq.next(3600) as i64;
         let status = match seq.next(10) {
             0 => "refunded",
             1..=5 => "delivered",
@@ -247,7 +247,7 @@ pub fn orders(now: DateTime<Utc>) -> Vec<Order> {
         sample.total = 125_000;
         sample.refunded = 0;
         sample.status = "paid".to_owned();
-        sample.placed_at = now.timestamp() - 2 * 3600;
+        sample.placed_at = now.as_secs() - 2 * 3600;
     }
     orders
 }
@@ -257,7 +257,7 @@ pub async fn seed(
     db: &Db,
     auth: &AuthService,
     access: &AccessService,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<(), BoxError> {
     if Order::query().get(db).await?.into_models().is_empty() {
         for order in orders(now) {
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn the_seed_is_the_same_shop_every_time() {
-        let now = Utc.with_ymd_and_hms(2026, 11, 6, 6, 30, 0).unwrap();
+        let now = Timestamp::utc(2026, 11, 6, 6, 30, 0).unwrap();
         let first = orders(now);
         assert_eq!(first.len(), 90);
         assert_eq!(
@@ -309,11 +309,13 @@ mod tests {
 
     #[test]
     fn periods_start_in_ist() {
+        use navree::datetime::Date;
+
         // Friday 6 November 2026, 12:00 IST.
-        let now = Utc.with_ymd_and_hms(2026, 11, 6, 6, 30, 0).unwrap();
-        let monday = ist().with_ymd_and_hms(2026, 11, 2, 0, 0, 0).unwrap();
-        assert_eq!(period_start("this_week", now), monday.timestamp());
-        let first = ist().with_ymd_and_hms(2026, 11, 1, 0, 0, 0).unwrap();
-        assert_eq!(period_start("this_month", now), first.timestamp());
+        let now = Timestamp::utc(2026, 11, 6, 6, 30, 0).unwrap();
+        let monday = Date::new(2026, 11, 2).unwrap().start_of_day(ist()).unwrap();
+        assert_eq!(period_start("this_week", now), monday.timestamp().as_secs());
+        let first = Date::new(2026, 11, 1).unwrap().start_of_day(ist()).unwrap();
+        assert_eq!(period_start("this_month", now), first.timestamp().as_secs());
     }
 }

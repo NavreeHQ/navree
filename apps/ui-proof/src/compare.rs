@@ -5,8 +5,8 @@
 
 use std::sync::{Arc, LazyLock};
 
-use chrono::NaiveDate;
 use http::Method;
+use navree::datetime::Date;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::ui::dates::{DatePicker, PickerStyle};
@@ -36,8 +36,8 @@ static CITIES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
 });
 
 /// Today on the date picker, so nothing depends on the clock.
-fn today() -> NaiveDate {
-    NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or(NaiveDate::MIN)
+fn today() -> Date {
+    Date::new(2026, 11, 3).unwrap_or(Date::MIN)
 }
 
 /// `2129334` as `₹21,29,334`: the last three digits, then groups of two.

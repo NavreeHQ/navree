@@ -1,6 +1,6 @@
 //! The inbox as one page: three panes, the command palette and the keys.
 
-use chrono::NaiveDate;
+use navree::datetime::Date;
 use navree::ui::*;
 
 use crate::data::{
@@ -78,7 +78,7 @@ pub struct Inbox<'a> {
     /// Which pane the page is about: the one shown when the panes stack.
     pub pane: &'a str,
     pub now: i64,
-    pub today: NaiveDate,
+    pub today: Date,
     /// What the composer starts with.
     pub draft: &'a str,
     pub kind: &'a str,

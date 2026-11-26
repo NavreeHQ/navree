@@ -127,7 +127,7 @@ fn shop() -> Shop {
     }
 }
 
-fn today() -> chrono::NaiveDate {
+fn today() -> navree::datetime::Date {
     data::day_of(NOW)
 }
 
@@ -289,7 +289,7 @@ fn sales(shop: &Shop) -> (navree::ui::charts::Report, Sales) {
     let (mut low, mut high) = (1, data::ORDERS);
     while low < high {
         let middle = low + (high - low) / 2;
-        if data::placed_at(middle, NOW) < start.timestamp() {
+        if data::placed_at(middle, NOW) < start.as_secs() {
             low = middle + 1;
         } else {
             high = middle;

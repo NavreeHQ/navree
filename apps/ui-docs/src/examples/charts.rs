@@ -3,8 +3,7 @@
 //! The rupee amounts are written in lakh grouping (`12_50_000`), as the pages print them.
 #![allow(clippy::inconsistent_digit_grouping)]
 
-use chrono::{DateTime, Duration, NaiveDate, Utc};
-use navree::time::Tz;
+use navree::datetime::{Date, Span, Time, Timestamp, Zone};
 use navree::ui::charts::*;
 use navree::ui::dates::{DateLocale, DatePreset, DateRules, RangeRules};
 use navree::ui::*;
@@ -388,25 +387,23 @@ fn line_chart_thumb() -> Chart {
 }
 
 fn line_chart_default() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap_or_default();
+    let first = Date::new(2026, 10, 28).unwrap_or_default();
     Chart::line("Orders and returns")
         .id("line-chart-default")
         .description("Per day, 28 October to 3 November, IST")
         .locale("en-IN")
-        .days((0..7).map(|i| first + Duration::days(i)))
+        .days((0..7).map(|i| first.add_days(i).unwrap_or(first)))
         .series(Series::new("Orders", [412, 530, 498, 610, 584, 233, 198]))
         .series(Series::new("Returns", [96, 141, 120, 168, 152, 51, 44]))
 }
 
 fn line_chart_hours() -> Chart {
-    let midnight = NaiveDate::from_ymd_opt(2026, 11, 3)
-        .and_then(|day| day.and_hms_opt(0, 0, 0))
-        .unwrap_or_default();
+    let midnight = Date::new(2026, 11, 3).unwrap_or_default().at(Time::MIDNIGHT);
     Chart::line("Orders by hour")
         .id("line-chart-hours")
         .description("3 November, on the clock of Asia/Kolkata")
         .locale("en-IN")
-        .times((0..24).map(|hour| midnight + Duration::hours(hour)))
+        .times((0..24).map(|hour| midnight.add(Span::hours(hour)).unwrap_or(midnight)))
         .series(Series::new(
             "Orders",
             [
@@ -417,12 +414,12 @@ fn line_chart_hours() -> Chart {
 }
 
 fn line_chart_gaps() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 21).unwrap_or_default();
+    let first = Date::new(2026, 10, 21).unwrap_or_default();
     Chart::line("Response time")
         .id("line-chart-gaps")
         .description("A day with no reading is a gap, not a zero")
         .locale("en-IN")
-        .days((0..14).map(|i| first + Duration::days(i)))
+        .days((0..14).map(|i| first.add_days(i).unwrap_or(first)))
         .format(NumberFormat::number().suffix(" ms"))
         .y_zero(false)
         .series(Series::new(
@@ -448,8 +445,8 @@ fn line_chart_gaps() -> Chart {
 }
 
 fn line_chart_annotations() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 21).unwrap_or_default();
-    let day = |offset| first + Duration::days(offset);
+    let first = Date::new(2026, 10, 21).unwrap_or_default();
+    let day = |offset| first.add_days(offset).unwrap_or(first);
     Chart::line("Orders per day")
         .id("line-chart-annotations")
         .locale("en-IN")
@@ -464,12 +461,12 @@ fn line_chart_annotations() -> Chart {
 }
 
 fn line_chart_toggles() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap_or_default();
+    let first = Date::new(2026, 10, 28).unwrap_or_default();
     Chart::line("UPI payments")
         .id("line-chart-toggles")
         .description("Click a name in the legend to hide its line")
         .locale("en-IN")
-        .days((0..7).map(|i| first + Duration::days(i)))
+        .days((0..7).map(|i| first.add_days(i).unwrap_or(first)))
         .toggles()
         .series(Series::new("Succeeded", [118, 131, 126, 140, 137, 122, 129]).tone(Tone::Success))
         .series(Series::new("Pending", [24, 31, 27, 35, 29, 38, 33]).tone(Tone::Warning))
@@ -477,7 +474,7 @@ fn line_chart_toggles() -> Chart {
 }
 
 fn line_chart_many() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap_or_default();
+    let first = Date::new(2026, 10, 28).unwrap_or_default();
     let states = [
         "Punjab",
         "Haryana",
@@ -494,7 +491,7 @@ fn line_chart_many() -> Chart {
         .id("line-chart-many")
         .description("Ten states: seven keep a color, the other three fold into Other")
         .locale("en-IN")
-        .days((0..7).map(|i| first + Duration::days(i)))
+        .days((0..7).map(|i| first.add_days(i).unwrap_or(first)))
         .toggles()
         .series_list(states.iter().enumerate().map(|(at, name)| {
             let at = at as i64;
@@ -564,11 +561,11 @@ fn line_chart_locales() -> Grid {
 }
 
 fn line_chart_table() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 30).unwrap_or_default();
+    let first = Date::new(2026, 10, 30).unwrap_or_default();
     Chart::line("Orders by payment")
         .id("line-chart-table")
         .locale("en-IN")
-        .days((0..5).map(|i| first + Duration::days(i)))
+        .days((0..5).map(|i| first.add_days(i).unwrap_or(first)))
         .table(TableMode::Shown)
         .series(Series::new("Prepaid", [12, 18, 9, 22, 30]))
         .series(Series::new("Cash on delivery", [3, 4, 2, 6, 8]))
@@ -589,12 +586,12 @@ fn area_chart_thumb() -> Chart {
 }
 
 fn area_chart_default() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 21).unwrap_or_default();
+    let first = Date::new(2026, 10, 21).unwrap_or_default();
     Chart::area("Active shoppers")
         .id("area-chart-default")
         .description("Per day, 21 October to 3 November")
         .locale("en-IN")
-        .days((0..14).map(|i| first + Duration::days(i)))
+        .days((0..14).map(|i| first.add_days(i).unwrap_or(first)))
         .smooth()
         .series(Series::new(
             "Active",
@@ -603,16 +600,19 @@ fn area_chart_default() -> Chart {
                 3_820, 3_560,
             ],
         ))
-        .annotation(Annotation::event(first + Duration::days(7), "App update"))
+        .annotation(Annotation::event(
+            first.add_days(7).unwrap_or(first),
+            "App update",
+        ))
 }
 
 fn area_chart_stacked() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 25).unwrap_or_default();
+    let first = Date::new(2026, 10, 25).unwrap_or_default();
     Chart::area("Traffic by source")
         .id("area-chart-stacked")
         .description("Visits per day; the top edge is the total")
         .locale("en-IN")
-        .days((0..10).map(|i| first + Duration::days(i)))
+        .days((0..10).map(|i| first.add_days(i).unwrap_or(first)))
         .stacked()
         .series(Series::new(
             "Search",
@@ -666,12 +666,12 @@ fn bar_chart_thumb() -> Chart {
 }
 
 fn bar_chart_default() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap_or_default();
+    let first = Date::new(2026, 10, 28).unwrap_or_default();
     Chart::bar("Revenue per day")
         .id("bar-chart-default")
         .locale("en-IN")
         .format(NumberFormat::currency("₹").max_decimals(0))
-        .days((0..7).map(|i| first + Duration::days(i)))
+        .days((0..7).map(|i| first.add_days(i).unwrap_or(first)))
         .series(Series::new(
             "Revenue",
             [
@@ -682,11 +682,11 @@ fn bar_chart_default() -> Chart {
 }
 
 fn bar_chart_grouped() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap_or_default();
+    let first = Date::new(2026, 10, 28).unwrap_or_default();
     Chart::bar("Orders placed, paid and delivered")
         .id("bar-chart-grouped")
         .locale("en-IN")
-        .days((0..7).map(|i| first + Duration::days(i)))
+        .days((0..7).map(|i| first.add_days(i).unwrap_or(first)))
         .toggles()
         .series(Series::new(
             "Placed",
@@ -755,14 +755,14 @@ fn bar_chart_horizontal_stacked() -> Chart {
 }
 
 fn bar_chart_many() -> Grid {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 5).unwrap_or_default();
+    let first = Date::new(2026, 10, 5).unwrap_or_default();
     Grid::cols(2).gap(4).children((
         // Days past `max_bars` are merged in runs, and added up.
         Chart::bar("Orders per day")
             .id("bar-chart-merged")
             .description("30 days in 10 bars")
             .locale("en-IN")
-            .days((0..30).map(|i| first + Duration::days(i)))
+            .days((0..30).map(|i| first.add_days(i).unwrap_or(first)))
             .max_bars(10)
             .series(Series::new("Orders", (0..30).map(|d| 900 + d * 137 % 700))),
         // Categories past it fold their tail into Other.
@@ -1035,8 +1035,8 @@ fn funnel_states() -> Grid {
 }
 
 fn reports_thumb() -> Row {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
-    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
+    let zone = Zone::named("Asia/Kolkata").unwrap_or(Zone::UTC);
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(400);
     let report = Report::from_query(
         &ReportQuery::default(),
@@ -1055,8 +1055,8 @@ fn reports_thumb() -> Row {
 }
 
 fn reports_default() -> Stack {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
-    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
+    let zone = Zone::named("Asia/Kolkata").unwrap_or(Zone::UTC);
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(400);
     // What the request asked for: `/reports?from=2026-10-28&to=2026-11-03`.
     let query = ReportQuery {
@@ -1067,10 +1067,10 @@ fn reports_default() -> Stack {
     let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone);
     // Stand-ins for a query's rows: the instant of each event.
     let start = report.bounds().0;
-    let orders: Vec<DateTime<Utc>> = (0..7)
+    let orders: Vec<Timestamp> = (0..7)
         .flat_map(|day| {
             (0..40 + day * 7 % 23 * 3)
-                .map(move |k| start + Duration::days(day) + Duration::minutes(k * 12))
+                .map(move |k| start + Span::days(day) + Span::minutes(k * 12))
         })
         .collect();
     let placed = report.count(orders);
@@ -1109,8 +1109,8 @@ fn reports_default() -> Stack {
 }
 
 fn reports_refused() -> Stack {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
-    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
+    let zone = Zone::named("Asia/Kolkata").unwrap_or(Zone::UTC);
     // The limits allow at most 90 days.
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(90);
     let query = ReportQuery {
@@ -1131,10 +1131,10 @@ fn reports_refused() -> Stack {
             ))
     });
     let start = report.bounds().0;
-    let orders: Vec<DateTime<Utc>> = (0..30)
+    let orders: Vec<Timestamp> = (0..30)
         .flat_map(|day| {
             (0..30 + day * 7 % 23 * 2)
-                .map(move |k| start + Duration::days(day) + Duration::minutes(k * 18))
+                .map(move |k| start + Span::days(day) + Span::minutes(k * 18))
         })
         .collect();
     let placed = report.count(orders);
@@ -1153,8 +1153,8 @@ fn reports_refused() -> Stack {
 }
 
 fn reports_live() -> Card {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
-    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
+    let zone = Zone::named("Asia/Kolkata").unwrap_or(Zone::UTC);
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(400);
     let query = ReportQuery {
         from: Some("2026-10-28".into()),
@@ -1163,10 +1163,10 @@ fn reports_live() -> Card {
     };
     let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone);
     let start = report.bounds().0;
-    let orders: Vec<DateTime<Utc>> = (0..7)
+    let orders: Vec<Timestamp> = (0..7)
         .flat_map(|day| {
             (0..40 + day * 7 % 23 * 3)
-                .map(move |k| start + Duration::days(day) + Duration::minutes(k * 12))
+                .map(move |k| start + Span::days(day) + Span::minutes(k * 12))
         })
         .collect();
     let placed = report.count(orders);
@@ -1186,8 +1186,8 @@ fn reports_live() -> Card {
 }
 
 fn reports_grains() -> impl IntoIterator<Item = (&'static str, Node)> {
-    let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
-    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
+    let today = Date::new(2026, 11, 3).unwrap_or_default();
+    let zone = Zone::named("Asia/Kolkata").unwrap_or(Zone::UTC);
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(4000);
     let window = |from: &str| {
         let query = ReportQuery {
@@ -1215,15 +1215,15 @@ const HEART_RATE: [u32; 49] = [
 ];
 
 fn area_chart_gradient() -> Chart {
-    let six = NaiveDate::from_ymd_opt(2026, 11, 12)
-        .and_then(|day| day.and_hms_opt(6, 0, 0))
-        .unwrap_or_default();
+    let six = Date::new(2026, 11, 12)
+        .unwrap_or_default()
+        .at(Time::new(6, 0, 0).unwrap_or_default());
     Chart::area("Heart rate")
         .id("area-chart-gradient")
         .description("Harleen Kaur, 12 November, IST")
         .locale("en-IN")
         .height(180)
-        .times((0..49).map(|i| six + Duration::minutes(20 * i)))
+        .times((0..49).map(|i| six.add(Span::minutes(20 * i)).unwrap_or(six)))
         .series(
             Series::new("Heart rate", HEART_RATE)
                 .ink(Ink::slot(8))
@@ -1248,9 +1248,9 @@ fn area_chart_gradient() -> Chart {
 }
 
 fn area_chart_steps() -> Chart {
-    let start = NaiveDate::from_ymd_opt(2026, 11, 11)
-        .and_then(|day| day.and_hms_opt(23, 10, 0))
-        .unwrap_or_default();
+    let start = Date::new(2026, 11, 11)
+        .unwrap_or_default()
+        .at(Time::new(23, 10, 0).unwrap_or_default());
     // Each stage and how long it lasted, in minutes: 0 deep, 1 light, 2 REM, 3 awake.
     let night: [(u32, i64); 16] = [
         (1, 20),
@@ -1275,7 +1275,7 @@ fn area_chart_steps() -> Chart {
     let mut times = Vec::new();
     for (_, minutes) in night {
         times.push(at);
-        at += Duration::minutes(minutes);
+        at = at.add(Span::minutes(minutes)).unwrap_or(at);
     }
     times.push(at);
     let stages: Vec<u32> = night.iter().map(|(stage, _)| *stage).chain([3]).collect();
@@ -1327,13 +1327,13 @@ fn area_chart_steps() -> Chart {
 }
 
 fn area_chart_trend() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 11, 6).unwrap_or_default();
+    let first = Date::new(2026, 11, 6).unwrap_or_default();
     Chart::area("Overnight recovery")
         .id("area-chart-trend")
         .description("Change in heart rate variability overnight, Gurpreet Singh")
         .locale("en-IN")
         .height(120)
-        .days((0..7).map(|i| first + Duration::days(i)))
+        .days((0..7).map(|i| first.add_days(i).unwrap_or(first)))
         .format(NumberFormat::percent_of_100())
         .series(
             Series::new("Recovery", [12, 8, -4, 15, 22, 18, 26])
@@ -1375,13 +1375,13 @@ fn bar_chart_reference() -> Chart {
 }
 
 fn bar_chart_colors() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 30).unwrap_or_default();
+    let first = Date::new(2026, 10, 30).unwrap_or_default();
     Chart::bar("Heart rate variability")
         .id("bar-chart-colors")
         .description("Each night, last 14 days, Neha Kapoor")
         .locale("en-IN")
         .height(160)
-        .days((0..14).map(|i| first + Duration::days(i)))
+        .days((0..14).map(|i| first.add_days(i).unwrap_or(first)))
         .format(NumberFormat::integer())
         .series(
             Series::new(
@@ -1409,13 +1409,13 @@ fn bar_chart_colors() -> Chart {
 }
 
 fn line_chart_axes() -> Chart {
-    let first = NaiveDate::from_ymd_opt(2026, 10, 14).unwrap_or_default();
+    let first = Date::new(2026, 10, 14).unwrap_or_default();
     Chart::line("Body weight")
         .id("line-chart-axes")
         .description("Last 30 days, Rohit Malhotra")
         .locale("en-IN")
         .height(160)
-        .days((0..30).map(|i| first + Duration::days(i)))
+        .days((0..30).map(|i| first.add_days(i).unwrap_or(first)))
         .format(NumberFormat::decimals(1).suffix(" kg"))
         .series(Series::new(
             "Weight",
@@ -1522,12 +1522,12 @@ fn line_chart_clock() -> Chart {
     let woke = [
         755, 760, 745, 770, 800, 850, 750, 755, 765, 740, 775, 820, 845, 750,
     ];
-    let first = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap_or_default();
+    let first = Date::new(2026, 10, 29).unwrap_or_default();
     Chart::line("Bedtime and waking")
         .id("line-chart-clock")
         .description("Amandeep Kahlon, the last 14 nights")
         .locale("en-IN")
-        .days((0..14).map(|d| first + Duration::days(d)))
+        .days((0..14).map(|d| first.add_days(d).unwrap_or(first)))
         .series(Series::new("To bed", to_bed).ink(Ink::slot(7)))
         .series(Series::new("Woke up", woke).ink(Ink::slot(4)))
         .format(NumberFormat::clock(18))

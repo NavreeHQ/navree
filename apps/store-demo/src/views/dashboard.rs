@@ -2,11 +2,10 @@
 //! activity as it happens, the shelves running low and today's top sellers. Every
 //! part is a region that a server-sent event stream keeps current.
 
+use navree::datetime::{Date, Offset, Timestamp, Zone};
 use navree::ui::charts::{Chart, Donut, Grain, NumberFormat, Report, Series};
 use navree::ui::dates::DateRange;
 use navree::ui::*;
-
-use chrono::{DateTime, Days, FixedOffset, NaiveDate};
 
 use crate::data::{
     Event, Fulfilment, Kind, Level, Line, OFFSET, Order, Product, Status, ZONE, day_of, warehouse,
@@ -119,14 +118,14 @@ pub const METHODS: [&str; 3] = ["upi", "card", "cod"];
 
 /// The days the sales charts cover: the last 30, a day at a time on India's clock,
 /// today the last and still counting.
-pub fn sales_report(today: NaiveDate) -> Report {
+pub fn sales_report(today: Date) -> Report {
     let first = today
-        .checked_sub_days(Days::new(SALES_DAYS - 1))
+        .add_days(-(SALES_DAYS as i64 - 1))
         .unwrap_or(today);
     // India keeps one offset all year, so a fixed one cuts the same days as the zone.
-    match FixedOffset::east_opt(OFFSET) {
-        Some(zone) => Report::new(DateRange::new(first, today), Grain::Day, &zone),
-        None => Report::new(DateRange::new(first, today), Grain::Day, &chrono::Utc),
+    match Offset::east(OFFSET) {
+        Ok(zone) => Report::new(DateRange::new(first, today), Grain::Day, &zone),
+        Err(_) => Report::new(DateRange::new(first, today), Grain::Day, &Zone::UTC),
     }
 }
 
@@ -155,8 +154,9 @@ impl Sales {
 
     /// Counts one order, when it was placed in the report's days.
     pub fn add(&mut self, report: &Report, order: &Order) {
-        let Some(day) =
-            DateTime::from_timestamp(order.placed_at, 0).and_then(|at| report.bucket_of(at))
+        let Some(day) = Timestamp::from_secs(order.placed_at)
+            .ok()
+            .and_then(|at| report.bucket_of(at))
         else {
             return;
         };
@@ -494,7 +494,7 @@ pub fn dashboard_body(
     total: u64,
     low: &[Product],
     sellers: &[Seller],
-    today: NaiveDate,
+    today: Date,
 ) -> Stack {
     Stack::gap(4).children((
         Text::muted(format!(

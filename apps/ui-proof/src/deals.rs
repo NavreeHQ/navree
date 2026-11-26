@@ -58,7 +58,7 @@ pub struct DealRow {
     #[col(hide_on_mobile, label = "Owner")]
     pub owner: &'static str,
     #[col(sortable, label = "Updated")]
-    pub updated_at: chrono::NaiveDate,
+    pub updated_at: navree::datetime::Date,
 }
 
 #[derive(Default, Deserialize, FilterBar)]
@@ -72,7 +72,7 @@ pub struct DealFilter {
 
 /// A thousand rows, the same on every run.
 pub fn rows(count: usize) -> Vec<DealRow> {
-    let start = chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap_or_default();
+    let start = navree::datetime::Date::new(2026, 1, 1).unwrap_or_default();
     (0..count)
         .map(|at| {
             let n = at as i64;
@@ -83,7 +83,7 @@ pub fn rows(count: usize) -> Vec<DealRow> {
                 stage: STAGES[(at * 7) % 5],
                 amount: Money((n * 7919) % 5_000_000),
                 owner: OWNERS[at % 4],
-                updated_at: start + chrono::Days::new((at % 300) as u64),
+                updated_at: start.add_days((at % 300) as i64).unwrap_or(start),
             }
         })
         .collect()

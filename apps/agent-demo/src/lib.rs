@@ -90,9 +90,15 @@ pub struct Seeder {
 
 impl Lifecycle for Seeder {
     fn on_init(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
-        Box::pin(
-            async move { shop::seed(&self.db, &self.auth, &self.access, chrono::Utc::now()).await },
-        )
+        Box::pin(async move {
+            shop::seed(
+                &self.db,
+                &self.auth,
+                &self.access,
+                navree::datetime::Timestamp::now(),
+            )
+            .await
+        })
     }
 }
 

@@ -11,12 +11,11 @@
 
 use std::sync::{Arc, LazyLock};
 
-use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use http::Method;
+use navree::datetime::{Date, DateTime, Span, Time, Timestamp};
 use navree::http::extract::Query;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use navree::time::Tz;
 use navree::ui::charts::*;
 use navree::ui::dates::{DatePreset, DateRules, RangeRules};
 use navree::ui::*;
@@ -24,12 +23,12 @@ use serde::Deserialize;
 
 const NASTY: &str = "<script>window.__pwned=1</script><img src=x onerror=\"window.__pwned=1\"> \"quotes\" 'single' javascript:alert(1)";
 
-fn today() -> NaiveDate {
-    NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or(NaiveDate::MIN)
+fn today() -> Date {
+    Date::new(2026, 11, 3).unwrap_or(Date::MIN)
 }
 
-fn zone() -> Tz {
-    "Asia/Kolkata".parse().unwrap_or(Tz::UTC)
+fn zone() -> navree::datetime::Zone {
+    navree::datetime::Zone::named("Asia/Kolkata").unwrap_or(navree::datetime::Zone::UTC)
 }
 
 /// A fixed sequence of numbers in `[0, 1)`.
@@ -44,15 +43,17 @@ impl Seq {
     }
 }
 
-fn days(n: i64) -> Vec<NaiveDate> {
+fn days(n: i64) -> Vec<Date> {
     (0..n)
-        .map(|i| today() - Duration::days(n - 1 - i))
+        .map(|i| today().add_days(-(n - 1 - i)).unwrap_or(Date::MIN))
         .collect()
 }
 
-fn hours(n: i64) -> Vec<NaiveDateTime> {
-    let start = today().and_hms_opt(0, 0, 0).unwrap_or_default();
-    (0..n).map(|i| start + Duration::hours(i)).collect()
+fn hours(n: i64) -> Vec<DateTime> {
+    let start = today().at(Time::MIDNIGHT);
+    (0..n)
+        .map(|i| start.add(Span::hours(i)).unwrap_or(start))
+        .collect()
 }
 
 fn wave(seed: u64, n: usize, base: f64, swing: f64) -> Vec<f64> {
@@ -142,7 +143,7 @@ fn cases() -> Vec<(&'static str, Node)> {
                 .smooth()
                 .series(Series::new("Active", wave(4, 30, 3_400.0, 900.0)))
                 .annotation(Annotation::event(
-                    today() - Duration::days(9),
+                    today().add_days(-9).unwrap_or(Date::MIN),
                     "Release 2.4",
                 ))
                 .into(),
@@ -527,12 +528,12 @@ fn cases() -> Vec<(&'static str, Node)> {
                 .days(month.clone())
                 .series(Series::new("Reports", wave(12, 30, 60.0, 25.0)))
                 .annotation(Annotation::band(
-                    today() - Duration::days(20),
-                    today() - Duration::days(14),
+                    today().add_days(-20).unwrap_or(Date::MIN),
+                    today().add_days(-14).unwrap_or(Date::MIN),
                     "Holiday",
                 ))
                 .annotation(Annotation::event(
-                    today() - Duration::days(6),
+                    today().add_days(-6).unwrap_or(Date::MIN),
                     "Reminder sent",
                 ))
                 .annotation(Annotation::target(80, "Target"))
@@ -822,24 +823,18 @@ fn gallery(shell: &AppShell, case: &Case) -> AppPage {
 }
 
 /// The events behind the report: a year of opens, made by a fixed sequence.
-static EVENTS: LazyLock<Vec<(DateTime<Utc>, &'static str)>> = LazyLock::new(|| {
+static EVENTS: LazyLock<Vec<(Timestamp, &'static str)>> = LazyLock::new(|| {
     let mut seq = Seq(42);
-    let start = Utc
-        .with_ymd_and_hms(2025, 11, 1, 0, 0, 0)
-        .single()
-        .unwrap_or_default();
+    let start = Timestamp::utc(2025, 11, 1, 0, 0, 0).unwrap_or_default();
     let mut out = Vec::with_capacity(60_000);
     let mut at = start;
-    let end = Utc
-        .with_ymd_and_hms(2026, 11, 4, 0, 0, 0)
-        .single()
-        .unwrap_or_default();
+    let end = Timestamp::utc(2026, 11, 4, 0, 0, 0).unwrap_or_default();
     while at < end {
         // Busier in the working day, quieter at weekends.
-        let hour = (at.timestamp() / 3600 % 24) as f64;
+        let hour = (at.as_secs() / 3600 % 24) as f64;
         let busy = 0.35 + 0.65 * ((hour - 4.0) / 24.0 * std::f64::consts::TAU).sin().max(0.0);
         let step = (900.0 / busy * (0.3 + seq.next())) as i64;
-        at += Duration::seconds(step.max(30));
+        at += Span::seconds(step.max(30));
         let kind = match seq.next() {
             x if x < 0.62 => "opened",
             x if x < 0.9 => "clicked",
@@ -858,7 +853,7 @@ fn whole(count: u64) -> String {
 fn limits() -> RangeRules {
     RangeRules::new(
         DateRules::new()
-            .min(NaiveDate::from_ymd_opt(2025, 11, 1).unwrap_or(NaiveDate::MIN))
+            .min(Date::new(2025, 11, 1).unwrap_or(Date::MIN))
             .max(today()),
     )
     .max_days(400)
