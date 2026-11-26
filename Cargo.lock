@@ -6163,6 +6163,7 @@ dependencies = [
  "quick-xml 0.42.0",
  "rand 0.10.4",
  "reqwest",
+ "ring",
  "rustls",
  "serde",
  "serde_json",
