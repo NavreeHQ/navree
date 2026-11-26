@@ -48,11 +48,11 @@ pub enum NativeFamily {
     Apple,
     /// Android: an app is named by its package name.
     Android,
+    /// Another system, or a client that did not say.
+    Other,
     /// Windows: an app is named by its package family name when it is installed from a
     /// package, and by the id it was built with when it is not.
     Windows,
-    /// Another system, or a client that did not say.
-    Other,
 }
 
 /// The client the shell document is for.
