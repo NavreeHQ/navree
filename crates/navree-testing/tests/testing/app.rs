@@ -101,9 +101,7 @@ async fn override_value_replaces_a_provider() {
         }
     }
 
-    let start = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
-        .unwrap()
-        .to_utc();
+    let start = navree_datetime::Timestamp::parse_rfc3339("2026-01-01T00:00:00Z").unwrap();
     let clock = Arc::new(FixedClock::new(start));
     let app = TestApp::builder()
         .module(ClockModule)
@@ -114,13 +112,13 @@ async fn override_value_replaces_a_provider() {
     let resolved = app.get::<dyn Clock>().await;
     assert_eq!(resolved.now(), start);
     clock.advance(std::time::Duration::from_secs(60));
-    assert_eq!(resolved.now(), start + chrono::TimeDelta::seconds(60));
+    assert_eq!(resolved.now(), start + navree_datetime::Span::seconds(60));
 }
 
 #[test]
 fn fixed_clock_is_the_contracts_clock() {
     fn same<T>(_: T, _: T) {}
-    let now = chrono::Utc::now();
+    let now = navree_datetime::Timestamp::now();
     same(FixedClock::new(now), ContractsFixedClock::new(now));
 }
 
