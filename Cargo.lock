@@ -4527,7 +4527,11 @@ dependencies = [
 name = "navree-datetime"
 version = "1.6.0"
 dependencies = [
+ "async-graphql",
+ "bson",
+ "serde",
  "serde_json",
+ "sqlx",
 ]
 
 [[package]]
@@ -8714,6 +8718,7 @@ dependencies = [
  "sqlx-postgres",
  "sqlx-sqlite",
  "syn 2.0.119",
+ "thiserror",
  "tokio",
  "url",
 ]

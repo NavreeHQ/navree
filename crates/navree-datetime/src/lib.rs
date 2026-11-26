@@ -173,13 +173,26 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+#[cfg(feature = "bson")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bson")))]
+pub mod bson;
 pub mod civil;
 mod date;
 mod date_time;
 mod error;
+#[cfg(feature = "async-graphql")]
+mod graphql;
 mod month;
 mod offset;
+#[cfg(feature = "serde")]
+mod serde;
 mod span;
+#[cfg(any(
+    feature = "sqlx-postgres",
+    feature = "sqlx-mysql",
+    feature = "sqlx-sqlite"
+))]
+mod sqlx;
 mod text;
 mod time;
 mod timestamp;
@@ -205,4 +218,26 @@ pub mod __private {
     // own name, and the offset each keeps over each stretch of time.
     // navree-time's `Tz`, a time zone for chrono, stands on them.
     pub use crate::zone::{Entry, LocalPeriods, Period, PeriodSpan};
+
+    #[cfg(feature = "sqlx-mysql")]
+    pub use crate::sqlx::mysql::{
+        decode_date_bytes as decode_mysql_date_bytes,
+        decode_date_time_bytes as decode_mysql_date_time_bytes,
+        decode_timestamp_bytes as decode_mysql_timestamp_bytes,
+    };
+    #[cfg(feature = "sqlx-postgres")]
+    pub use crate::sqlx::postgres::{
+        decode_date_binary as decode_postgres_date_binary,
+        decode_date_time_binary as decode_postgres_date_time_binary,
+        decode_time_binary as decode_postgres_time_binary,
+        decode_timestamp_binary as decode_postgres_timestamp_binary,
+    };
+    #[cfg(feature = "sqlx-sqlite")]
+    pub use crate::sqlx::sqlite::{
+        decode_date_text as decode_sqlite_date_text,
+        decode_date_time_text as decode_sqlite_date_time_text,
+        decode_time_text as decode_sqlite_time_text,
+        decode_timestamp_text as decode_sqlite_timestamp_text,
+        decode_zoned_text as decode_sqlite_zoned_text,
+    };
 }
