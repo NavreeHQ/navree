@@ -2036,7 +2036,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "navree-access"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "http",
  "navree-bounded",
@@ -2055,7 +2055,7 @@ dependencies = [
 
 [[package]]
 name = "navree-api"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "http",
  "indexmap",
@@ -2074,7 +2074,7 @@ dependencies = [
 
 [[package]]
 name = "navree-auth"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "form_urlencoded",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "navree-bounded"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "hashbrown 0.17.1",
  "tokio",
@@ -2116,7 +2116,7 @@ dependencies = [
 
 [[package]]
 name = "navree-cache"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "navree-bounded",
@@ -2135,7 +2135,7 @@ dependencies = [
 
 [[package]]
 name = "navree-cli"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2161,7 +2161,7 @@ dependencies = [
 
 [[package]]
 name = "navree-config"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "navree-contracts",
  "navree-kernel",
@@ -2176,7 +2176,7 @@ dependencies = [
 
 [[package]]
 name = "navree-contracts"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "navree-datetime",
  "navree-kernel",
@@ -2188,7 +2188,7 @@ dependencies = [
 
 [[package]]
 name = "navree-crypto"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -2214,14 +2214,14 @@ dependencies = [
 
 [[package]]
 name = "navree-datetime"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "navree-db"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "futures-util",
@@ -2248,7 +2248,7 @@ dependencies = [
 
 [[package]]
 name = "navree-directory"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "hex",
@@ -2281,7 +2281,7 @@ dependencies = [
 
 [[package]]
 name = "navree-dock"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "hex",
@@ -2295,7 +2295,7 @@ dependencies = [
 
 [[package]]
 name = "navree-documents"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -2320,7 +2320,7 @@ dependencies = [
 
 [[package]]
 name = "navree-domains"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "hickory-resolver",
@@ -2358,7 +2358,7 @@ dependencies = [
 
 [[package]]
 name = "navree-events"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "navree-contracts",
  "navree-kernel",
@@ -2429,11 +2429,11 @@ dependencies = [
 
 [[package]]
 name = "navree-glob"
-version = "1.6.0"
+version = "1.7.0"
 
 [[package]]
 name = "navree-harbor"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2455,7 +2455,7 @@ dependencies = [
 
 [[package]]
 name = "navree-http"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "dashmap",
@@ -2494,7 +2494,7 @@ dependencies = [
 
 [[package]]
 name = "navree-http-client"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -2520,7 +2520,7 @@ dependencies = [
 
 [[package]]
 name = "navree-integrations"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -2552,7 +2552,7 @@ dependencies = [
 
 [[package]]
 name = "navree-kernel"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "thiserror",
  "tokio",
@@ -2562,7 +2562,7 @@ dependencies = [
 
 [[package]]
 name = "navree-logbook"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "form_urlencoded",
@@ -2592,7 +2592,7 @@ dependencies = [
 
 [[package]]
 name = "navree-macros"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "heck",
  "proc-macro-crate",
@@ -2603,7 +2603,7 @@ dependencies = [
 
 [[package]]
 name = "navree-mail"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -2647,14 +2647,14 @@ dependencies = [
 
 [[package]]
 name = "navree-markdown"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "pulldown-cmark",
 ]
 
 [[package]]
 name = "navree-mcp"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2686,7 +2686,7 @@ dependencies = [
 
 [[package]]
 name = "navree-micro"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -2717,7 +2717,7 @@ dependencies = [
 
 [[package]]
 name = "navree-navigator"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "futures-util",
  "html5ever",
@@ -2739,7 +2739,7 @@ dependencies = [
 
 [[package]]
 name = "navree-oauth"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "form_urlencoded",
@@ -2770,7 +2770,7 @@ dependencies = [
 
 [[package]]
 name = "navree-openapi"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "indexmap",
  "navree-datetime",
@@ -2782,7 +2782,7 @@ dependencies = [
 
 [[package]]
 name = "navree-orm"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "argon2",
  "base64 0.23.1",
@@ -2815,7 +2815,7 @@ dependencies = [
 
 [[package]]
 name = "navree-orm-macros"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "heck",
  "navree-datetime",
@@ -2827,7 +2827,7 @@ dependencies = [
 
 [[package]]
 name = "navree-pdf"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "aes",
  "bytes",
@@ -2843,11 +2843,11 @@ dependencies = [
 
 [[package]]
 name = "navree-phone"
-version = "1.6.0"
+version = "1.7.0"
 
 [[package]]
 name = "navree-queue"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "futures-util",
  "hex",
@@ -2875,7 +2875,7 @@ dependencies = [
 
 [[package]]
 name = "navree-realtime"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "dashmap",
@@ -2904,7 +2904,7 @@ dependencies = [
 
 [[package]]
 name = "navree-schedule"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "futures-util",
  "navree-config",
@@ -2923,7 +2923,7 @@ dependencies = [
 
 [[package]]
 name = "navree-schema"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "navree-config",
  "serde",
@@ -2935,7 +2935,7 @@ dependencies = [
 
 [[package]]
 name = "navree-search"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "futures",
  "hex",
@@ -2964,7 +2964,7 @@ dependencies = [
 
 [[package]]
 name = "navree-sheets"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "chardetng",
@@ -3000,7 +3000,7 @@ dependencies = [
 
 [[package]]
 name = "navree-sso"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "flate2",
@@ -3033,7 +3033,7 @@ dependencies = [
 
 [[package]]
 name = "navree-storage"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -3059,7 +3059,7 @@ dependencies = [
 
 [[package]]
 name = "navree-telemetry"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "navree-datetime",
  "navree-kernel",
@@ -3072,7 +3072,7 @@ dependencies = [
 
 [[package]]
 name = "navree-template"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "serde",
  "stacker",
@@ -3080,7 +3080,7 @@ dependencies = [
 
 [[package]]
 name = "navree-testing"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bytes",
  "cookie",
@@ -3100,7 +3100,7 @@ dependencies = [
 
 [[package]]
 name = "navree-time"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "http",
  "navree-config",
@@ -3119,7 +3119,7 @@ dependencies = [
 
 [[package]]
 name = "navree-ui"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "brotli",
  "bytes",
@@ -3148,7 +3148,7 @@ dependencies = [
 
 [[package]]
 name = "navree-ui-macros"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "heck",
  "proc-macro-crate",
@@ -3159,7 +3159,7 @@ dependencies = [
 
 [[package]]
 name = "navree-validation"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "form_urlencoded",
  "html5ever",
@@ -3187,7 +3187,7 @@ dependencies = [
 
 [[package]]
 name = "navree-validation-macros"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "heck",
  "proc-macro-crate",
@@ -3199,7 +3199,7 @@ dependencies = [
 
 [[package]]
 name = "navree-view"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "navree-config",
  "navree-datetime",
@@ -3213,7 +3213,7 @@ dependencies = [
 
 [[package]]
 name = "navree-webhooks"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -3250,7 +3250,7 @@ dependencies = [
 
 [[package]]
 name = "navree-workspace"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "base64 0.23.1",
  "form_urlencoded",
