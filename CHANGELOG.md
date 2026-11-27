@@ -5,7 +5,7 @@ Every change to Navree is listed here, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Every crate and
 every `@navree/*` package carries the same version.
 
-## [Unreleased]
+## [1.7.0] - 2026-11-27
 
 ### Upgrading
 
@@ -16,7 +16,7 @@ every `@navree/*` package carries the same version.
 
 ### Added
 
-- `navree-datetime`, re-exported unconditionally as `navree::datetime`: Navree's own date, time and time-zone foundation crate (`#![forbid(unsafe_code)]`, years -262,144 to 262,143), providing `Timestamp`, `Date`, `Time`, `DateTime`, `Offset`, `Zone`, `Zoned`, `Span`, `Weekday`, `Month`, `Disambiguation` (`Compatible`, `Earlier`, `Later`, `Reject`), `Precision` and `UseZ`. It carries the compiled IANA time-zone tables and standing rules moved down from `navree-time`, ISO `Display`, RFC 3339 and RFC 2822 formatting and parsing, chrono-compatible `strftime` formatting/parsing and compile-time `pattern::check`, leap-second `:60` input handling, serde serialization, and feature-gated glue for SQLx (`sqlx-postgres`, `sqlx-mysql`, `sqlx-sqlite`), `async-graphql` and `bson`, verified byte for byte against golden suites recorded from 1.6.0, with a new guide at `/docs/digging-deeper/dates-and-times/`.
+- `navree-datetime`, re-exported unconditionally as `navree::datetime`: Navree's own date, time and time-zone foundation crate (`#![forbid(unsafe_code)]`, years -262,143 to 262,142), providing `Timestamp`, `Date`, `Time`, `DateTime`, `Offset`, `Zone`, `Zoned`, `Span`, `Weekday`, `Month`, `Disambiguation` (`Compatible`, `Earlier`, `Later`, `Reject`) and `Precision`. It carries the compiled IANA time-zone tables and standing rules moved down from `navree-time`, ISO `Display`, RFC 3339 and RFC 2822 formatting and parsing, chrono-compatible `strftime` formatting/parsing and compile-time `pattern::check`, leap-second `:60` input handling, serde serialization, and feature-gated glue for SQLx (`sqlx-postgres`, `sqlx-mysql`, `sqlx-sqlite`), `async-graphql` and `bson`, verified byte for byte against golden suites recorded from 1.6.0, with a new guide at `/docs/digging-deeper/dates-and-times/`.
 - `navree upgrade [--check] [PATH]` in `navree-cli`: a `syn` span-preserving codemod that moves an app's Rust files onto `navree::datetime` and `HasTimestamps` while keeping comments and formatting intact, flagging places that need a human choice between calendar and exact arithmetic.
 - Public storage driver traits and in-house cloud drivers in `navree-storage` (`navree::storage::store` and `cloud::{s3, gcs, azure}`), built on the workspace's `reqwest` (`rustls` + `ring`), `hmac`, `sha2`, `ring`, `quick-xml`, `base64` and `percent-encoding`:
   - **S3 and S3-compatible stores** (`feature = "s3"`): Signature Version 4 header and presigned URL signing, static keys and session tokens, `AssumeRoleWithWebIdentity` (`AWS_WEB_IDENTITY_TOKEN_FILE` + `AWS_ROLE_ARN`), ECS/EKS container credentials, and IMDSv2 (with IMDSv1 only when `AWS_IMDSV1_FALLBACK` is set), multipart uploads with token refresh between parts, and `ListObjectsV2` continuation.
@@ -1369,7 +1369,8 @@ Most apps upgrade with no change. These are the changes that can ask something o
 
 First release. Read what it includes in the [release notes](https://navree.com/docs/prologue/release-notes/).
 
-[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.7.0
 [1.6.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.6.0
 [1.5.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.5.0
 [1.4.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.4.0
