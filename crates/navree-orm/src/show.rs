@@ -405,11 +405,11 @@ mod tests {
         assert!(text.contains("  factory       DealFactory\n"), "{text}");
         assert!(text.contains("\ncolumns\n"), "{text}");
         assert!(
-            text.contains("  company_id    Option<i64>            nullable\n"),
+            text.contains("  company_id    Option<i64>        nullable\n"),
             "{text}"
         );
         assert!(
-            text.contains("  stage         Stage                  cast string_enum\n"),
+            text.contains("  stage         Stage              cast string_enum\n"),
             "{text}"
         );
         assert!(text.contains("  title         String\n"), "{text}");

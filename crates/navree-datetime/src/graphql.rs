@@ -3,7 +3,7 @@
 
 use ::async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
 
-use crate::{Date, DateTime, Time, Timestamp, Zone, Zoned};
+use crate::{Date, DateTime, Precision, Time, Timestamp, Zone, Zoned};
 
 /// An instant in RFC 3339 format.
 #[Scalar(
@@ -19,7 +19,7 @@ impl ScalarType for Timestamp {
     }
 
     fn to_value(&self) -> Value {
-        Value::String(self.to_rfc3339())
+        Value::String(self.to_rfc3339_with(Precision::Auto, true))
     }
 }
 

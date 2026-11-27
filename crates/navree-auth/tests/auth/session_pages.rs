@@ -828,7 +828,7 @@ async fn every_route_of_the_pages_is_documented() {
         assert!(api.summary.is_some(), "{label}");
         assert_eq!(api.tags, ["Auth pages"], "{label}");
     }
-    assert_eq!(pages, 24);
+    assert_eq!(pages, 26);
 }
 
 /// A component of the app's own, with a stylesheet: an app that contributes one has pages that

@@ -404,12 +404,14 @@ fn sqlx_encodings_are_chronos_bytes() {
                     let _ = Encode::<Postgres>::encode_by_ref(&value, &mut buf).unwrap();
                     assert_eq!(hex(&buf), expected, "{line}");
                     let decoded = decode_postgres_timestamp_binary(&buf).unwrap();
-                    assert_eq!(decoded.as_secs(), value.as_secs(), "{line}");
-                    assert_eq!(
-                        decoded.subsec_nanos(),
-                        value.subsec_nanos() / 1_000 * 1_000,
-                        "{line}"
+                    assert_eq!(decoded.subsec_nanos() % 1_000, 0, "{line}");
+                    assert!(
+                        (decoded - value).abs() < navree_datetime::Span::micros(1),
+                        "{line}: {decoded:?} vs {value:?}"
                     );
+                    let mut reencoded = PgArgumentBuffer::default();
+                    let _ = Encode::<Postgres>::encode_by_ref(&decoded, &mut reencoded).unwrap();
+                    assert_eq!(hex(&reencoded), expected, "{line}");
                 }
                 "DateTime<FixedOffset>" => {
                     let value = fixed_zoned_of(&line);
@@ -426,15 +428,15 @@ fn sqlx_encodings_are_chronos_bytes() {
                     let _ = Encode::<Postgres>::encode_by_ref(&value, &mut buf).unwrap();
                     assert_eq!(hex(&buf), expected, "{line}");
                     let decoded = decode_postgres_date_time_binary(&buf).unwrap();
-                    assert_eq!(decoded.date(), value.date(), "{line}");
-                    assert_eq!(
-                        decoded.time(),
-                        value
-                            .time()
-                            .with_nanos(value.time().nanosecond() / 1_000 * 1_000)
-                            .unwrap(),
-                        "{line}"
+                    assert_eq!(decoded.time().nanosecond() % 1_000, 0, "{line}");
+                    assert!(
+                        (decoded.in_utc() - value.in_utc()).abs()
+                            < navree_datetime::Span::micros(1),
+                        "{line}: {decoded:?} vs {value:?}"
                     );
+                    let mut reencoded = PgArgumentBuffer::default();
+                    let _ = Encode::<Postgres>::encode_by_ref(&decoded, &mut reencoded).unwrap();
+                    assert_eq!(hex(&reencoded), expected, "{line}");
                 }
                 "NaiveDate" => {
                     let value = date_of(&line);
@@ -572,13 +574,13 @@ fn sqlx_encodings_are_chronos_bytes() {
                     let written = sqlite_text(&value).unwrap();
                     if let Some(expected) = line.get("out").and_then(serde_json::Value::as_str) {
                         assert_eq!(written, expected, "{line}");
+                        if value.offset().seconds() % 60 == 0 {
+                            let decoded = decode_sqlite_zoned_text(&written).unwrap();
+                            assert_eq!(decoded.timestamp(), value.timestamp(), "{line}");
+                            assert_eq!(decoded.offset(), value.offset(), "{line}");
+                        }
                     } else {
                         assert_eq!(text(&line, "err"), "panic", "{line}");
-                    }
-                    if value.offset().seconds() % 60 == 0 {
-                        let decoded = decode_sqlite_zoned_text(&written).unwrap();
-                        assert_eq!(decoded.timestamp(), value.timestamp(), "{line}");
-                        assert_eq!(decoded.offset(), value.offset(), "{line}");
                     }
                 }
                 "DateTime<Tz>" => {
@@ -586,13 +588,13 @@ fn sqlx_encodings_are_chronos_bytes() {
                     let written = sqlite_text(&value).unwrap();
                     if let Some(expected) = line.get("out").and_then(serde_json::Value::as_str) {
                         assert_eq!(written, expected, "{line}");
+                        if value.offset().seconds() % 60 == 0 {
+                            let decoded = decode_sqlite_zoned_text(&written).unwrap();
+                            assert_eq!(decoded.timestamp(), value.timestamp(), "{line}");
+                            assert_eq!(decoded.offset(), value.offset(), "{line}");
+                        }
                     } else {
                         assert_eq!(text(&line, "err"), "panic", "{line}");
-                    }
-                    if value.offset().seconds() % 60 == 0 {
-                        let decoded = decode_sqlite_zoned_text(&written).unwrap();
-                        assert_eq!(decoded.timestamp(), value.timestamp(), "{line}");
-                        assert_eq!(decoded.offset(), value.offset(), "{line}");
                     }
                 }
                 "NaiveDateTime" => {

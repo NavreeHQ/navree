@@ -15,7 +15,7 @@
 
 use std::any::Any;
 
-use navree_db::{DbOptions, Executor, Pool};
+use navree_db::{DbOptions, Executor, Pool, Statement};
 use navree_testing::TestAppBuilder;
 use uuid::Uuid;
 
@@ -80,7 +80,8 @@ pub fn database(builder: TestAppBuilder) -> TestAppBuilder {
     builder
         .config("database.url", database.url.clone())
         .config("database.migrate_on_boot", true)
-        .config("database.max_connections", 4)
+        .config("database.max_connections", 2)
+        .config("database.idle_timeout_secs", 2)
         .hold(database)
 }
 
@@ -133,16 +134,58 @@ impl ServerDatabase {
 
 impl Drop for ServerDatabase {
     fn drop(&mut self) {
-        let force = if self.server == Server::Postgres {
-            " WITH (FORCE)"
-        } else {
-            ""
-        };
-        let sql = format!("DROP DATABASE IF EXISTS {}{force}", self.name);
-        if let Err(error) = run_admin(&self.admin, sql) {
+        if let Err(error) = drop_database(self.server, &self.admin, &self.name) {
             eprintln!("could not drop a test database: {error}");
         }
     }
+}
+
+/// Drops `name` on `admin`, first ending any connections still attached to it
+/// (`WITH (FORCE)` on PostgreSQL, `KILL` from `PROCESSLIST` on MySQL and
+/// MariaDB, where `DROP DATABASE` leaves pooled sessions open).
+fn drop_database(server: Server, admin: &str, name: &str) -> Result<(), String> {
+    if server == Server::Postgres {
+        return run_admin(
+            admin,
+            format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
+        );
+    }
+    let admin = admin.to_owned();
+    let name = name.to_owned();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| error.to_string())?;
+        runtime.block_on(async move {
+            let pool = Pool::connect(&DbOptions {
+                url: admin,
+                max_connections: 1,
+                ..DbOptions::default()
+            })
+            .await
+            .map_err(|error| format!("cannot connect to the test server: {error}"))?;
+            let query = format!(
+                "SELECT CAST(ID AS CHAR) AS id FROM information_schema.PROCESSLIST \
+                 WHERE DB = '{name}' AND ID <> CONNECTION_ID()"
+            );
+            if let Ok(rows) = pool.fetch_all(&Statement::text(&query)).await {
+                for row in rows {
+                    if let Ok(id) = row.get::<String>("id")
+                        && id.bytes().all(|b| b.is_ascii_digit())
+                    {
+                        let _ = pool.execute_script(&format!("KILL {id}")).await;
+                    }
+                }
+            }
+            let sql = format!("DROP DATABASE IF EXISTS {name}");
+            let result = pool.execute_script(&sql).await;
+            pool.close().await;
+            result.map(drop).map_err(|error| format!("{sql}: {error}"))
+        })
+    })
+    .join()
+    .map_err(|_| "the admin thread panicked".to_owned())?
 }
 
 /// Runs `sql` on the server of `admin`, on a thread and runtime of its own

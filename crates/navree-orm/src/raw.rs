@@ -32,7 +32,7 @@
 //! let rows = select(&db, raw("SELECT id, title FROM deals ORDER BY created_at DESC LIMIT ?", [10])).await?;
 //! let archived = statement(&uow, raw("UPDATE deals SET stage = ? WHERE closed_at < ?", [
 //!     Value::from("archived"),
-//!     Value::from(Utc::now() - Duration::days(365)),
+//!     Value::from(Timestamp::now() - Span::days(365)),
 //! ]))
 //! .await?;
 //! # let _ = (open, rows, archived);
