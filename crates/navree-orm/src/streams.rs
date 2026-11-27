@@ -25,7 +25,7 @@
 //!
 //! # async fn demo(db: Db) -> Result<()> {
 //! // Close stale deals 500 at a time; key pages stay correct while rows change.
-//! let cutoff = Utc::now() - Duration::days(90);
+//! let cutoff = Timestamp::now() - Span::days(90);
 //! let db2 = db.clone();
 //! Deal::query()
 //!     .where_(Deal::STAGE.eq(Stage::Open))

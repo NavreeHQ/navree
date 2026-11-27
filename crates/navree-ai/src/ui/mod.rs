@@ -245,10 +245,11 @@ impl ModuleBuilderAssistantExt for ModuleBuilder {
                             "an assistant without RealtimeModule: its pages change only when drawn again"
                         );
                     }
+                    let clock = ai.clock().await;
                     let core = host::Core::new(
                         (*ai).clone(),
                         store::Store::new(db.clone()),
-                        Conversations::new(Some(db)),
+                        Conversations::with_clock(Some(db), clock),
                         live,
                         signer,
                         config,

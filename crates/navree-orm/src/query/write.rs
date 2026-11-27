@@ -115,7 +115,7 @@ impl<M: Model> Builder<M> {
     /// ```no_run
     /// # use navree_orm::__doc_models::*;
     /// # async fn demo(uow: Uow) -> Result<()> {
-    /// let cutoff = Utc::now() - Duration::days(90);
+    /// let cutoff = Timestamp::now() - Span::days(90);
     /// let lost = Deal::query()
     ///     .where_(Deal::STAGE.eq(Stage::Open))
     ///     .where_(Deal::CREATED_AT.lt(cutoff))

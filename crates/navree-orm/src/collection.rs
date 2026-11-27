@@ -226,7 +226,7 @@ impl<M: Model> Collection<M> {
     /// ```no_run
     /// # use navree_orm::__doc_models::*;
     /// # async fn demo(db: Db, uow: Uow) -> Result<()> {
-    /// let stale = Deal::query().where_(Deal::CREATED_AT.lt(Utc::now() - Duration::days(90))).get(&db).await?;
+    /// let stale = Deal::query().where_(Deal::CREATED_AT.lt(Timestamp::now() - Span::days(90))).get(&db).await?;
     /// stale.to_query().update(&uow, [Deal::STAGE.set(Stage::Lost)]).await?;
     /// # Ok(()) }
     /// ```

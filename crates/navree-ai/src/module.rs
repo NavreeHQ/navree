@@ -155,7 +155,15 @@ fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
         .exports::<VectorStore>()
         .lifecycle::<VectorStore>()
         .factory(Factory::<Conversations>::new(|r: Resolver| async move {
-            Ok(Arc::new(Conversations::new(r.app().try_get::<Db>().await)))
+            let app = r.app();
+            let clock = match app.try_get::<dyn navree_contracts::Clock>().await {
+                Some(clock) => clock,
+                None => Arc::new(navree_contracts::SystemClock) as Arc<dyn navree_contracts::Clock>,
+            };
+            Ok(Arc::new(Conversations::with_clock(
+                app.try_get::<Db>().await,
+                clock,
+            )))
         }))
         .exports::<Conversations>()
         .migrations(memory::migrations())

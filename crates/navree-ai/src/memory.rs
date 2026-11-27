@@ -198,6 +198,7 @@ pub(crate) struct Loaded {
 #[derive(Clone)]
 pub struct Conversations {
     db: Option<Arc<Db>>,
+    clock: Arc<dyn navree_contracts::Clock>,
 }
 
 impl std::fmt::Debug for Conversations {
@@ -240,7 +241,11 @@ impl Conversations {
     /// The service over `db` (`None`: every call fails with
     /// [`AiError::Config`]).
     pub fn new(db: Option<Arc<Db>>) -> Self {
-        Self { db }
+        Self::with_clock(db, Arc::new(navree_contracts::SystemClock))
+    }
+
+    pub(crate) fn with_clock(db: Option<Arc<Db>>, clock: Arc<dyn navree_contracts::Clock>) -> Self {
+        Self { db, clock }
     }
 
     fn db(&self) -> Result<&Db, AiError> {
@@ -311,7 +316,7 @@ impl Conversations {
         let row = self.owned(user_id, conversation_id).await?;
         let changed = conversation::Model::update_where(Filter::all().eq("id", row.id))
             .set("title", Some(title.into()))
-            .set("updated_at", Timestamp::now())
+            .set("updated_at", self.clock.now())
             .execute(self.db()?)
             .await
             .map_err(db_error)?;
@@ -413,7 +418,7 @@ impl Conversations {
         agent: &str,
         first_message: &str,
     ) -> Result<conversation::Model, AiError> {
-        let now = Timestamp::now();
+        let now = self.clock.now();
         let row = conversation::Model {
             id: Uuid::now_v7(),
             user_id,
@@ -443,7 +448,7 @@ impl Conversations {
                 },
                 content: serde_json::to_string(&stored_parts(message))
                     .unwrap_or_else(|_| "[]".to_owned()),
-                created_at: Timestamp::now(),
+                created_at: self.clock.now(),
             };
             record::insert(db, &row).await.map_err(db_error)?;
         }
@@ -467,7 +472,7 @@ impl Conversations {
                 .set("summarized_count", count);
         }
         changes
-            .set("updated_at", Timestamp::now())
+            .set("updated_at", self.clock.now())
             .execute(self.db()?)
             .await
             .map_err(db_error)?;

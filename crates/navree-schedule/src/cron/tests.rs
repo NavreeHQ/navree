@@ -12,10 +12,12 @@ fn at(text: &str) -> Timestamp {
     Timestamp::parse_rfc3339(text).unwrap()
 }
 
+fn rfc3339_z(t: Timestamp) -> String {
+    t.to_rfc3339_with(navree_datetime::Precision::Auto, true)
+}
+
 fn next(text: &str, after: &str, zone: Tz) -> Option<String> {
-    cron(text)
-        .next_after(at(after), &zone)
-        .map(|t| t.to_rfc3339())
+    cron(text).next_after(at(after), &zone).map(rfc3339_z)
 }
 
 fn error(text: &str) -> CronError {
@@ -248,7 +250,7 @@ fn never_matching_expressions_have_no_next_run() {
     let next = leap_monday
         .next_after(at("2026-01-01T00:00:00Z"), &utc)
         .unwrap();
-    assert_eq!(next.to_rfc3339(), "2044-02-29T00:00:00Z");
+    assert_eq!(rfc3339_z(next), "2044-02-29T00:00:00Z");
 }
 
 #[test]
@@ -269,17 +271,18 @@ fn spring_forward_runs_a_skipped_time_once_after_the_gap() {
     let first = fixed
         .next_after(at("2026-03-08T06:59:00Z"), &new_york)
         .unwrap();
-    assert_eq!(first.to_rfc3339(), "2026-03-08T07:00:00Z");
+    assert_eq!(rfc3339_z(first), "2026-03-08T07:00:00Z");
     let second = fixed.next_after(first, &new_york).unwrap();
-    assert_eq!(second.to_rfc3339(), "2026-03-09T06:00:00Z");
+    assert_eq!(rfc3339_z(second), "2026-03-09T06:00:00Z");
     // A wildcard expression catches nothing up: `*/15` in the hour 2 does
     // not exist on that night.
     let every_15 = cron("*/15 2 * * *");
     assert_eq!(
-        every_15
-            .next_after(at("2026-03-08T06:59:00Z"), &new_york)
-            .unwrap()
-            .to_rfc3339(),
+        rfc3339_z(
+            every_15
+                .next_after(at("2026-03-08T06:59:00Z"), &new_york)
+                .unwrap()
+        ),
         "2026-03-09T06:00:00Z"
     );
     // A time at the end of the gap and one inside it still run once there.
@@ -287,9 +290,9 @@ fn spring_forward_runs_a_skipped_time_once_after_the_gap() {
     let first = both
         .next_after(at("2026-03-08T06:30:00Z"), &new_york)
         .unwrap();
-    assert_eq!(first.to_rfc3339(), "2026-03-08T07:00:00Z");
+    assert_eq!(rfc3339_z(first), "2026-03-08T07:00:00Z");
     assert_eq!(
-        both.next_after(first, &new_york).unwrap().to_rfc3339(),
+        rfc3339_z(both.next_after(first, &new_york).unwrap()),
         "2026-03-08T07:30:00Z"
     );
 }

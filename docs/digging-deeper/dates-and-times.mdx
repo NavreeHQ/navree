@@ -138,8 +138,8 @@ Every type's `Display` implementation writes its canonical ISO 8601 / RFC 3339 r
 use navree::datetime::{Precision, Timestamp, Zoned};
 
 let ts = Timestamp::parse_rfc3339("2026-11-25T15:00:00.125+05:30")?;
-assert_eq!(ts.to_rfc3339(), "2026-11-25T09:30:00.125Z");
-assert_eq!(ts.to_rfc3339_with(Precision::Secs, false), "2026-11-25T09:30:00+00:00");
+assert_eq!(ts.to_rfc3339(), "2026-11-25T09:30:00.125+00:00");
+assert_eq!(ts.to_rfc3339_with(Precision::Secs, true), "2026-11-25T09:30:00Z");
 
 let zoned = Zoned::parse_rfc3339("2026-11-25T15:00:00+05:30")?;
 assert_eq!(zoned.to_rfc2822(), "Wed, 25 Nov 2026 15:00:00 +0530");

@@ -5,9 +5,11 @@ error[E0277]: `std::string::String` cannot be a timestamp column
   |                 ^^^^^^ the trait `HasTimestamps` is not implemented for `std::string::String`
   |
   = note: use `Timestamp`, `Zoned`, `DateTime`, `i64` or an `Option` of one
-  = help: the following other types implement trait `HasTimestamps`:
-            DateTime
-            Option<T>
-            Timestamp
-            Zoned
-            i64
+help: the following other types implement trait `HasTimestamps`
+ --> src/model.rs
+  |
+  | impl HasTimestamps for i64 {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^ `i64`
+...
+  | impl<T: HasTimestamps> HasTimestamps for Option<T> {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `std::option::Option<T>`

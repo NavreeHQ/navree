@@ -406,7 +406,7 @@ impl<M: Model> Builder<M> {
     /// ```
     /// # use navree_orm::__doc_models::*;
     /// let overdue = Deal::query()
-    ///     .where_has(Deal::activities, |q| q.where_(Activity::DUE_AT.lt(Utc::now())))
+    ///     .where_has(Deal::activities, |q| q.where_(Activity::DUE_AT.lt(Timestamp::now())))
     ///     .where_has("company", |q: Builder<Company>| q.where_(Company::ACTIVE.eq(true)));
     /// # let _ = overdue;
     /// ```

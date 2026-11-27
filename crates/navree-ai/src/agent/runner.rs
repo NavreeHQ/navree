@@ -353,7 +353,7 @@ impl<A: Agent> AgentRunBuilder<A> {
         }
         options.max_steps = options.max_steps.max(1);
         let memory = options.memory == Memory::Conversation && self.conversation.is_some();
-        let conversations = Conversations::new(Some(db.clone()));
+        let conversations = Conversations::with_clock(Some(db.clone()), clock.clone());
 
         let mut history = Vec::new();
         let mut summary = None;

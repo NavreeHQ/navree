@@ -331,9 +331,9 @@ pub async fn expire_notices(app: &AppContext) -> Result<u64, BoxError> {
     }
     let now = match app.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
-        None => navree::datetime::Timestamp::now(),
+        None => Timestamp::now(),
     };
-    let cutoff = now - navree::datetime::Span::days(i64::from(settings.keep_days));
+    let cutoff = now - Span::days(i64::from(settings.keep_days));
     let db = app.get::<Db>().await?;
     let uow = db.uow(None, None).await;
     let removed = notice::Model::query()

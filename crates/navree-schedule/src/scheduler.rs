@@ -639,6 +639,6 @@ mod tests {
     #[test]
     fn minute_of_truncates_seconds_and_nanos() {
         let now = Timestamp::parse_rfc3339("2026-10-25T02:30:59.999Z").unwrap();
-        assert_eq!(minute_of(now).to_rfc3339(), "2026-10-25T02:30:00Z");
+        assert_eq!(minute_of(now).to_rfc3339(), "2026-10-25T02:30:00+00:00");
     }
 }

@@ -137,6 +137,11 @@ fn serde_writes_and_reads_what_chrono_wrote() {
                 let json = serde_json::to_string(&value).unwrap();
                 if let Some(expected) = line.get("out").and_then(serde_json::Value::as_str) {
                     assert_eq!(json, expected, "{line}");
+                    if value.offset().seconds() % 60 == 0 {
+                        let decoded: Zoned = serde_json::from_str(&json).unwrap();
+                        assert_eq!(decoded.timestamp(), value.timestamp(), "{line}");
+                        assert_eq!(decoded.offset(), value.offset(), "{line}");
+                    }
                 } else {
                     assert_eq!(text(&line, "err"), "panic", "{line}");
                     assert!(
@@ -144,24 +149,19 @@ fn serde_writes_and_reads_what_chrono_wrote() {
                         "unexpected boundary JSON `{json}` for {line}"
                     );
                 }
-                if value.offset().seconds() % 60 == 0 {
-                    let decoded: Zoned = serde_json::from_str(&json).unwrap();
-                    assert_eq!(decoded.timestamp(), value.timestamp(), "{line}");
-                    assert_eq!(decoded.offset(), value.offset(), "{line}");
-                }
             }
             "DateTime<Tz>" => {
                 let value = named_zoned_of(&line);
                 let json = serde_json::to_string(&value).unwrap();
                 if let Some(expected) = line.get("out").and_then(serde_json::Value::as_str) {
                     assert_eq!(json, expected, "{line}");
+                    if value.offset().seconds() % 60 == 0 {
+                        let decoded: Zoned = serde_json::from_str(&json).unwrap();
+                        assert_eq!(decoded.timestamp(), value.timestamp(), "{line}");
+                        assert_eq!(decoded.offset(), value.offset(), "{line}");
+                    }
                 } else {
                     assert_eq!(text(&line, "err"), "panic", "{line}");
-                }
-                if value.offset().seconds() % 60 == 0 {
-                    let decoded: Zoned = serde_json::from_str(&json).unwrap();
-                    assert_eq!(decoded.timestamp(), value.timestamp(), "{line}");
-                    assert_eq!(decoded.offset(), value.offset(), "{line}");
                 }
             }
             "NaiveDate" => {

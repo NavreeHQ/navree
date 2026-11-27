@@ -1071,7 +1071,12 @@ async fn a_run_can_answer_with_a_type() {
 
 #[tokio::test]
 async fn ai_prune_deletes_untouched_conversations() {
-    let app = app().await;
+    let clock = Arc::new(navree_contracts::FixedClock::new(start()));
+    let app = agent_app()
+        .override_value::<dyn navree_contracts::Clock>(clock.clone())
+        .module(AssistantModule)
+        .build()
+        .await;
     let daljit = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     ai.fake().unwrap().respond(FakeReply::text("hi"));
@@ -1103,7 +1108,7 @@ async fn ai_prune_deletes_untouched_conversations() {
         1
     );
 
-    tokio::time::sleep(Duration::from_millis(5)).await;
+    clock.advance(Duration::from_secs(60));
     app.run_command("ai:prune", &["--days", "0"]).await.unwrap();
     assert!(
         conversations
