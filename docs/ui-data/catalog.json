@@ -657,7 +657,8 @@
       "examples": [
         "forms/thumb",
         "forms/default",
-        "forms/errors"
+        "forms/errors",
+        "forms/own-parts"
       ]
     },
     {
@@ -1906,6 +1907,8 @@
         "data-table/bulk",
         "data-table/filter-row",
         "data-table/compact",
+        "data-table/current",
+        "data-table/page-filters",
         "data-table/states"
       ]
     },
@@ -36512,6 +36515,1215 @@
       ]
     },
     {
+      "id": "data-table/current",
+      "component": "data-table",
+      "slug": "current",
+      "title": "The row a page shows, and a muted header",
+      "kind": "single",
+      "code": "let query = TableQuery::<Deal>::parse(\"/deals\", \"\");\nlet page = TablePage::new(deals(), 5);\nDataTable::new(\"deals\", &query, &page)\n    .caption(\"Deals\")\n    .row_href(|deal| format!(\"/deals/{}\", deal.id))\n    .current_row(|deal| deal.id == 2)\n    .muted_header()\n    .into()",
+      "src": "/ui-preview/data-table/current.html",
+      "height": 440,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "overlay-d30ab67a4ddf.js",
+        "table-4818c62c0060.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "data-table",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table-toolbar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "toolbar-form",
+                  "tag": "form",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "table-search",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "toolbar-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "column-list",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "column-row",
+                              "tag": "div",
+                              "count": 5,
+                              "children": [
+                                {
+                                  "slot": "filter-option",
+                                  "tag": "label",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "checkbox",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "column-move",
+                                  "tag": "a",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-links",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-link",
+                              "tag": "a",
+                              "count": 3,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-alert",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "alert-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "button",
+                  "tag": "a",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "table-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table",
+                  "tag": "table",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "input",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "th-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "filter-range",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "filter-field",
+                                      "tag": "label",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "filter-range",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "filter-field",
+                                      "tag": "label",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-footer",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table-summary",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "footer-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-size",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "native-select",
+                          "tag": "select",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data-table/page-filters",
+      "component": "data-table",
+      "slug": "page-filters",
+      "title": "Filters of the page's own",
+      "kind": "single",
+      "code": "let query =\n    TableQuery::<Deal, DealFilter>::parse(\"/deals\", \"stage=won&stage=negotiation&hot=true\");\nlet page = TablePage::new(deals(), 5);\nDataTable::new(\"deals\", &query, &page)\n    .caption(\"Deals\")\n    .options(\n        \"company\",\n        vec![\n            FilterOption::new(\"sutlej\", \"Sutlej Supply\"),\n            FilterOption::new(\"haveli\", \"Haveli Home\"),\n        ],\n    )\n    .without_columns_picker()\n    .into()",
+      "src": "/ui-preview/data-table/page-filters.html",
+      "height": 440,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "overlay-d30ab67a4ddf.js",
+        "table-4818c62c0060.js",
+        "menus-a3553608f59a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "data-table",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table-toolbar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "toolbar-form",
+                  "tag": "form",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "table-search",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "toggle-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "toggle-group-item",
+                          "tag": "label",
+                          "count": 4,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "native-select",
+                      "tag": "select",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "choice",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "checkbox",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "native-select",
+                      "tag": "select",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "toolbar-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-links",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-link",
+                              "tag": "a",
+                              "count": 3,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-chips",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "table-alert",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "alert-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "button",
+                  "tag": "a",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "table-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table",
+                  "tag": "table",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 3,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "input",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 3,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "th-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 3,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "filter-range",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "filter-field",
+                                      "tag": "label",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 3,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "filter-range",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "filter-field",
+                                      "tag": "label",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-footer",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table-summary",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "footer-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-size",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "native-select",
+                          "tag": "select",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "data-table/states",
       "component": "data-table",
       "slug": "states",
@@ -58244,6 +59456,86 @@
                   "tag": "button",
                   "count": 1,
                   "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "forms/own-parts",
+      "component": "forms",
+      "slug": "own-parts",
+      "title": "A mono field, fields a size larger and the submit button's look",
+      "kind": "single",
+      "code": "FormView::<Checkout>::new()\n    .post(\"/checkout\")\n    .with_values(vec![(\"plan\".to_owned(), \"growth\".to_owned())])\n    .submit_button(Button::primary(\"Pay and start\").icon(icons::LOCK).block())",
+      "src": "/ui-preview/forms/own-parts.html",
+      "height": 460,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "form",
+          "tag": "form",
+          "count": 1,
+          "children": [
+            {
+              "slot": "form-grid",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "field",
+                  "tag": "div",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "label",
+                      "tag": "label",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "native-select",
+                      "tag": "select",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "field-description",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "form-actions",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
                 }
               ]
             }

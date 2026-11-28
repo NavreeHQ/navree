@@ -5337,6 +5337,18 @@
         "doc": "Which rows stay in view while the table scrolls."
       },
       {
+        "name": "current_row",
+        "generics": "",
+        "args": "current: impl Fn(&R) -> bool + 'a",
+        "doc": "Marks the row the page shows, such as the one whose details are open beside the table: its `<tr>` says `aria-current=\"true\"` and is drawn in the theme's colour for a chosen row (`Roles::selected_row`, `--row-selected`; `ink-3` when the theme gives none). Only the first row `current` says yes to is marked. It is a mark, not a selection: nothing posts it, and the boxes and bulk actions are as they were."
+      },
+      {
+        "name": "muted_header",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the column headings in the muted text colour (`fg-2`), as a plain `Table` draws its own. Their size, weight, line height, tracking and face are the theme's `table_head` text style either way."
+      },
+      {
         "name": "detail",
         "generics": "",
         "args": "detail: impl Fn(&R) -> Node + 'a",
@@ -5352,7 +5364,7 @@
         "name": "options",
         "generics": "",
         "args": "column: &'static str, options: Vec<FilterOption>",
-        "doc": "Sets the choices of a filter whose choices come from the page."
+        "doc": "Sets the choices of a filter whose choices come from the page: a column's, by the column's name, or one of the page's own filters (`#[derive(FilterBar)]`), by its parameter's name, in the place of its type's."
       },
       {
         "name": "foot",
@@ -8291,6 +8303,24 @@
         "doc": "Adds a link back."
       },
       {
+        "name": "submit_variant",
+        "generics": "",
+        "args": "variant: ButtonVariant",
+        "doc": "Gives the submit button another look, such as `ButtonVariant::Outline`: it is primary unless this says otherwise."
+      },
+      {
+        "name": "submit_button",
+        "generics": "",
+        "args": "button: Button",
+        "doc": "Makes `button` the form's submit button, in the place of the one `submit` labels: its look, size, icon and width are yours. The form makes it submit, and a link it had is dropped."
+      },
+      {
+        "name": "without_actions",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the form with no buttons: no submit button and no cancel link. A button elsewhere, such as in a dialog's footer, submits it by naming `form_id` in its `form` attribute."
+      },
+      {
         "name": "of",
         "generics": "",
         "args": "value: &T",
@@ -9389,6 +9419,12 @@
         "doc": "Sets the height and type size: the same four sizes as a button. The default needs nothing more; the others link the parts stylesheet."
       },
       {
+        "name": "mono",
+        "generics": "",
+        "args": "",
+        "doc": "Draws its text in the page's mono face (`--font-mono`, a theme's `Face::Mono` font): a tax number, an account number, a key. It links the parts stylesheet."
+      },
+      {
         "name": "clearable",
         "generics": "",
         "args": "label: impl Into<String>",
@@ -9483,6 +9519,12 @@
         "generics": "",
         "args": "addon: impl Into<Node>",
         "doc": "Adds something after the input."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the height, a step of the theme's field sizes, as an input's: the input and what is before or after it fill the group. The default needs nothing more; the others link the parts stylesheet."
       }
     ],
     "variants": [],
@@ -12073,6 +12115,12 @@
         "generics": "",
         "args": "prompt: impl Into<String>",
         "doc": "Adds an empty first choice that says what to do."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the height, a step of the theme's field sizes, as an input's: the default needs nothing more; the others link the parts stylesheet."
       },
       {
         "name": "disabled",
@@ -21673,6 +21721,12 @@
         "generics": "",
         "args": "",
         "doc": "Lets a click on the chosen item of a single group turn it off. It needs the script: with none, a radio stays on once chosen."
+      },
+      {
+        "name": "form",
+        "generics": "",
+        "args": "form: impl Into<String>",
+        "doc": "Ties the group's inputs to the form with the id `form`, for a group drawn outside it: they post with that form, as a button with a `form` attribute does."
       },
       {
         "name": "on_change",

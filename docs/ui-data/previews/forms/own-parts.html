@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'">
+<meta name="robots" content="noindex">
+<title>Forms: A mono field, fields a size larger and the submit button's look</title>
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_toolkit/geist-685b571ab077.woff2">
+<link rel="stylesheet" href="../_toolkit/navree-ui-00c3c73c425c.css">
+<link rel="stylesheet" href="../_toolkit/parts-styles-c969f0545502.css">
+<link rel="stylesheet" href="../_frame/preview.css">
+<script type="module" src="../_frame/preview.js"></script>
+</head>
+<body data-preview="start"><div data-preview-stage><form data-slot="form" id="checkout" method="post" action="/checkout" data-ui-form><div data-slot="form-grid"><div data-slot="field" data-wide><label data-slot="label" for="checkout-plan">Plan</label><select data-slot="native-select" name="plan" required data-size="lg" id="checkout-plan" aria-describedby="checkout-plan-help"><option value="starter">Starter</option><option value="growth" selected>Growth</option><option value="scale">Scale</option></select><p data-slot="field-description" id="checkout-plan-help">You can change it at any time.</p></div><div data-slot="field"><label data-slot="label" for="checkout-company">Company</label><input data-slot="input" type="text" name="company" required minlength="1" maxlength="120" data-size="lg" id="checkout-company"></div><div data-slot="field"><label data-slot="label" for="checkout-gstin">GSTIN</label><input data-slot="input" type="text" name="gstin" placeholder="22AAAAA0000A1Z5" required minlength="15" maxlength="15" data-mono data-size="lg" id="checkout-gstin"></div></div><div data-slot="form-actions"><button data-slot="button" data-variant="primary" data-block type="submit"><svg data-slot="icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Pay and start</button></div></form></div></body>
+</html>
