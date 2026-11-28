@@ -514,6 +514,12 @@
         "doc": "Leaves the file out of the page's head as a preload: a font only some pages use is fetched when the text that needs it is drawn."
       },
       {
+        "name": "as_face",
+        "generics": "",
+        "args": "face: crate::theme::Face",
+        "doc": "Makes it one of the page's faces: its rule also sets the face's custom property, with a system stack behind the family. `Face::Text` is the page's text (`--font-sans`, in place of the theme's font, and the toolkit's Geist is no longer preloaded); `Face::Display` draws headings, the page title and the brand (`--font-display`); `Face::Mono` draws code and figures (`--font-mono`). A page with no display face draws those in its text face, as before."
+      },
+      {
         "name": "name",
         "generics": "",
         "args": "",
@@ -538,6 +544,12 @@
         "doc": "Whether a page preloads it."
       },
       {
+        "name": "role",
+        "generics": "",
+        "args": "",
+        "doc": "The page's face it is, if `as_face` made it one."
+      },
+      {
         "name": "url",
         "generics": "",
         "args": "",
@@ -553,7 +565,7 @@
         "name": "face",
         "generics": "",
         "args": "",
-        "doc": "The `@font-face` rule: the family, the file's address, the weights, the style and the display."
+        "doc": "The `@font-face` rule: the family, the file's address, the weights, the style and the display; for a face of the page, then the face's custom property on the root."
       }
     ],
     "variants": [],
@@ -2499,6 +2511,42 @@
         "generics": "",
         "args": "footer: impl IntoNodes",
         "doc": "Adds to the footer."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "CardSizes": {
+    "name": "CardSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The padding of cards and stats in px. Without them: 16 px.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "padding",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "A card's padding, around its header, its content and its footer, from 0 to 64 px."
+      },
+      {
+        "name": "stat_padding_y",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "A stat's padding above and below, from 0 to 64 px."
+      },
+      {
+        "name": "stat_padding_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "A stat's padding at its sides, from 0 to 64 px."
       }
     ],
     "variants": [],
@@ -4633,6 +4681,48 @@
     "variants": [],
     "shared": []
   },
+  "ControlSizes": {
+    "name": "ControlSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "Control heights in px, by `Size` step: buttons, toggles and the items of a toggle group, the width of an icon-only one, and segmented tabs, whose track is the step's height. A step you don't set keeps the toolkit's: 24, 28, 32 and 36 px, scaled by the theme's density.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every step the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "xs",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Xs`, from 16 to 64 px."
+      },
+      {
+        "name": "sm",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Sm`, from 16 to 64 px."
+      },
+      {
+        "name": "md",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The default size, from 16 to 64 px."
+      },
+      {
+        "name": "lg",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Lg`, from 16 to 64 px."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Conversation": {
     "name": "Conversation",
     "kind": "struct",
@@ -4712,6 +4802,105 @@
         "generics": "",
         "args": "copy: impl Into<Cow<'static, str>>, copied: impl Into<Cow<'static, str>>",
         "doc": "The button's words, in the page's language: \"Copy\" and \"Copied\" by default."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Corner": {
+    "name": "Corner",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "A corner: a length, or round ends.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Px",
+        "doc": "`n` px, from 0 to 32.",
+        "default": false
+      },
+      {
+        "name": "Pill",
+        "doc": "Round ends whatever the part's height: a pill, or a circle when the part is square. Written as `999px`.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Corners": {
+    "name": "Corners",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The corners of each kind of part. A part you don't set keeps the theme's `Radius`: its control corner for controls and rows, its surface corner for surfaces. A checkbox keeps the control corner always: a round box reads as a radio.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "No corner of its own for any part."
+      }
+    ],
+    "methods": [
+      {
+        "name": "button",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Buttons, and the outer corners of a button group."
+      },
+      {
+        "name": "badge",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Badges, and the count on a tab."
+      },
+      {
+        "name": "toggle",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Toggles, the items of a toggle group, segmented tabs and their track, and the switch, whose thumb follows it."
+      },
+      {
+        "name": "avatar",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Avatars."
+      },
+      {
+        "name": "field",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Inputs, text areas, native selects, input groups, the select and combobox controls and the phone input."
+      },
+      {
+        "name": "nav",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "The sidebar's items, its brand and user rows, the top bar's links, and the rows of menus and popovers."
+      },
+      {
+        "name": "card",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Cards, stats, fact cards, items and tables."
+      },
+      {
+        "name": "panel",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Alerts, a tab's alert and code blocks."
+      },
+      {
+        "name": "overlay",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Popovers, hover cards, menus, the select's list, dialogs and drawers."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether no part has a corner of its own."
       }
     ],
     "variants": [],
@@ -6758,6 +6947,27 @@
     "variants": [],
     "shared": []
   },
+  "Elevation": {
+    "name": "Elevation",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "How raised and floating parts stand off the page. A part's shadow is derived from the palette's text colour in light mode and is a deeper black in dark mode; there is no glow.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Flat",
+        "doc": "Flat with a border, as the toolkit draws: no shadow.",
+        "default": true
+      },
+      {
+        "name": "Soft",
+        "doc": "Two soft shadows: a small one under a raised part (the chosen segmented tab, the current sidebar link, a toggle that is on, the current button) and a wider one under a floating one (popovers, menus, dialogs, sheets, the select's list and a chart's tip).",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Empty": {
     "name": "Empty",
     "kind": "struct",
@@ -7081,6 +7291,32 @@
     ],
     "methods": [],
     "variants": [],
+    "shared": []
+  },
+  "Face": {
+    "name": "Face",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "A face: one of a page's three families. The text face is the theme's `Font` or the app's own; the display face draws headings, the page title and the brand when the app gives one (`AppFont::as_face`), and the text face when it doesn't; the mono face draws code and figures.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Text",
+        "doc": "The text face: `--font-sans`.",
+        "default": false
+      },
+      {
+        "name": "Display",
+        "doc": "The display face: `--font-display`, or the text face when the app has none.",
+        "default": false
+      },
+      {
+        "name": "Mono",
+        "doc": "The mono face: `--font-mono`.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "FactCard": {
@@ -7457,6 +7693,54 @@
         "generics": "",
         "args": "children: impl IntoNodes",
         "doc": "Adds fields."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "FieldSizes": {
+    "name": "FieldSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "Field heights in px by `Size` step, and their inner padding: inputs, input groups, native selects, the select and combobox controls and the phone input. A field takes a step with `Input::size`, so one page can draw 44 px fields and the rest 36 px. Without them: the control heights, and 10 px of padding.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every step the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "xs",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Xs`, from 16 to 64 px."
+      },
+      {
+        "name": "sm",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Sm`, from 16 to 64 px."
+      },
+      {
+        "name": "md",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The default size, from 16 to 64 px."
+      },
+      {
+        "name": "lg",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Lg`, from 16 to 64 px."
+      },
+      {
+        "name": "padding_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space between a field's edge and its text, from 0 to 32 px."
       }
     ],
     "variants": [],
@@ -9226,6 +9510,60 @@
         "generics": "",
         "args": "columns: u8",
         "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Inverse": {
+    "name": "Inverse",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/roles.rs",
+    "summary": "The colours of the inverse surface: a part of a page drawn on the theme's other palette, such as a dark card on a light page. Each part you don't set stays the other palette's. Each colour is given for a page in light mode, then in dark mode: `surface(#0a0a0a, #eaeae7)` is a near-black card on a light page and a near-white one on a dark page.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every part the other palette's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "surface",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The surface: its page and cards, its fields, and the text on its accent."
+      },
+      {
+        "name": "raised",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "A panel raised on it, hover and a selected item: an inner panel, a chip."
+      },
+      {
+        "name": "line",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Its dividers and borders."
+      },
+      {
+        "name": "text",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Its text and headings, and its accent: a primary button on it takes this colour, with the surface's as its text."
+      },
+      {
+        "name": "muted",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Its secondary text and hints."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether every part is the other palette's."
       }
     ],
     "variants": [],
@@ -12402,6 +12740,54 @@
     ],
     "shared": []
   },
+  "PageSizes": {
+    "name": "PageSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The page's sizes in px, in the app shell. Without them: 24 px of padding, 16 px between its parts, and as wide as the window allows.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "padding_top",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space above its content, from 0 to 96 px."
+      },
+      {
+        "name": "padding_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space at its sides, from 0 to 96 px."
+      },
+      {
+        "name": "padding_bottom",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space below its content, from 0 to 96 px."
+      },
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space between its parts (its heading and each block), from 0 to 64 px."
+      },
+      {
+        "name": "max_width",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The most it is wide, its padding included, from 480 to 2400 px: on a wider window it stands in the middle."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "PagesOptions": {
     "name": "PagesOptions",
     "kind": "struct",
@@ -15243,6 +15629,78 @@
     "variants": [],
     "shared": []
   },
+  "Roles": {
+    "name": "Roles",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/roles.rs",
+    "summary": "Colours for things one token paints today, each in both palettes and each falling back to that token: white cards beside an off-white sidebar, a ghost button in the text's own colour, and the inverse surface. A theme takes them with `Theme::with_roles`, which refuses any whose text falls short of WCAG AA, in light or in dark. Each colour is given for a page in light mode, then in dark mode.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "No role set: every thing in its token's colour."
+      }
+    ],
+    "methods": [
+      {
+        "name": "card",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Cards, stats, fact cards, tables, dialogs, sheets, popovers and menus: the surfaces above the page. Without it, `ink-1`, which the sidebar and a table's header keep."
+      },
+      {
+        "name": "field",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Inputs, text areas, selects, input groups, checkboxes and radios, the select and combobox controls and the phone input. Without it, `ink-1`."
+      },
+      {
+        "name": "ghost_text",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The text of a ghost button, such as the icon buttons of a top bar. Without it, `fg-2`."
+      },
+      {
+        "name": "shell_muted",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The sidebar's quieter text: the brand's context line, the user's email, the groups' labels and the counts. Without it, `fg-3`."
+      },
+      {
+        "name": "segment_track",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The track of segmented tabs. Without it, `ink-2`."
+      },
+      {
+        "name": "segment_on",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The chosen tab on a segmented track. Without it, `ink-3`."
+      },
+      {
+        "name": "selected_row",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "A selected row of a table. Without it, `ink-3`."
+      },
+      {
+        "name": "inverse",
+        "generics": "",
+        "args": "inverse: Inverse",
+        "doc": "The inverse surface's colours, in place of any set before."
+      },
+      {
+        "name": "is_default",
+        "generics": "",
+        "args": "",
+        "doc": "Whether no role is set."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Row": {
     "name": "Row",
     "kind": "struct",
@@ -16258,6 +16716,54 @@
     "variants": [],
     "shared": []
   },
+  "Shape": {
+    "name": "Shape",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "Everything a theme says beyond its `ThemeSpec` but colours: the corners of each kind of part and the type scale. A theme takes it with `Theme::with_shape`, which checks every value; a built-in theme has the default shape, which sets nothing.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Sets nothing: every part as the spec draws it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "corners",
+        "generics": "",
+        "args": "corners: Corners",
+        "doc": "The corners of each kind of part, in place of any set before."
+      },
+      {
+        "name": "type_scale",
+        "generics": "",
+        "args": "type_scale: TypeScale",
+        "doc": "The type scale, in place of any set before."
+      },
+      {
+        "name": "sizes",
+        "generics": "",
+        "args": "sizes: Sizes",
+        "doc": "The sizes of controls, fields, the shell, the page and cards, in place of any set before."
+      },
+      {
+        "name": "elevation",
+        "generics": "",
+        "args": "elevation: Elevation",
+        "doc": "How raised and floating parts stand off the page."
+      },
+      {
+        "name": "is_default",
+        "generics": "",
+        "args": "",
+        "doc": "Whether it sets nothing."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Sheet": {
     "name": "Sheet",
     "kind": "struct",
@@ -16649,6 +17155,54 @@
     ],
     "shared": []
   },
+  "SidebarSizes": {
+    "name": "SidebarSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The sidebar's sizes in px. Without them: 256 px wide, 8 px insets, 8 px between its blocks and 32 px items.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "width",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "Its width open, from 160 to 400 px (`--sidebar-w`)."
+      },
+      {
+        "name": "inset_y",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space above its first block and below its last, from 0 to 64 px."
+      },
+      {
+        "name": "inset_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space at its sides, from 0 to 64 px."
+      },
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space between its blocks (the brand, each group of links, the footer), from 0 to 64 px."
+      },
+      {
+        "name": "item_height",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The height of each of its links, from 20 to 64 px."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "SignInRequired": {
     "name": "SignInRequired",
     "kind": "struct",
@@ -16954,6 +17508,90 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "Sizes": {
+    "name": "Sizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The sizes of controls, fields, badges, the shell, the page and cards, in px. A size you don't set keeps the toolkit's, which follows the theme's density; one you set is the pixels you give, whatever the density.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      },
+      {
+        "name": "new",
+        "generics": "",
+        "args": "base: u32",
+        "doc": ""
+      }
+    ],
+    "methods": [
+      {
+        "name": "controls",
+        "generics": "",
+        "args": "controls: ControlSizes",
+        "doc": "The controls' heights, in place of any set before."
+      },
+      {
+        "name": "fields",
+        "generics": "",
+        "args": "fields: FieldSizes",
+        "doc": "The fields' heights and padding, in place of any set before."
+      },
+      {
+        "name": "badge_height",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "A badge's height, from 14 to 40 px. Without it: 20 px."
+      },
+      {
+        "name": "sidebar",
+        "generics": "",
+        "args": "sidebar: SidebarSizes",
+        "doc": "The sidebar's sizes, in place of any set before."
+      },
+      {
+        "name": "topbar",
+        "generics": "",
+        "args": "topbar: TopbarSizes",
+        "doc": "The top bar's sizes, in place of any set before."
+      },
+      {
+        "name": "page",
+        "generics": "",
+        "args": "page: PageSizes",
+        "doc": "The page's sizes, in place of any set before."
+      },
+      {
+        "name": "cards",
+        "generics": "",
+        "args": "cards: CardSizes",
+        "doc": "The padding of cards and stats, in place of any set before."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether no size is set."
+      },
+      {
+        "name": "set",
+        "generics": "",
+        "args": "screen: Screen, px: u32",
+        "doc": "Takes `px` from `screen` up, replacing what that screen had."
+      },
+      {
+        "name": "sizers",
+        "generics": "",
+        "args": "height: impl Fn(u32) -> u32",
+        "doc": "The pictures that give the drawing its size: one per width, each shown from its screen up to the next one's, so the page needs no style attribute. `height` is a drawing's height for its width."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "Skeleton": {
@@ -19385,6 +20023,54 @@
     "variants": [],
     "shared": []
   },
+  "TextStyle": {
+    "name": "TextStyle",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "How one kind of text is set: its size in px, its line height, its weight, its tracking in em and its `Face`. A value you don't set keeps the toolkit's.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Nothing set: the toolkit's own."
+      },
+      {
+        "name": "px",
+        "generics": "",
+        "args": "size: u16",
+        "doc": "Text `size` px tall, from 10 to 72."
+      }
+    ],
+    "methods": [
+      {
+        "name": "line",
+        "generics": "",
+        "args": "line: f64",
+        "doc": "Its line height, as a multiple of its size: from 1 to 2, to two places."
+      },
+      {
+        "name": "weight",
+        "generics": "",
+        "args": "weight: u16",
+        "doc": "Its weight: 400, 500, 600 or 700."
+      },
+      {
+        "name": "tracking",
+        "generics": "",
+        "args": "em: f64",
+        "doc": "Its tracking (letter spacing) in em: from -0.06 to 0.1, to three places."
+      },
+      {
+        "name": "face",
+        "generics": "",
+        "args": "face: Face",
+        "doc": "The face it is drawn in."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "TextVariant": {
     "name": "TextVariant",
     "kind": "enum",
@@ -19468,7 +20154,7 @@
     "name": "Theme",
     "kind": "struct",
     "file": "crates/navree-ui/src/theme/mod.rs",
-    "summary": "A theme: an id, a name and a `ThemeSpec`. The built-in ones are associated constants; `Theme::custom` makes your own.",
+    "summary": "A theme: an id, a name and a `ThemeSpec`. The built-in ones are associated constants; `Theme::custom` makes your own, `with_shape` gives it a `Shape` and `with_roles` its `Roles`.",
     "constructors": [
       {
         "name": "custom",
@@ -19490,6 +20176,30 @@
       }
     ],
     "methods": [
+      {
+        "name": "with_shape",
+        "generics": "",
+        "args": "shape: Shape",
+        "doc": "This theme with `shape`: the corners of each kind of part. Refused for a built-in theme, which ships as it is (make it yours first with `renamed`), and for a value out of range, each named with why, as `ImportError::Fields`."
+      },
+      {
+        "name": "with_roles",
+        "generics": "",
+        "args": "roles: Roles",
+        "doc": "This theme with `roles`: colours for what one token paints today (cards apart from the sidebar, fields, a ghost button's text, the sidebar's quieter text, segmented tabs, a selected row) and the inverse surface. Refused for a built-in theme, which ships as it is (make it yours first with `renamed`), and when any text pair a role draws falls short of WCAG AA in either palette: each such pair is named under its role, with its ratio, as `ImportError::Fields`."
+      },
+      {
+        "name": "shape",
+        "generics": "",
+        "args": "",
+        "doc": "Its `Shape`: the default, which sets nothing, unless `with_shape` gave it one."
+      },
+      {
+        "name": "roles",
+        "generics": "",
+        "args": "",
+        "doc": "Its `Roles`: none set, unless `with_roles` gave it some."
+      },
       {
         "name": "id",
         "generics": "",
@@ -19548,7 +20258,7 @@
         "name": "renamed",
         "generics": "",
         "args": "id: ThemeId, name: impl Into<String>",
-        "doc": "The same look under another id and name."
+        "doc": "The same look under another id and name: its spec, and what it says beyond."
       },
       {
         "name": "neutral",
@@ -21362,6 +22072,36 @@
     "variants": [],
     "shared": []
   },
+  "TopbarSizes": {
+    "name": "TopbarSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The top bar's sizes in px. Without them: 48 px high, 12 px at its sides.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "height",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "Its height, from 32 to 96 px (`--topbar-h`)."
+      },
+      {
+        "name": "inset_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space at its sides, from 0 to 64 px."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Trace": {
     "name": "Trace",
     "kind": "struct",
@@ -21871,6 +22611,126 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "TypeScale": {
+    "name": "TypeScale",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The type scale: a `TextStyle` for each kind of text the toolkit draws that a design sets apart. A kind you don't set keeps the toolkit's. Sizes are pixels, so text keeps its size under every density, as the toolkit's own text does.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every kind of text as the toolkit sets it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "page_title",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A page's title in the app shell. Without it: 20 px, 600, line 1.25, -0.01 em, in the display face."
+      },
+      {
+        "name": "h1",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A first-level `Heading`. Without it: 24 px, 600, line 1.25, -0.01 em, in the display face."
+      },
+      {
+        "name": "h2",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A second-level heading. Without it: 20 px, as `h1` otherwise."
+      },
+      {
+        "name": "h3",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A third-level heading. Without it: 16 px, as `h1` otherwise."
+      },
+      {
+        "name": "h4",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A fourth-level heading. Without it: 14 px, as `h1` otherwise, in the text face."
+      },
+      {
+        "name": "card_title",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A card's title. Without it: 14 px, 600."
+      },
+      {
+        "name": "brand",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "The app's name: the brand in the sidebar and a site's brand. Without it: the sidebar's 14 px, 500, and a site's 17 px, 650, -0.015 em; both in the display face."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "The page's body text. Without it: 14 px, 400, line 1.5."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A field's label. Without it: 13 px, 500, line 1.25."
+      },
+      {
+        "name": "button",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A button of the default size. Without it: 14 px, 500, line 1."
+      },
+      {
+        "name": "badge",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A badge. Without it: 12 px, 500."
+      },
+      {
+        "name": "input",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "The text in an input, a text area, a native select and the select's control. Without it: 14 px."
+      },
+      {
+        "name": "breadcrumb",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A breadcrumb trail. Without it: 13 px."
+      },
+      {
+        "name": "stat_value",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A stat's figure. Without it: 24 px, 600, line 1.2, with figures of one width in any face."
+      },
+      {
+        "name": "table_head",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A table's column headings. Without it: 13 px, 500 in a table, 14 px in a data table."
+      },
+      {
+        "name": "sidebar_user",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "The signed-in person's name in the sidebar. Without it: 14 px, 500."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether no kind of text has a style of its own."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "Upload": {

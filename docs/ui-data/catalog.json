@@ -2710,10 +2710,26 @@
       "id": "themes",
       "name": "Themes",
       "url": "/docs/ui/themes/",
-      "summary": "A theme: an id, a name and a `ThemeSpec`. The built-in ones are associated constants; `Theme::custom` makes your own.",
+      "summary": "A theme: an id, a name and a `ThemeSpec`. The built-in ones are associated constants; `Theme::custom` makes your own, `with_shape` gives it a `Shape` and `with_roles` its `Roles`.",
       "group": null,
       "types": [
         "Theme",
+        "Shape",
+        "Corners",
+        "Corner",
+        "TypeScale",
+        "TextStyle",
+        "Face",
+        "Sizes",
+        "ControlSizes",
+        "FieldSizes",
+        "SidebarSizes",
+        "TopbarSizes",
+        "PageSizes",
+        "CardSizes",
+        "Elevation",
+        "Roles",
+        "Inverse",
         "Appearance",
         "Mode",
         "ThemeSetting",
@@ -2730,7 +2746,8 @@
         "themes/menu",
         "themes/inset",
         "themes/floating",
-        "themes/header"
+        "themes/header",
+        "themes/shape"
       ]
     },
     {
@@ -60430,6 +60447,563 @@
                               "tag": "span",
                               "count": 1,
                               "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "themes/shape",
+      "component": "themes",
+      "slug": "shape",
+      "title": "A theme with a shape of its own",
+      "kind": "single",
+      "code": "let shell = crm().appearance(Appearance::new(shaped_theme(), Mode::Light));\ndeals(shell.page(\"Deals\", \"/deals\")).body(Card::titled(\"Pipeline\").body(\n    Stack::gap(3).children((\n        Row::gap(2).wrap().children((\n            Input::search(\"q\").placeholder(\"Search deals\"),\n            Button::new(\"Filter\").variant(ButtonVariant::Outline),\n            Badge::new(\"Won\").variant(BadgeVariant::Success),\n            Badge::new(\"Open\"),\n        )),\n        Alert::new(AlertTone::Warning).title(\"Three deals close this week.\"),\n    )),\n))",
+      "src": "/ui-preview/themes/shape.html",
+      "height": 620,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "fit": false,
+      "scripts": [
+        "sidebar-366c16d19fc8.js",
+        "overlay-d30ab67a4ddf.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sidebar-wrapper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sidebar",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sidebar-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-logo",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-brand-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-brand-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-brand-context",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-content",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-group-label",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-menu",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-item",
+                              "tag": "a",
+                              "count": 4,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-count",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "sidebar-sub",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "sidebar-sub-item",
+                                  "tag": "a",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "sidebar-label",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-user",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "avatar",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sidebar-user-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-user-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-user-email",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-link",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sidebar-overlay",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sidebar-inset",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "topbar",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "breadcrumb",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "topbar-spacer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "theme-menu-form",
+                          "tag": "form",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "theme-cards",
+                              "tag": "fieldset",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "theme-menu-legend",
+                                  "tag": "legend",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "theme-card",
+                                  "tag": "label",
+                                  "count": 7,
+                                  "children": [
+                                    {
+                                      "slot": "theme-card-input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "theme-swatches",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "theme-swatch",
+                                          "tag": "span",
+                                          "count": 3,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "theme-card-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "theme-card-name",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "theme-card-description",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "theme-modes",
+                              "tag": "fieldset",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "theme-menu-legend",
+                                  "tag": "legend",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "theme-mode-group",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "theme-mode",
+                                      "tag": "label",
+                                      "count": 3,
+                                      "children": [
+                                        {
+                                          "slot": "theme-mode-input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "page",
+                  "tag": "main",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "page-title",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "page-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "grid",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "stat",
+                          "tag": "div",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "stat-label",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "stat-value",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "stat-trend",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "card",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "card-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "card-title",
+                              "tag": "h2",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "card-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stack",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "row",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "badge",
+                                      "tag": "span",
+                                      "count": 2,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "alert",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "alert-title",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
                             }
                           ]
                         }

@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "d7b3d75d699b";
+pub const BUILD: &str = "155c00e56d3f";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-8984b59d1fec.js";
@@ -98,7 +98,7 @@ pub const PHONE_URL: &str = "/_navree/ui/phone-e7a815361487.js";
 pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-957b1e028c79.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-7d8ad667768d.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -107,7 +107,7 @@ pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
 pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-28cded4d619c.css";
 
 /// The URL of `markdown.css`.
-pub const MARKDOWN_URL: &str = "/_navree/ui/markdown-d0ca9ef3eb37.css";
+pub const MARKDOWN_URL: &str = "/_navree/ui/markdown-f55df33329fd.css";
 
 /// The URL of `upload-styles.css`.
 pub const UPLOAD_STYLES_URL: &str = "/_navree/ui/upload-styles-7f4953470d44.css";
@@ -122,7 +122,7 @@ pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-46da85c6d8a4.
 pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-7b8f9c0c97ba.css";
 
 /// The URL of `charts-styles.css`.
-pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-731c25be066b.css";
+pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-52976e599526.css";
 
 /// The URL of `chart-paint.css`.
 pub const CHART_PAINT_URL: &str = "/_navree/ui/chart-paint-6133a5ac46b9.css";
@@ -140,29 +140,29 @@ pub const CHART_GRIDS_URL: &str = "/_navree/ui/chart-grids-70741be83598.css";
 pub const APP_BLOCKS_URL: &str = "/_navree/ui/app-blocks-019da61ba75f.css";
 
 /// The URL of `parts-styles.css`.
-pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-d81644e15d78.css";
+pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-baa6f1ef2002.css";
 
 /// The URL of `sortable-grid-styles.css`.
 pub const SORTABLE_GRID_STYLES_URL: &str = "/_navree/ui/sortable-grid-styles-c22d032878e6.css";
 
 /// The URL of `marketing.css`.
-pub const MARKETING_URL: &str = "/_navree/ui/marketing-f051192c072e.css";
+pub const MARKETING_URL: &str = "/_navree/ui/marketing-7c33e837cc3f.css";
 
 /// The URL of `table-styles.css`.
-pub const TABLE_STYLES_URL: &str = "/_navree/ui/table-styles-b8d141ebcbb8.css";
+pub const TABLE_STYLES_URL: &str = "/_navree/ui/table-styles-5046236cf239.css";
 
 /// The URL of `select-styles.css`.
-pub const SELECT_STYLES_URL: &str = "/_navree/ui/select-styles-0ab4c2f349e5.css";
+pub const SELECT_STYLES_URL: &str = "/_navree/ui/select-styles-fc80817ad790.css";
 
 /// The URL of `phone-styles.css`.
 #[cfg(feature = "phone")]
-pub const PHONE_STYLES_URL: &str = "/_navree/ui/phone-styles-c1ecf192eb6c.css";
+pub const PHONE_STYLES_URL: &str = "/_navree/ui/phone-styles-d71f81be2292.css";
 
 /// The URL of `slider-styles.css`.
 pub const SLIDER_STYLES_URL: &str = "/_navree/ui/slider-styles-c68078b420ec.css";
 
 /// The URL of `menus-styles.css`.
-pub const MENUS_STYLES_URL: &str = "/_navree/ui/menus-styles-8ce6d31c7e84.css";
+pub const MENUS_STYLES_URL: &str = "/_navree/ui/menus-styles-2cad8c4fa6e3.css";
 
 /// The URL of `split-styles.css`.
 pub const SPLIT_STYLES_URL: &str = "/_navree/ui/split-styles-7cb3a5a9232d.css";
@@ -468,7 +468,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "957b1e028c79",
+        hash: "7d8ad667768d",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -495,7 +495,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "markdown",
         ext: "css",
-        hash: "d0ca9ef3eb37",
+        hash: "f55df33329fd",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/markdown.css"),
         gzip: Some(include_bytes!("../dist/markdown.css.gz")),
@@ -540,7 +540,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "charts-styles",
         ext: "css",
-        hash: "731c25be066b",
+        hash: "52976e599526",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/charts-styles.css"),
         gzip: Some(include_bytes!("../dist/charts-styles.css.gz")),
@@ -594,7 +594,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "parts-styles",
         ext: "css",
-        hash: "d81644e15d78",
+        hash: "baa6f1ef2002",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/parts-styles.css"),
         gzip: Some(include_bytes!("../dist/parts-styles.css.gz")),
@@ -612,7 +612,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "marketing",
         ext: "css",
-        hash: "f051192c072e",
+        hash: "7c33e837cc3f",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/marketing.css"),
         gzip: Some(include_bytes!("../dist/marketing.css.gz")),
@@ -621,7 +621,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "table-styles",
         ext: "css",
-        hash: "b8d141ebcbb8",
+        hash: "5046236cf239",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/table-styles.css"),
         gzip: Some(include_bytes!("../dist/table-styles.css.gz")),
@@ -630,7 +630,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "select-styles",
         ext: "css",
-        hash: "0ab4c2f349e5",
+        hash: "fc80817ad790",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/select-styles.css"),
         gzip: Some(include_bytes!("../dist/select-styles.css.gz")),
@@ -640,7 +640,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "phone-styles",
         ext: "css",
-        hash: "c1ecf192eb6c",
+        hash: "d71f81be2292",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/phone-styles.css"),
         gzip: Some(include_bytes!("../dist/phone-styles.css.gz")),
@@ -658,7 +658,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "menus-styles",
         ext: "css",
-        hash: "8ce6d31c7e84",
+        hash: "2cad8c4fa6e3",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/menus-styles.css"),
         gzip: Some(include_bytes!("../dist/menus-styles.css.gz")),
