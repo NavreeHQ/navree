@@ -30,6 +30,12 @@ pub fn all() -> Vec<Example> {
             "Vertical",
             button_group_vertical
         ),
+        single!(
+            "button-group",
+            "segmented",
+            "Segmented links",
+            button_group_segmented
+        ),
         single!("toggle", "thumb", "Toggles", toggle_thumb),
         single!("toggle", "default", "Toggles", toggle_default),
         gallery!("toggle", "states", "States", toggle_states),
@@ -59,6 +65,10 @@ fn button_variants() -> impl IntoIterator<Item = (&'static str, Button)> {
         ("Outline", Button::outline("Save")),
         ("Ghost", Button::ghost("Save")),
         ("Destructive", Button::destructive("Delete")),
+        (
+            "Destructive outline",
+            Button::new("Delete deal").variant(ButtonVariant::DestructiveOutline),
+        ),
         (
             "Link",
             Button::new("Read more").variant(ButtonVariant::Link),
@@ -145,6 +155,13 @@ fn button_group_vertical() -> ButtonGroup {
     ButtonGroup::new("Zoom").vertical().children((
         Button::icon_only(icons::PLUS, "Zoom in").variant(ButtonVariant::Outline),
         Button::icon_only(icons::MINUS, "Zoom out").variant(ButtonVariant::Outline),
+    ))
+}
+
+fn button_group_segmented() -> ButtonGroup {
+    ButtonGroup::new("Mode").segmented().children((
+        Button::new("Mine").href("/deals/mine").current(true),
+        Button::new("Team").href("/deals/team"),
     ))
 }
 

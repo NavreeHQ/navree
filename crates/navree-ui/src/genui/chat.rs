@@ -1153,13 +1153,17 @@ impl Conversation {
     }
 }
 
+/// One conversation of a [`ThreadList`]: its title, its page and whether it is the open one.
+type Thread = (String, LocalHref, bool);
+
 /// A reader's conversations, newest first, each a link to its page; the open one is
 /// marked as the current page.
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct ThreadList {
     label: String,
-    threads: Vec<(String, LocalHref, bool)>,
+    threads: Vec<Thread>,
+    groups: Vec<(String, Vec<Thread>)>,
 }
 
 impl ThreadList {
@@ -1168,6 +1172,7 @@ impl ThreadList {
         Self {
             label: label.into(),
             threads: Vec::new(),
+            groups: Vec::new(),
         }
     }
 
@@ -1183,22 +1188,79 @@ impl ThreadList {
         self
     }
 
+    /// Adds conversations under a heading of their own, such as "Today" and "Earlier": each
+    /// thread a `(title, href, current)` as [`thread`](Self::thread) takes it. The group is
+    /// a list named by its label, after the threads given without one.
+    ///
+    /// ```
+    /// use navree_ui::genui::ThreadList;
+    /// use navree_ui::render;
+    ///
+    /// let list = ThreadList::new("Your conversations")
+    ///     .group("Today", [("Refunds this week", "/assistant/7", true)])
+    ///     .group("Earlier", [("GST summary for October", "/assistant/5", false)]);
+    /// let html = render(&list.into());
+    /// assert!(html.contains(r#"<ul role="list" aria-labelledby="#));
+    /// assert!(html.contains(">Earlier</p>"));
+    /// ```
+    pub fn group<T, H>(
+        mut self,
+        label: impl Into<String>,
+        threads: impl IntoIterator<Item = (T, H, bool)>,
+    ) -> Self
+    where
+        T: Into<String>,
+        H: Into<LocalHref>,
+    {
+        self.groups.push((
+            label.into(),
+            threads
+                .into_iter()
+                .map(|(title, href, current)| (title.into(), href.into(), current))
+                .collect(),
+        ));
+        self
+    }
+
     fn into_node(self) -> Node {
-        let items: Vec<Node> = self
-            .threads
+        let items = |threads: Vec<Thread>| -> Vec<Node> {
+            threads
+                .into_iter()
+                .map(|(title, href, current)| {
+                    let link = el("a")
+                        .attr("href", href.as_str().to_owned())
+                        .attr_opt("aria-current", current.then_some("page"))
+                        .child(cut(&title, 80));
+                    el("li").child(link).into()
+                })
+                .collect()
+        };
+        // With no group, the one list it always was.
+        let plain = (self.groups.is_empty() || !self.threads.is_empty())
+            .then(|| el("ul").attr("role", "list").child(items(self.threads)));
+        let id = id_part(&self.label);
+        let groups: Vec<Node> = self
+            .groups
             .into_iter()
-            .map(|(title, href, current)| {
-                let link = el("a")
-                    .attr("href", href.as_str().to_owned())
-                    .attr_opt("aria-current", current.then_some("page"))
-                    .child(cut(&title, 80));
-                el("li").child(link).into()
+            .enumerate()
+            .map(|(at, (label, threads))| {
+                let heading = format!("threads-{id}-{at}");
+                el("div")
+                    .attr("data-genui", "thread-group")
+                    .children((
+                        el("p").attr("id", heading.clone()).child(label),
+                        el("ul")
+                            .attr("role", "list")
+                            .attr("aria-labelledby", heading)
+                            .child(items(threads)),
+                    ))
+                    .into()
             })
             .collect();
         el("nav")
             .attr("data-genui", "threads")
             .attr("aria-label", self.label)
-            .child(el("ul").attr("role", "list").child(items))
+            .children((plain, groups))
             .into()
     }
 }

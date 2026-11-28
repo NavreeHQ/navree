@@ -267,6 +267,10 @@ pub struct StateLabels {
     pub caught_up: Cow<'static, str>,
     /// "There is nothing left to do here."
     pub caught_up_help: Cow<'static, str>,
+    /// "You're acting as another user.", on an error page shown during an impersonation.
+    pub impersonating: Cow<'static, str>,
+    /// "Stop impersonating": the button that ends an impersonation.
+    pub stop_impersonating: Cow<'static, str>,
 }
 
 impl Default for StateLabels {
@@ -378,6 +382,8 @@ impl Default for StateLabels {
             clear_filters: "Clear filters".into(),
             caught_up: "You're all caught up".into(),
             caught_up_help: "There is nothing left to do here.".into(),
+            impersonating: "You're acting as another user.".into(),
+            stop_impersonating: "Stop impersonating".into(),
         }
     }
 }

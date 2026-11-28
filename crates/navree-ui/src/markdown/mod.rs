@@ -232,6 +232,7 @@ pub struct CodeBlock {
     language: String,
     code: String,
     copy: bool,
+    inverse: bool,
     labels: MarkdownLabels,
 }
 
@@ -242,6 +243,7 @@ impl CodeBlock {
             language: clean_language(language.as_ref()),
             code: code.into(),
             copy: false,
+            inverse: false,
             labels: MarkdownLabels::default(),
         }
     }
@@ -252,6 +254,21 @@ impl CodeBlock {
         self
     }
 
+    /// Draws the block on the inverse surface: a dark code panel on a light page, a light one
+    /// on a dark page, its text, its colours and its copy button reading the theme's other
+    /// palette, or the inverse colours of its [`Roles`](crate::theme::Roles::inverse).
+    ///
+    /// ```
+    /// use navree_ui::{CodeBlock, render};
+    ///
+    /// let html = render(&CodeBlock::new("sh", "navree dev").copy_button().inverse().into());
+    /// assert!(html.starts_with(r#"<div data-slot="code-block" data-inverse>"#));
+    /// ```
+    pub fn inverse(mut self) -> Self {
+        self.inverse = true;
+        self
+    }
+
     /// Sets the words.
     pub fn labels(mut self, labels: MarkdownLabels) -> Self {
         self.labels = labels;
@@ -259,13 +276,25 @@ impl CodeBlock {
     }
 
     fn into_node(self) -> Node {
-        code_block(&self.language, &self.code, self.copy, &self.labels)
+        code_block(
+            &self.language,
+            &self.code,
+            self.copy,
+            &self.labels,
+            self.inverse,
+        )
     }
 }
 
 into_node!(CodeBlock);
 
-fn code_block(language: &str, code: &str, copy: bool, labels: &MarkdownLabels) -> Node {
+fn code_block(
+    language: &str,
+    code: &str,
+    copy: bool,
+    labels: &MarkdownLabels,
+    inverse: bool,
+) -> Node {
     let shown = code.strip_suffix('\n').unwrap_or(code);
     let inside: Vec<Node> = match highlight::highlight(language, shown) {
         Some(nodes) => nodes,
@@ -292,6 +321,7 @@ fn code_block(language: &str, code: &str, copy: bool, labels: &MarkdownLabels) -
     });
     el("div")
         .slot("code-block")
+        .flag("data-inverse", inverse)
         .uses(Uses::MARKDOWN)
         .children((
             bar,
@@ -388,7 +418,13 @@ impl Writer<'_> {
                 );
             }
             Item::CodeBlock(block) => {
-                let node = code_block(&block.language, &block.code, self.md.copy, &self.md.labels);
+                let node = code_block(
+                    &block.language,
+                    &block.code,
+                    self.md.copy,
+                    &self.md.labels,
+                    false,
+                );
                 self.add(node);
             }
             Item::Image(image) => {

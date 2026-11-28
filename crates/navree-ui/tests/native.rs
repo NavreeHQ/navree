@@ -2504,6 +2504,41 @@ fn an_auth_page_is_a_screen_only_where_it_gives_the_client_a_call() {
 }
 
 #[test]
+fn an_auth_page_with_a_brand_and_a_footer_is_still_a_screen_where_it_gives_a_call() {
+    use navree_ui::marketing::Brand;
+    use navree_ui::{AuthLayout, NativeCall, NativeProvider, Stack};
+    let page = || {
+        let call = NativeCall::provider_sign_in(
+            NativeProvider::Apple,
+            "/api/auth/social/apple/native/nonce",
+            "/api/auth/social/apple/native/session",
+        );
+        let column = Stack::gap(4).children((
+            el("h1").slot("page-title").child("Sign in"),
+            Button::outline("Sign in with Apple").native_call(call),
+        ));
+        View::new("Sign in").body(
+            AuthLayout::new(column)
+                .aside(Text::new("Orders, packed and tracked."))
+                .aside_end()
+                .brand(Brand::new("Sutlej Supply", "/"))
+                .footer(Text::muted("Every sign-in is checked for a new device.")),
+        )
+    };
+    // The brand over the column is a browser's, as the panel is; the line at its foot is
+    // the column's, said after the form.
+    let native = TestNative::build(with_caps(Platform::Ios, &["platform_sign_in"]), page);
+    assert!(native.is_native(), "{:?}", native.why());
+    assert!(native.sees("Every sign-in is checked for a new device."));
+    assert!(!native.sees("Orders, packed and tracked."));
+    assert_eq!(native.page().dropped, ["auth-aside", "auth-brand"]);
+    assert!(matches!(
+        native.tap("Sign in with Apple"),
+        Some(Action::Device(_))
+    ));
+}
+
+#[test]
 fn a_link_a_browser_reloads_the_page_for_is_a_plain_link_to_a_native_client() {
     let page = TestNative::of(
         &View::new("Sign in").body(
@@ -3126,4 +3161,45 @@ fn an_action_that_asks_first_carries_its_question_and_a_hook_no_reader_knows_is_
         .flag("data-ui-wizard", true)
         .into();
     assert_eq!(lower(&node).why(), ["hook:data-ui-wizard"]);
+}
+
+#[test]
+fn a_page_gives_a_native_screen_its_subtitle_and_its_top_bar_actions() {
+    let page = |more: bool| {
+        move || {
+            let page = shell()
+                .for_request("/orders/1", &http::HeaderMap::new())
+                .page("Order CS-20481")
+                .crumb("Orders", "/orders")
+                .actions(Button::primary("Print").href("/orders/1/print"))
+                .body(Text::new("Two items, paid"));
+            let page = if more {
+                page.subtitle("Placed on 12 Nov by Tanvi Sharma")
+                    .topbar_actions(Button::outline("Download invoice").href("/orders/1/invoice"))
+            } else {
+                page
+            };
+            page.to_view()
+        }
+    };
+    let native = TestNative::build(with_caps(Platform::Ios, &[]), page(true));
+    assert!(native.is_native(), "{:?}", native.why());
+    assert_eq!(
+        native.screen().subtitle.as_deref(),
+        Some("Placed on 12 Nov by Tanvi Sharma")
+    );
+    // The top bar's actions come after the page's own, in one row.
+    assert_eq!(native.screen().actions.len(), 2);
+    assert_eq!(
+        native.tap("Print"),
+        Some(Action::navigate("/orders/1/print"))
+    );
+    assert_eq!(
+        native.tap("Download invoice"),
+        Some(Action::navigate("/orders/1/invoice"))
+    );
+    // A page that says neither gets the screen it got.
+    let plain = TestNative::build(with_caps(Platform::Ios, &[]), page(false));
+    assert!(plain.screen().subtitle.is_none());
+    assert_eq!(plain.screen().actions.len(), 1);
 }

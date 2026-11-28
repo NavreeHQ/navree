@@ -1078,6 +1078,10 @@ name = "ui_auth_browser"
 required-features = ["access", "auth", "browser", "crypto", "db", "http", "session", "sqlite", "testing", "ui", "workspace"]
 
 [[test]]
+name = "ui_auth_pages_browser"
+required-features = ["access", "auth", "browser", "crypto", "db", "http", "session", "sqlite", "testing", "ui"]
+
+[[test]]
 name = "ui_auth_session"
 required-features = ["access", "auth", "crypto", "db", "http", "session", "sqlite", "testing", "ui"]
 

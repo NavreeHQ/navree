@@ -33,6 +33,21 @@ Use a popover for a few controls that belong to one button: a quick edit, a filt
 
 <UiPreview example="popover/sides" />
 
+## A button with a name of its own
+
+`.label(..)` names the popup. When the button shows something that doesn't say what it opens, such as a count, `.trigger_label(..)` names the button for assistive technology. `Popover::icon_only(id, icon, label)` draws a square button showing the icon alone, named by `label`, as a ghost button unless `.variant(..)` says otherwise.
+
+```rust
+use navree::ui::*;
+
+Row::gap(2).children((
+    Popover::icon_only("alerts", icons::BELL, "Notifications").body("Nothing new."),
+    Popover::new("inbox", "3").trigger_label("3 new messages").body("Three messages."),
+))
+```
+
+<UiPreview example="popover/icon" />
+
 ## Keyboard and accessibility
 
 <UiA11y>

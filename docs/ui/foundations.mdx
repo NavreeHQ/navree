@@ -23,6 +23,8 @@ Every token has a light value and a dark one, and a page shows one or the other 
 | `violet`, `cyan`, `rose` | Tones for labels |
 | `chart-1` to `chart-8`, `bar` | Chart series, in the order series take them, and neutral bars |
 
+A theme of your own can give some of what one token paints a colour of its own, with its [colour roles](/docs/ui/themes/#colour-roles): cards and fields apart from the sidebar (`--card`, `--field`, behind which stays `ink-1`), a ghost button's text (`--ghost-fg`), the sidebar's quieter text (`--shell-muted`), segmented tabs (`--segment-track`, `--segment-on`) and a selected row (`--row-selected`). Each is checked as the token it stands in for. A part marked as the inverse surface is drawn on the theme's other palette: a dark card on a light page.
+
 - **Green is for one thing at a time:** the primary action of a view, the focus ring, and good news (a won deal, a rising figure). Navigation, selection and hover use the ink steps, never green.
 - **Amber warns, red fails or destroys.** A destructive button and a failed alert are red; a warning is amber.
 - **Contrast is tested.** Every text and background pair the toolkit uses reaches 4.5:1 in both modes of every built-in theme, and the focus ring and chart colours reach 3:1, checked by a test in the crate and measured again in real browsers. The chart colours are also measured as a set: each stays apart from the next for readers with protanopia or deuteranopia and for everyone else, sits in one band of lightness, and has enough colour not to read as grey.
@@ -31,13 +33,32 @@ Every token has a light value and a dark one, and a page shows one or the other 
 
 ## Corners
 
-Controls (buttons, inputs, badges, menu items, avatars) have 4 px corners, `--radius`. Surfaces (cards, popovers, dialogs) have 6 px, `--radius-lg`. Nothing is a pill.
+Controls (buttons, inputs, badges, menu items, avatars) have 4 px corners, `--radius`. Surfaces (cards, popovers, dialogs) have 6 px, `--radius-lg`. A theme's `Radius` sets both, from square to 8 and 12 px. A theme of your own can also give each kind of part a corner of its own, from 0 to 32 px or a pill, with the `Corners` of its [shape](/docs/ui/themes/#a-themes-shape): pill buttons and badges, 12 px inputs and 16 px cards, say. A part it doesn't set keeps `--radius` or `--radius-lg`.
+
+```rust
+use navree::ui::theme::{Corner, Corners, Shape, Theme, ThemeId};
+
+/// Pill buttons and badges, 12 px fields and 16 px cards, on Ocean's colours.
+pub fn rounded_theme() -> Theme {
+    let shape = Shape::new().corners(
+        Corners::new()
+            .button(Corner::Pill)
+            .badge(Corner::Pill)
+            .field(Corner::Px(12))
+            .card(Corner::Px(16)),
+    );
+    Theme::OCEAN
+        .renamed(ThemeId::parse("rounded").expect("a theme id"), "Rounded")
+        .with_shape(shape)
+        .expect("every value of the shape in range")
+}
+```
 
 <UiPreview example="foundations/radius" />
 
 ## Sizes
 
-Controls are 32 px tall by default, on a 4 px grid. `Size::Xs`, `Sm` and `Lg` make a control 24, 28 or 36 px. Buttons, toggles, avatars and a popover's button take a `Size`.
+Controls are 32 px tall by default, on a 4 px grid. `Size::Xs`, `Sm` and `Lg` make a control 24, 28 or 36 px. Buttons, toggles, avatars, inputs and a popover's button take a `Size`. A theme of your own can say what each step is, in pixels, with the [sizes](/docs/ui/themes/#sizes) of its shape: 36 px buttons and 44 px fields, say, and the sidebar's width, the top bar's height and the page's padding with them.
 
 <UiPreview example="foundations/sizes" />
 
@@ -47,11 +68,15 @@ Controls are 32 px tall by default, on a 4 px grid. `Size::Xs`, `Sm` and `Lg` ma
 
 ## Type
 
-Body text is 14 px Geist and secondary text 13 px. A theme may set its text in a system stack instead (System, Humanist, Geometric or Serif), which downloads nothing. Headings are semibold: `h1` is 24 px, `h2` 20 px, `h3` 16 px and `h4` 14 px. Geist is the toolkit's one web font, self-hosted, preloaded and shown with `font-display: optional`, so text never reflows when it arrives. Code and other monospace text use the system's monospace font, which costs no download. See [Heading and Text](/docs/components/typography/).
+Body text is 14 px Geist and secondary text 13 px. A theme may set its text in a system stack instead (System, Humanist, Geometric or Serif), which downloads nothing. Headings are semibold: `h1` is 24 px, `h2` 20 px, `h3` 16 px and `h4` 14 px. Headings to `h3`, the page title and the brand draw in the display face, `--font-display`, which is the text face until the app gives one of its own (`AppFont::as_face`). A theme of your own sets the size, line height, weight, tracking and face of each kind of text with the [type scale](/docs/ui/themes/#type) of its shape. Geist is the toolkit's one web font, self-hosted, preloaded and shown with `font-display: optional`, so text never reflows when it arrives. Code and other monospace text use the system's monospace font, which costs no download. See [Heading and Text](/docs/components/typography/).
 
 ## Density
 
-A theme's density scales controls and space together while text keeps its size: compact at 7/8 (28 px controls), default, and comfortable at 9/8 (36 px). A [Table](/docs/components/table/) row is 40 px tall with 12 px of cell padding. A [DataTable](/docs/ui/data-table/) row is 48 px; the reader can make rows compact (36 px) or spacious (60 px) from the table's own controls. Pages have 24 px of padding.
+A theme's density scales controls and space together while text keeps its size: compact at 7/8 (28 px controls), default, and comfortable at 9/8 (36 px). A size a theme's shape sets in pixels keeps its pixels under every density. A [Table](/docs/components/table/) row is 40 px tall with 12 px of cell padding. A [DataTable](/docs/ui/data-table/) row is 48 px; the reader can make rows compact (36 px) or spacious (60 px) from the table's own controls. Pages have 24 px of padding.
+
+## Elevation
+
+Parts are flat, with a border: no shadow and no glow. A theme of your own can give raised parts (the chosen segmented tab, the current link) and floating ones (popovers, menus, dialogs) two soft shadows with the [elevation](/docs/ui/themes/#elevation) of its shape, `--shadow-raised` and `--shadow-floating`.
 
 ## Layout and the shell
 

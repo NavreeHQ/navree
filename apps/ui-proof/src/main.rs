@@ -12,6 +12,7 @@
 //! | `/` | a dashboard: stats, a lazy region, a polling region |
 //! | `/deals?per_page=1000` | the 1,000-row table: sort, filter, page in the URL, morphed |
 //! | `/deals/new` | the deal form |
+//! | `/forms/parts` | a form's own parts: a submit button of the app's own, option cards in a field's place, a mono field and fields a size larger, in a theme that follows the device |
 //! | `/plain` | a page with nothing interactive: no script at all |
 //! | `/gallery` | every component in its states |
 //! | `/menus` | tabs, toggle groups, dropdown menus and toasts in their states |
@@ -23,6 +24,8 @@
 //! | `/themes/layouts/{layout}` | the same page in each layout, folding three ways |
 //! | `/themes/builder` | the theme builder, saving to memory and importing |
 //! | `/themes/scopes` | the app's, a workspace's (locked or not) and a user's choice |
+//! | `/themes/shaped` | a theme with a shape and colour roles, and the inverse surface |
+//! | `/shell/options` | a shell with a bare and dark mark, a badge, a workspace switcher drawn as a card, a slot above the person, the person's initials, top bar actions, badges and a subtitle by the title; `?mono` for a mono title and crumb |
 //! | `/pages` | error pages, sign-in and the states inside a page, in every case |
 //! | `/flow` | the stepper, slider, tree view and toolbar in every state, and a wizard at `/flow/wizard/start` |
 //! | `/markdown` | Markdown and code blocks: a reply, tables, links, pictures, raw HTML, code in every language, and `/markdown/render?text=` for any text |
@@ -32,8 +35,10 @@
 //! | `/charts` | every chart type in its states; `/charts/report` a report over a window |
 //! | `/charts/grids` | the calendar and matrix heat maps and the scatter plot in every state |
 //! | `/app-blocks` | the app's own stylesheet and typeface, figure tiles, an info tip, chart skeletons, a breathing guide, a dock, a day pager and a view switcher |
+//! | `/auth-layouts` | the page of a sign-in form: the panel first or after it, flush or inset and inverse, a brand and a footer, a form with no card and links as buttons, `?case=` one of them |
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
 //! | `/extensions` | components of the app's own and of a plugin: mounting, new props and leaving, owned bodies and the seal, calls to the app's routes, a script that asks for another site's file, a sheet scoped to its components, pages that start clean, an inline editor with a control of a plugin's own, and the plugin's map |
+//! | `/looks` | the looks a component takes when asked, in a shaped theme and in the built-in one (`/looks/plain`), and on the inverse surface |
 //! | `/parts` | the small parts of the base components, the colour picker, an avatar group, a trace, a questionnaire, a select with flags, flags by pointer and a sparkline in each row |
 //! | `/site` | a public website of marketing blocks: home, pricing, privacy, contact, sitemap and robots |
 //! | `/widgets` | a home-screen widget builder: a sortable grid of tiles, saved as they move, and the widget drawn as a PNG on the server |
@@ -53,6 +58,7 @@ use navree::ui::{NavGroup, NavItem, PagesOptions, Shell, UiModule, UserMenu, ico
 
 mod agra_theme;
 mod app_blocks;
+mod auth_layouts;
 mod bench;
 mod charts;
 mod compare;
@@ -63,10 +69,12 @@ mod deals;
 mod display;
 mod extensions;
 mod flow;
+mod form_parts;
 mod gallery;
 mod grids;
 mod icons_flags;
 mod islands;
+mod looks;
 mod markdown;
 mod menubar;
 mod menus;
@@ -75,6 +83,7 @@ mod pages;
 mod parts;
 mod phone;
 mod select;
+mod shell_options;
 mod site;
 mod themes;
 mod upload;
@@ -158,7 +167,9 @@ impl Module for ProofModule {
             .controller::<menubar::BarPages>()
             .controller::<phone::PhonePages>()
             .controller::<display::DisplayPages>()
+            .controller::<form_parts::FormPartsPages>()
             .controller::<themes::ThemePages>()
+            .controller::<shell_options::ShellPages>()
             .controller::<pages::Pages>()
             .controller::<flow::FlowPages>()
             .controller::<otp_carousel::CodePages>()
@@ -168,10 +179,12 @@ impl Module for ProofModule {
             .controller::<charts::ChartPages>()
             .controller::<grids::GridPages>()
             .controller::<app_blocks::AppBlockPages>()
+            .controller::<auth_layouts::AuthLayoutPages>()
             .controller::<islands::IslandPages>()
             .controller::<extensions::ExtensionPages>()
             .controller::<compare::ComparePages>()
             .controller::<parts::PartsPages>()
+            .controller::<looks::LookPages>()
             .controller::<site::SitePages>()
             .controller::<widgets::WidgetPages>();
         // The script the islands page draws its island with, served by the toolkit.
@@ -186,6 +199,8 @@ impl Module for ProofModule {
         m.contribute(app_blocks::BRAND);
         m.contribute(app_blocks::FONT);
         m.contribute(app_blocks::MARK);
+        m.contribute(shell_options::MARK_DARK);
+        m.contribute(themes::DISPLAY);
     }
 }
 

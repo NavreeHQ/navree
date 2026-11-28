@@ -50,11 +50,40 @@ m.contribute(ErrorShell::new(|request| async move { shell_for(request.user).awai
 
 The builder runs only for an error, and it has one second. One that is slower, that panics or that returns `None` leaves the page on its own, with no sidebar, and never turns the answer into JSON.
 
+The shell is applied to the request's path and query, as on any of its pages: a theme or a mode asked for in the address (`?theme=ocean&mode=light`) holds on an error page too, and the reader's choice in the theme cookie does as well.
+
 A module of a plugin that is not one of the framework's own packages may contribute neither error pages (`m.error_pages`) nor an `ErrorShell`, and the boot stops if one does: the app registers such a plugin's pages, or its shell, from a module of its own.
 
 A guest gets a page on its own: the same stylesheet, one `h1` and no script. So does a 401, a 429 and a 503 for anyone, because those must work when much else does not, and so does a panic. The page carries the build, so a boosted link to it is shown in place and costs one request.
 
 After a form posted without JavaScript, the page offers Home and a plain sign-in, and no Reload or Try again: a link would repeat the request as a `GET` of an address that only takes a `POST`.
+
+### Your app's look on a page on its own
+
+A page on its own is drawn in Navree's own look unless you ask for yours. `PagesOptions::shell_look()` draws it in the look of your registered `Shell`: its default appearance, the themes it offers, its stylesheets and typefaces, and its title template ("Page not found · Kesar"). The reader's theme cookie and a `?theme=` or `?mode=` in the address lie over the appearance, as on any page of the shell. The page keeps its own `h1` and still runs no script.
+
+```rust
+UiModule::with_pages(PagesOptions::default().shell_look().offer_sign_in(true))
+```
+
+An app that builds its shell for each request, with an `ErrorShell`, gives the look itself: `.appearance(Appearance::new(Theme::OCEAN, Mode::Light))`, `.stylesheet(&SHEET)` and `.font(&FACE)` on `PagesOptions`. `.offer_sign_in(true)` adds Sign in beside a guest's own actions, so someone signed out who lands on a missing page can get back in; the 401 page has it already.
+
+### During an impersonation
+
+When an administrator acts as another user, `ErrorContext::impersonator` names the administrator. An `ErrorShell` can read it to put Stop impersonating in the user menu of the shell around the page:
+
+```rust
+m.contribute(ErrorShell::new(|request| async move {
+    let menu = UserMenu::new("Harleen Kaur", "harleen@agra.in").action("Sign out", "/sign-out");
+    let menu = match request.impersonator {
+        Some(_) => menu.action("Stop impersonating", "/impersonate/stop"),
+        None => menu,
+    };
+    request.user.map(|_| Shell::new("Agra").user(menu))
+}));
+```
+
+`PagesOptions::stop_impersonating("/impersonate/stop")` makes the page itself say so, in the shell and on its own: a line that the reader is acting as another user, and a Stop impersonating button, a form that posts to that address with the session's token. `AuthPages` from `navree-auth` serves `/impersonate/stop`. The address must be a path on your site; any other is dropped when the app boots.
 
 ## Sign in, and back to where you were
 

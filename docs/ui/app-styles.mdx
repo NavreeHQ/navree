@@ -5,7 +5,7 @@ description: "An app links its own stylesheet and typefaces from a page, served 
 
 <UiPreview example="app-styles/brand" />
 
-A theme sets the colours, the corners, the density and a text face from a short list. An app that wants its own art direction, a backdrop behind a headline, a typeface of its own, a rhythm the components don't have, adds two files of its own: a stylesheet and a font. The toolkit serves both the way it serves its own, so the page keeps its policy of files from its own origin and nothing inline.
+A theme sets the colours, the corners, the density, a text face from a short list and, for a theme of your own, a [shape](/docs/ui/themes/#a-themes-shape) and [colour roles](/docs/ui/themes/#colour-roles). An app that wants its own art direction, a backdrop behind a headline, a typeface of its own, a rhythm the components don't have, adds two files of its own: a stylesheet and a font. The toolkit serves both the way it serves its own, so the page keeps its policy of files from its own origin and nothing inline.
 
 ```rust
 use navree::prelude::*;
@@ -113,13 +113,23 @@ There is no `style` attribute and no `<style>` element on a Navree page, so the 
 
 `AppFont` is one woff2 file with the rule that names it: the family, the weights it covers (`weight(600)`, or `weights(100, 900)` for a variable font), `italic()`, and what the browser does while it loads (`display(FontDisplay::Swap)` by default). A page that links it preloads the file, so text paints in it on first load, and links the rule. A font that only some pages use is `lazy()`: it is fetched when text that needs it is drawn.
 
-Use the family in the app's sheet, as `font-family: "Fraunces", serif`, or as the page's text face:
+To make it one of the page's faces, give it `as_face`: `Face::Text` draws the page's text in it, `Face::Display` its headings, page title and brand, and `Face::Mono` its code and figures. Its rule then sets the face's custom property (`--font-sans`, `--font-display` or `--font-mono`) with a system stack behind the family, so the page needs no stylesheet of yours for it. A page whose text face is the app's no longer preloads Geist.
 
-```css
-:root {
-  --font-sans: "Fraunces", system-ui, sans-serif;
+```rust
+use navree::ui::theme::Face;
+use navree::ui::*;
+
+/// The bytes stand in for `include_bytes!("../assets/InterTight.woff2")`.
+static HEADINGS: AppFont = AppFont::new("inter-tight", "Inter Tight", b"wOF2....", 200 * 1024)
+    .weights(500, 700)
+    .as_face(Face::Display);
+
+fn faced_shell() -> Shell {
+    Shell::new("Sutlej Fit").font(&HEADINGS)
 }
 ```
+
+A theme's [type scale](/docs/ui/themes/#type) then says which kind of text takes which face. A font that is no face of the page is a family the app's own sheet can name, as `font-family: "Fraunces", serif`.
 
 The file must be woff2, and the family is letters, digits, spaces and `-` only: both are checked when the app compiles, so a rule can't carry anything but a family.
 

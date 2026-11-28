@@ -4,7 +4,7 @@ use super::{Size, icon, root_methods};
 use crate::cmd::Commands;
 use crate::html::Href;
 use crate::icons::Icon;
-use crate::node::{Element, IntoNodes, Node, el, into_node};
+use crate::node::{Element, IntoNodes, Node, Uses, el, into_node};
 
 /// How a button looks.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -23,6 +23,10 @@ pub enum ButtonVariant {
     Destructive,
     /// Looks like a link.
     Link,
+    /// Something that destroys, quieter than [`Destructive`](Self::Destructive): the danger
+    /// colour on no fill, with a faint line of it around, and a thin tint of it on hover. It
+    /// links the looks stylesheet.
+    DestructiveOutline,
 }
 
 /// What a `<button>` does in a form.
@@ -145,6 +149,25 @@ impl Button {
         self
     }
 
+    /// Says this link is the page being shown: `aria-current="page"`, which a screen reader
+    /// reads out. The button is drawn raised, as the chosen item of a
+    /// [segmented](ButtonGroup::segmented) group is. `false` writes nothing.
+    ///
+    /// ```
+    /// use navree_ui::{Button, render};
+    ///
+    /// let mine = Button::new("Mine").href("/deals/mine").current(true);
+    /// assert!(render(&mine.into()).contains(r#"aria-current="page""#));
+    /// let team = Button::new("Team").href("/deals/team").current(false);
+    /// assert!(!render(&team.into()).contains("aria-current"));
+    /// ```
+    pub fn current(mut self, current: bool) -> Self {
+        if current {
+            self.el = self.el.attr("aria-current", "page");
+        }
+        self
+    }
+
     /// Says this link may be fetched ahead of a click (see
     /// [`Element::prefetch`](crate::Element::prefetch)). Only for a link whose `GET`
     /// changes nothing.
@@ -168,6 +191,13 @@ impl Button {
     /// Chromium, each such button that moves makes the form recount its controls across
     /// the whole page, so a thousand rows cost a phone most of a second on every sort.
     pub fn submit(mut self) -> Self {
+        self.kind = ButtonKind::Submit;
+        self
+    }
+
+    /// The button as a form's submit button: it submits, and a link it had is dropped.
+    pub(crate) fn into_submit(mut self) -> Self {
+        self.href = None;
         self.kind = ButtonKind::Submit;
         self
     }
@@ -365,6 +395,9 @@ impl Button {
             ButtonVariant::Ghost => root.attr("data-variant", "ghost"),
             ButtonVariant::Destructive => root.attr("data-variant", "destructive"),
             ButtonVariant::Link => root.attr("data-variant", "link"),
+            ButtonVariant::DestructiveOutline => root
+                .attr("data-variant", "destructive-outline")
+                .uses(Uses::LOOKS),
         };
         root = root
             .attr_opt("data-size", self.size.as_str())
@@ -433,6 +466,34 @@ impl ButtonGroup {
     /// Stacks the buttons.
     pub fn vertical(mut self) -> Self {
         self.el = self.el.attr("data-orientation", "vertical");
+        self
+    }
+
+    /// Draws the group as a segmented control: a track in the theme's segment colour, its
+    /// buttons on it, and the [current](Button::current) one raised in the chosen segment's
+    /// colour, as [segmented tabs](crate::TabsVariant::Segmented) are drawn. Its items are
+    /// often links, one to each place: each stays a link, with a link's keys, and the page
+    /// needs no script. It links the looks stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Button, ButtonGroup, render};
+    ///
+    /// let mode = ButtonGroup::new("Mode").segmented().block().children((
+    ///     Button::new("Mine").href("/deals/mine").current(true),
+    ///     Button::new("Team").href("/deals/team"),
+    /// ));
+    /// let html = render(&mode.into());
+    /// assert!(html.contains(r#"data-variant="segmented""#));
+    /// assert!(html.contains(r#"<a data-slot="button" aria-current="page" href="/deals/mine">"#));
+    /// ```
+    pub fn segmented(mut self) -> Self {
+        self.el = self.el.attr("data-variant", "segmented").uses(Uses::LOOKS);
+        self
+    }
+
+    /// Fills the width, sharing it equally among the buttons. It links the looks stylesheet.
+    pub fn block(mut self) -> Self {
+        self.el = self.el.flag("data-block", true).uses(Uses::LOOKS);
         self
     }
 

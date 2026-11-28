@@ -60,6 +60,8 @@ async fn save(Form(fields): Form<SaveFields>) -> Reply {
 | Font | Geist, which ships with the toolkit, or the System, Humanist, Geometric or Serif stack, which download nothing |
 | Every colour | Each of the 31 colour tokens, light and dark, as `#rgb`, `#rrggbb` or `rgb(r, g, b)` |
 
+The builder sets a theme's spec. What a theme says beyond it, its [shape](/docs/ui/themes/#a-themes-shape) and its [colour roles](/docs/ui/themes/#colour-roles), is set in code with `Theme::with_shape` and `Theme::with_roles`, on the function the Rust export gives you; a theme you import keeps its spec in the draft and leaves the rest out.
+
 An accent you pick fills buttons as picked. What reads on and around it is worked out for you: the text on it is white wherever white reaches 4.5:1 and otherwise a deep shade of its own hue; the accent as text moves toward the page's text until it reaches 4.5:1 on every surface; the focus ring reaches 3:1 on every surface. On hover the accent moves away from its text, so the text reads better on hover, never worse. The chart colours stay the base theme's when you pick an accent: they are one set, chosen so neighbouring series stay apart for colour-blind readers, and an accent dropped into it could repeat a hue. Set them by hand to change them.
 
 ## Export

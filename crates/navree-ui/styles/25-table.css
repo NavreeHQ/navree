@@ -44,12 +44,13 @@
   & thead{border:0}
   & caption{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   & thead th,& thead td{background:var(--ink-1);border-bottom:1px solid var(--line-2)}
-  & th{height:2.75rem;color:var(--fg);font-size:14px}
+  & th{height:2.75rem;color:var(--fg);font-size:var(--text-table-head-size,14px)}
+  &[data-muted-head] :is(th,th a:not(:hover)){color:var(--fg-2)}
   & td{height:var(--row-h);border-top:0;border-bottom:1px solid var(--line);white-space:nowrap}
   & tbody tr:last-child td{border-bottom:0}
   & tbody td{background:var(--ink-1)}
   & tbody tr:hover td{background:var(--ink-2)}
-  & tbody tr[data-selected] td{background:var(--ink-3)}
+  & tbody tr:is([data-selected],[aria-current]) td{background:var(--row-selected,var(--ink-3))}
   & tbody[data-message] td{height:auto;white-space:normal}
   & tbody[data-message] tr:hover td{background:var(--ink-1)}
   & tbody:not([data-message]) td{max-width:28rem;overflow:hidden;text-overflow:ellipsis}

@@ -8,7 +8,7 @@ use std::sync::{Arc, OnceLock};
 use http::{HeaderMap, Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_config::{ConfigModule, ConfigSources};
-use navree_contracts::{AuthVia, Principal};
+use navree_contracts::{AuthVia, Impersonator, Principal};
 use navree_http::body::{Body, Bytes};
 use navree_http::{
     AppRouter, Authenticator, Controller, HttpModule, HttpOptions, ModuleBuilderHttpExt, RouteDef,
@@ -93,7 +93,9 @@ impl Module for TestModule {
     }
 }
 
-/// Authenticates requests carrying `x-user-id: <uuid>`; everyone else is a guest.
+/// Authenticates requests carrying `x-user-id: <uuid>`; everyone else is a guest. A user's
+/// request that also carries `x-impersonator: <uuid>` is an impersonation by that user, as an
+/// impersonation token's `act` claim makes it.
 #[derive(Debug, Default)]
 pub struct HeaderAuthenticator {
     pub calls: AtomicUsize,
@@ -106,17 +108,23 @@ impl Authenticator for HeaderAuthenticator {
     ) -> BoxFuture<'a, Result<Option<Principal>, navree_http::AppError>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async move {
-            Ok(parts
-                .headers
-                .get("x-user-id")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| Uuid::parse_str(v).ok())
-                .map(|user_id| Principal {
-                    user_id,
-                    via: AuthVia::Test,
-                    token_abilities: None,
-                    session_id: None,
-                }))
+            let id = |name: &str| {
+                parts
+                    .headers
+                    .get(name)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| Uuid::parse_str(v).ok())
+            };
+            let principal = id("x-user-id").map(|user_id| Principal {
+                user_id,
+                via: AuthVia::Test,
+                token_abilities: None,
+                session_id: None,
+            });
+            if let (Some(_), Some(by)) = (&principal, id("x-impersonator")) {
+                parts.extensions.insert(Impersonator(by));
+            }
+            Ok(principal)
         })
     }
 }

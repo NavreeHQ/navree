@@ -1,7 +1,7 @@
 //! Charts drawn on the server as SVG: [`Chart`] (line, area and bar, vertical and
-//! horizontal, grouped and stacked), [`Donut`], [`Sparkline`] and [`Funnel`], the
-//! grids and points ([`CalendarHeatmap`], [`MatrixHeatmap`], [`RelationList`] and
-//! [`Scatter`]), and
+//! horizontal, grouped and stacked), [`Donut`], [`Sparkline`], [`Funnel`] and [`Waterfall`], the
+//! grids and points ([`Heatmap`], [`CalendarHeatmap`], [`MatrixHeatmap`], [`RelationList`]
+//! and [`Scatter`]), and
 //! [`Report`], which reads a date range from the URL, picks a grain and buckets a
 //! query by it.
 //!
@@ -65,6 +65,7 @@ mod scale;
 mod sparkline;
 mod strip;
 mod value;
+mod waterfall;
 
 pub use axes::{Axis, Domain, Gridlines, Ticks};
 pub use cartesian::{Annotation, At, Chart, Merge, Series};
@@ -73,8 +74,8 @@ pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
 pub use funnel::{Funnel, MAX_STAGES, Stage};
 pub use grids::{
-    CalendarHeatmap, GridLabels, HeatSteps, MAX_RELATIONS, MatrixHeatmap, PointSeries, Relation,
-    RelationList, Scatter,
+    CalendarHeatmap, GridLabels, HeatSteps, Heatmap, MAX_HEAT_COLUMNS, MAX_HEAT_ROWS,
+    MAX_RELATIONS, MatrixHeatmap, PointSeries, Relation, RelationList, RowSummary, Scatter,
 };
 pub use linear::{LinearLabels, MAX_PARTS};
 pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};
@@ -95,6 +96,7 @@ pub use scale::Grain;
 pub use sparkline::Sparkline;
 pub use strip::{ColorStrip, MAX_CELLS};
 pub use value::IntoValue;
+pub use waterfall::{MAX_WATERFALL_ROWS, Waterfall, WaterfallLabels};
 
 /// The most categorical colours: a ninth series folds into Other.
 pub const MAX_SERIES: usize = 8;
@@ -493,6 +495,8 @@ pub(crate) enum Color {
     Tone(Tone),
     /// The rest, in the quiet ink.
     Other,
+    /// The text ink.
+    Text,
     /// The theme's accent.
     Accent,
 }
@@ -507,6 +511,7 @@ impl Color {
                 None => element.attr("data-color", "other"),
             },
             Self::Other => element.attr("data-color", "other"),
+            Self::Text => element.attr("data-color", "text"),
             Self::Accent => element.attr("data-color", "accent"),
         }
     }

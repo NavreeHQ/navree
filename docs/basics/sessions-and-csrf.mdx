@@ -365,6 +365,49 @@ AuthPages::new()
 
 `aside` puts the app's panel (its mark, a line about it, a picture) beside the form from 960 px up; on a phone the form stands alone. `theme_menu` puts light, dark and system in the corner (and the themes, when the shell offers more than one), and is on when the shell has a theme menu. `view(fn(View) -> View)` dresses each page last, for what the options don't cover. The layout is navree-ui's [`AuthLayout`](/docs/components/auth-layout/).
 
+#### In the app's words and the design's layout
+
+A design draws the sign-in page its own way: its own heading and line under it, a field called "Work email", no card around the form, links as buttons, the panel on the right. Each of these is an option of `AuthPages`, never markup or a stylesheet of yours:
+
+```rust
+use navree::auth::{AuthForm, AuthPages, AuthWords};
+use navree::ui::marketing::Brand;
+use navree::ui::{AuthLayout, ButtonVariant, Text};
+
+AuthPages::new()
+    .app_name("Agra CRM")
+    .app_name_line(false)
+    .form_style(AuthForm::Plain)
+    .links_as(ButtonVariant::Ghost)
+    .words(
+        AuthWords::new()
+            .sign_in("Sign in to Agra CRM", "Your deals, your contacts and the week ahead.")
+            .email_label("Work email"),
+    )
+    .aside(brand::panel())
+    .layout(|layout: AuthLayout| {
+        layout
+            .brand(Brand::new("Agra CRM", "/").mark(brand::mark()))
+            .footer(Text::muted("Every sign-in is checked for a new device."))
+            .aside_end()
+            .aside_inset()
+            .aside_inverse()
+            .body_width(400)
+    })
+    .setup_sign_out()
+```
+
+| Option | What it does |
+|---|---|
+| `words(AuthWords)` | Each page's title (also its tab's) and the line under it, and the labels of the fields: `sign_in(title, lead)`, `sign_up`, `two_factor`, `forgot_password`, `reset_password`, `magic_link`, `magic_link_confirm`, `code`, `code_entry`, `passkey`, `two_factor_setup`, `two_factor_secret`, `recovery_codes`, `two_factor_on`; `email_label`, `password_label`, `remember_label`, `name_label`, `password_again_label`, `new_password_label`, `new_password_again_label`, `authenticator_code_label`, `recovery_code_label`, `emailed_code_label`. A word you don't give is the page's own English. |
+| `form_style(AuthForm::Plain)` | Draws the title, the line under it as quiet text and the form on the page, with no card around the form. `AuthForm::Card`, the default, is the form in a card. |
+| `app_name_line(false)` | Leaves out the line with the app's name over the title. The panel is still named after the app. |
+| `links_as(ButtonVariant)` | Draws the links under a form (forgotten password, the other ways in, back to sign in) as buttons of that look, as wide as the form, to the same places. |
+| `layout(fn(AuthLayout) -> AuthLayout)` | Hands every page's [`AuthLayout`](/docs/components/auth-layout/) to your function: the panel after the form, inset and on the inverse surface, a brand at the top of the form's column and a footer, the form's width. |
+| `setup_sign_out()` | Puts a Sign out button on the two-factor set-up page. It posts to `POST /sign-out` with the session's token, which a user who must set two-factor authentication up can reach. |
+
+The words are text: the page escapes them. A label renames the field wherever it is drawn; the field still posts under its own name, and the buttons, notices and errors keep their words. None of these options changes a route, a check or an answer, and an app that uses none of them gets exactly the pages it got before. The words are the app's, in one language: for pages in the reader's language, give the words of your app's language.
+
 ### What a sign-in does
 
 - **It regenerates the session.** The session gets a new id and a new CSRF token, so an id someone planted or saw before the sign-in signs nobody in. The cookie is `HttpOnly`, `Secure`, `SameSite=Lax` and, with the default options, named `__Host-navree_session`.

@@ -8,8 +8,15 @@
 //! - each step is told from the one before it (a day with no data, which is hollow, then zero,
 //!   the faintest step, up to the deepest);
 //! - the deepest step of the calendar reaches 3:1 on the surface, as any chart mark must;
-//! - a value written in a matrix cell reads at 4.5:1 on every step it can sit on.
+//! - a value written in a matrix cell reads at 4.5:1 on every step it can sit on;
+//! - a heat map's band in a colour at full strength reaches 3:1 on the surface, and a band of
+//!   the same colour made soft is told from it and from a cell with no data.
+//!
+//! The heat map of rows by columns is drawn here too, through the public API: a cell for each
+//! row at each column, one legend, and a table of the same rows and columns.
 
+use navree_ui::charts::{ColorScale, Heatmap, Ink, NumberFormat};
+use navree_ui::render;
 use navree_ui::theme::{Palette, Rgb, Side, Theme, Token};
 
 /// The least distance between the calendar's steps, in OKLab times 100.
@@ -190,4 +197,160 @@ fn the_matrixs_steps_are_told_apart_and_a_value_in_a_cell_reads() {
         }
     }
     assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+/// The soft step a heat map's band takes, as the sheet writes it: its mixing in the light palette
+/// and in the dark one.
+fn soft_step() -> (Mix, Mix) {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/extra/chart-grids.css");
+    let css = std::fs::read_to_string(path).unwrap();
+    let line = css
+        .lines()
+        .find(|line| line.starts_with("[data-mix=soft]"))
+        .expect("the soft band's rule");
+    let mixes: Vec<Mix> = line
+        .split("color-mix(in oklab,var(--c) ")
+        .skip(1)
+        .map(|part| {
+            let (share, into) = part.split_once("%,var(--").unwrap();
+            assert!(into.starts_with("surface)"), "{line}");
+            Mix(share.parse().unwrap(), Token::Ink0)
+        })
+        .collect();
+    assert_eq!(mixes.len(), 2, "{line}");
+    (mixes[0], mixes[1])
+}
+
+#[test]
+fn a_heat_maps_full_bands_read_and_its_soft_bands_are_told_apart() {
+    let (light, dark) = soft_step();
+    let soft = (0, light, dark);
+    let mut found = Vec::new();
+    for theme in Theme::BUILT_IN {
+        for side in Side::BOTH {
+            let palette = theme.spec().palette(side);
+            for surface in [Token::Ink0, Token::Ink1] {
+                let under = palette.get(surface);
+                for ink in INKS {
+                    let full = palette.get(ink);
+                    let light = colour(palette, side, surface, ink, &soft);
+                    let name = format!(
+                        "{} {} {} on {}",
+                        theme.id(),
+                        side.as_str(),
+                        ink.name(),
+                        surface.name()
+                    );
+                    let ratio = full.contrast(under);
+                    if ratio < 3.0 {
+                        found.push(format!("{name}: the full band is {ratio:.2}:1"));
+                    }
+                    for (what, other) in [("its full colour", full), ("no data", under)] {
+                        let distance = apart(light, other);
+                        if distance < CALENDAR_APART {
+                            found.push(format!(
+                                "{name}: the soft band is {distance:.1} from {what}"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[test]
+fn a_heat_map_draws_a_cell_for_each_row_at_each_column_one_legend_and_its_table() {
+    let slots: Vec<String> = (0..37)
+        .map(|s| format!("{}:{:02}", 10 + s / 6, s % 6 * 10))
+        .collect();
+    let mut chart = Heatmap::new("Moving, every ten minutes")
+        .id("moving")
+        .row_name("Person")
+        .columns(slots)
+        .range(0, 1)
+        .format(NumberFormat::percent())
+        .ink(Ink::slot(1));
+    for person in 0..8 {
+        chart = chart.row(
+            format!("Person {person}"),
+            (0..37).map(|s| f64::from((person * 7 + s) % 10) / 10.0),
+        );
+    }
+    let html = render(&chart.into());
+    assert_eq!(html.matches(r#"data-slot="heat-cell""#).count(), 8 * 37);
+    assert_eq!(html.matches(r#"data-slot="heat-legend""#).count(), 1);
+    // Five steps between the ends, and nothing else in the legend: every cell has data.
+    assert_eq!(html.matches(r#"data-slot="heat-key""#).count(), 5, "{html}");
+    for step in ["0", "1", "2", "3", "4"] {
+        assert!(
+            html.contains(&format!(r#"data-level="{step}""#)),
+            "step {step}"
+        );
+    }
+    // The table: a row for each person, a column for each slot after the column that names them.
+    let table = &html[html.find("<table").unwrap()..html.find("</table>").unwrap()];
+    assert_eq!(table.matches("<tr>").count(), 1 + 8);
+    assert_eq!(table.matches(r#"<th scope="col""#).count(), 1 + 37);
+    assert!(table.contains(r#"<th scope="col">Person</th>"#));
+    assert!(table.contains(r#"<th scope="row">Person 7</th>"#));
+    // A body that says it is a grid with a table of rows and columns, for the keys and the tooltip.
+    assert!(
+        html.contains(r#"data-grid data-cross data-rows="296""#),
+        "{html}"
+    );
+}
+
+/// A cell with no data and the legend's key for it are drawn alike: hollow, with a dashed edge.
+#[test]
+fn the_key_for_no_data_is_hollow_like_the_cell() {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/extra/chart-grids.css");
+    let css = std::fs::read_to_string(path).unwrap();
+    assert!(
+        css.contains(
+            ":is([data-slot=heat-cell],[data-slot=heat-key])[data-level=none]{background:none;outline:1px dashed"
+        ),
+        "the rule for no data draws the key too"
+    );
+    let html = render(
+        &Heatmap::new("Gaps")
+            .columns(["a", "b"])
+            .row("r", [Some(1.0), None])
+            .into(),
+    );
+    assert!(
+        html.contains(r#"<li><span data-slot="heat-key" data-level="none"></span>No data</li>"#),
+        "{html}"
+    );
+}
+
+#[test]
+fn a_heat_maps_scale_names_its_bands_in_the_one_legend() {
+    let html = render(
+        &Heatmap::new("Resting heart rate against usual")
+            .columns(["Week 1", "Week 2"])
+            .row("Harleen Kaur", [0.6, 1.0])
+            .row("Gurpreet Singh", [1.3, 1.6])
+            .colors(
+                ColorScale::new(Ink::slot(2))
+                    .label("Far under")
+                    .from(0.75, Ink::slot(2).soft())
+                    .label("Under")
+                    .from(0.9, Ink::muted().soft())
+                    .label("About right")
+                    .from(1.1, Ink::slot(1).soft())
+                    .label("Over")
+                    .from(1.4, Ink::slot(1))
+                    .label("Far over"),
+            )
+            .into(),
+    );
+    assert_eq!(html.matches(r#"data-slot="heat-legend""#).count(), 1);
+    assert_eq!(html.matches(r#"data-slot="heat-key""#).count(), 5);
+    for band in ["Far under", "Under", "About right", "Over", "Far over"] {
+        assert!(html.contains(&format!("</span>{band}</li>")), "{band}");
+    }
 }

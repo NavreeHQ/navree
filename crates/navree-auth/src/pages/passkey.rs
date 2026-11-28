@@ -44,7 +44,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{
-    PASSKEY_CALL, PagesController, Paths, api, call_holder, link, page, signed_in_redirect,
+    PASSKEY_CALL, Page, PagesController, Paths, api, call_holder, link, page, signed_in_redirect,
     signed_in_target,
 };
 use crate::{AuthError, ClientMeta, PasskeyLoginOptionsInput, SessionSignIn};
@@ -114,8 +114,7 @@ fn passkey_page(paths: &Paths, next: Option<&str>) -> navree_ui::View {
     script.push_str("\" defer></script>");
     page(
         paths,
-        "Sign in with a passkey",
-        "Use the passkey on this device, or one from your phone or security key.",
+        Page::Passkey,
         Stack::gap(4)
             .children((
                 el("div")
@@ -136,7 +135,7 @@ fn passkey_page(paths: &Paths, next: Option<&str>) -> navree_ui::View {
                     "Passkeys need JavaScript. Sign in with your password instead.",
                 )),
                 Node::from(SafeHtml::trusted(script)),
-                link("Sign in with a password", &paths.sign_in),
+                link(paths, "Sign in with a password", &paths.sign_in),
             ))
             .into(),
     )

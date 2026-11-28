@@ -91,6 +91,29 @@ pub struct PagesOptions {
     debug_chosen: bool,
     /// The words of every state.
     pub labels: StateLabels,
+    /// The theme and mode of a page drawn on its own: for a guest, for a 401, a 429 and a
+    /// 503, and when the shell can't be built. The reader's choice in the theme cookie and a
+    /// `?theme=` or `?mode=` in the address lie over it. `None`, and no
+    /// [`shell_look`](PagesOptions::shell_look), draws such a page as it always was: in
+    /// Navree's own look.
+    pub appearance: Option<crate::theme::Appearance>,
+    /// Whether a page drawn on its own takes the look of the app's registered `Shell`: its
+    /// default appearance (unless [`appearance`](PagesOptions::appearance) gives one), the
+    /// themes it offers to the cookie and the address, its stylesheets and typefaces, and its
+    /// title template. Off by default.
+    pub shell_look: bool,
+    /// The app's stylesheets a page drawn on its own links, after the shell's.
+    pub stylesheets: Vec<crate::AppSheet>,
+    /// The app's typefaces a page drawn on its own links, after the shell's.
+    pub fonts: Vec<crate::AppFont>,
+    /// Whether a page drawn for a guest offers "Sign in" beside its own actions, so someone
+    /// signed out who lands on a missing page can get back in (off by default). The 401 page
+    /// offers it always.
+    pub offer_sign_in: bool,
+    /// Where "Stop impersonating" posts: with an address, an error page shown during an
+    /// impersonation ([`ErrorContext::impersonator`](navree_http::ErrorContext::impersonator))
+    /// says so and offers to stop it. A path on this site; `None` (the default) says nothing.
+    pub stop_impersonating: Option<String>,
 }
 
 impl Default for PagesOptions {
@@ -102,6 +125,12 @@ impl Default for PagesOptions {
             debug: cfg!(debug_assertions),
             debug_chosen: false,
             labels: StateLabels::default(),
+            appearance: None,
+            shell_look: false,
+            stylesheets: Vec::new(),
+            fonts: Vec::new(),
+            offer_sign_in: false,
+            stop_impersonating: None,
         }
     }
 }
@@ -137,6 +166,65 @@ impl PagesOptions {
     /// Sets the words.
     pub fn labels(mut self, labels: StateLabels) -> Self {
         self.labels = labels;
+        self
+    }
+
+    /// Draws a page on its own (for a guest, a 401, a 429 and a 503) in `appearance`: the
+    /// app's theme and mode. The reader's theme cookie and the address's `?theme=` and
+    /// `?mode=` lie over it.
+    ///
+    /// ```
+    /// use navree_ui::pages::PagesOptions;
+    /// use navree_ui::theme::{Appearance, Mode, Theme};
+    ///
+    /// let options = PagesOptions::default().appearance(Appearance::new(Theme::OCEAN, Mode::Light));
+    /// assert!(options.appearance.is_some());
+    /// ```
+    pub fn appearance(mut self, appearance: crate::theme::Appearance) -> Self {
+        self.appearance = Some(appearance);
+        self
+    }
+
+    /// Draws a page on its own in the look of the app's registered `Shell`: its default
+    /// appearance, the themes it offers, its stylesheets and typefaces, and its title
+    /// template. An app that builds its shell for each request (an `ErrorShell`) gives the
+    /// look with [`appearance`](Self::appearance), [`stylesheet`](Self::stylesheet) and
+    /// [`font`](Self::font) instead.
+    pub fn shell_look(mut self) -> Self {
+        self.shell_look = true;
+        self
+    }
+
+    /// Links a stylesheet of the app's own on a page drawn on its own. See
+    /// [`View::stylesheet`](crate::View::stylesheet).
+    pub fn stylesheet(mut self, sheet: &crate::AppSheet) -> Self {
+        if !self.stylesheets.contains(sheet) {
+            self.stylesheets.push(*sheet);
+        }
+        self
+    }
+
+    /// Links a typeface of the app's own on a page drawn on its own. See
+    /// [`View::font`](crate::View::font).
+    pub fn font(mut self, font: &crate::AppFont) -> Self {
+        if !self.fonts.contains(font) {
+            self.fonts.push(*font);
+        }
+        self
+    }
+
+    /// Offers "Sign in" beside a guest's page's own actions: on a missing page, say, beside
+    /// "Go to home".
+    pub fn offer_sign_in(mut self, offer: bool) -> Self {
+        self.offer_sign_in = offer;
+        self
+    }
+
+    /// Says on an error page shown during an impersonation that the reader is acting as
+    /// another user, and offers "Stop impersonating", a form that posts to `href` with the
+    /// session's token. navree-auth's `AuthPages` serves `/impersonate/stop`.
+    pub fn stop_impersonating(mut self, href: impl Into<String>) -> Self {
+        self.stop_impersonating = Some(href.into());
         self
     }
 
@@ -194,6 +282,14 @@ impl PagesOptions {
         }
         if !usable(&self.home) {
             self.home = defaults.home;
+        }
+        // A form posts only to this site.
+        if self
+            .stop_impersonating
+            .as_deref()
+            .is_some_and(|href| !usable(href) || !href.starts_with('/') || href.starts_with("//"))
+        {
+            self.stop_impersonating = None;
         }
         self
     }

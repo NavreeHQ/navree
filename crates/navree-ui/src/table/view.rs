@@ -260,6 +260,16 @@ impl FilterOption {
         self.count = Some(count);
         self
     }
+
+    /// What it posts.
+    pub(crate) fn value(&self) -> &str {
+        &self.value
+    }
+
+    /// What it shows.
+    pub(crate) fn label(&self) -> &str {
+        &self.label
+    }
 }
 
 /// An action on the selected rows.
@@ -562,6 +572,9 @@ type RowFn<'a, R, T> = Box<dyn Fn(&R) -> T + 'a>;
 
 /// A table with search, filters, sort links, selection and pagination, as one region.
 ///
+/// It keeps the functions it is given for each row as closures that need not be `Send`: build it
+/// after a handler's last `.await`, so the handler's future stays `Send`.
+///
 /// ```ignore
 /// DataTable::new("deals", &query, &page).caption("Deals").sticky_header()
 /// ```
@@ -593,6 +606,10 @@ pub struct DataTable<'a, R, F = NoFilter> {
     #[cfg(feature = "native-preview")]
     row_opens: Option<RowFn<'a, R, String>>,
     sticky_rows: Option<RowFn<'a, R, bool>>,
+    /// The row the page shows: marked `aria-current`, not selected.
+    current_row: Option<RowFn<'a, R, bool>>,
+    /// Whether the column headings are drawn in the muted text colour.
+    muted_header: bool,
     detail: Option<RowFn<'a, R, Node>>,
     export: Option<Href>,
     options: Vec<(&'static str, Vec<FilterOption>)>,
@@ -656,6 +673,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             #[cfg(feature = "native-preview")]
             row_opens: None,
             sticky_rows: None,
+            current_row: None,
+            muted_header: false,
             detail: None,
             export: None,
             options: Vec::new(),
@@ -901,6 +920,48 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         self
     }
 
+    /// Marks the row the page shows, such as the one whose details are open beside the
+    /// table: its `<tr>` says `aria-current="true"` and is drawn in the theme's colour for a
+    /// chosen row (`Roles::selected_row`, `--row-selected`; `ink-3` when the theme gives
+    /// none). Only the first row `current` says yes to is marked. It is a mark, not a
+    /// selection: nothing posts it, and the boxes and bulk actions are as they were.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: this is its path.
+    /// # use navree_ui::table;
+    /// use navree_ui::{DataTable, TableQuery, TableRow, render};
+    ///
+    /// #[derive(Clone, TableRow)]
+    /// struct Deal {
+    ///     #[col(skip)]
+    ///     id: i64,
+    ///     name: String,
+    /// }
+    ///
+    /// # fn main() {
+    /// let rows = vec![
+    ///     Deal { id: 1, name: "Sutlej Supply".to_owned() },
+    ///     Deal { id: 2, name: "Haveli Home".to_owned() },
+    /// ];
+    /// let query = TableQuery::<Deal>::parse("/deals", "");
+    /// let html = render(&DataTable::new("deals", &query, &rows).current_row(|row| row.id == 2).into());
+    /// assert!(html.contains(r#"<tr data-key="2" aria-current="true">"#));
+    /// assert!(html.contains(r#"<tr data-key="1">"#));
+    /// # }
+    /// ```
+    pub fn current_row(mut self, current: impl Fn(&R) -> bool + 'a) -> Self {
+        self.current_row = Some(Box::new(current));
+        self
+    }
+
+    /// Draws the column headings in the muted text colour (`fg-2`), as a plain
+    /// [`Table`](crate::Table) draws its own. Their size, weight, line height, tracking and
+    /// face are the theme's `table_head` text style either way.
+    pub fn muted_header(mut self) -> Self {
+        self.muted_header = true;
+        self
+    }
+
     /// What a row opens to. Only open rows are drawn: `open=` is in the URL.
     pub fn detail(mut self, detail: impl Fn(&R) -> Node + 'a) -> Self {
         self.detail = Some(Box::new(detail));
@@ -913,7 +974,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         self
     }
 
-    /// Sets the choices of a filter whose choices come from the page.
+    /// Sets the choices of a filter whose choices come from the page: a column's, by the
+    /// column's name, or one of the page's own filters (`#[derive(FilterBar)]`), by its
+    /// parameter's name, in the place of its type's.
     pub fn options(mut self, column: &'static str, options: Vec<FilterOption>) -> Self {
         self.options.push((column, options));
         self
@@ -1949,7 +2012,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 .slot("table-search")
                 .children((icon(icons::SEARCH), input))
         });
-        let controls = self.query.filter().controls();
+        let controls = self.query.filter().controls_with(&self.options);
         let columns = self.columns_picker.then(|| self.columns_picker_node());
         let view = self.density_switch.then(|| self.density_switch_node());
         let views = self.views.as_ref().map(|(views, url)| {
@@ -2530,6 +2593,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let span = self.span();
         let mut out = String::new();
         let mut label = String::new();
+        let mut marked = false;
         for (index, row) in self.data.rows.iter().enumerate() {
             let key = row.key();
             out.push_str("<tr");
@@ -2545,6 +2609,15 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             }
             if self.sticky_rows.as_ref().is_some_and(|sticky| sticky(row)) {
                 out.push_str(" data-sticky-row");
+            }
+            if !marked
+                && self
+                    .current_row
+                    .as_ref()
+                    .is_some_and(|current| current(row))
+            {
+                out.push_str(" aria-current=\"true\"");
+                marked = true;
             }
             out.push('>');
             if selectable {
@@ -3050,6 +3123,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let table = el("table")
             .slot("table")
             .flag("data-fixed", !state.widths.is_empty())
+            .flag("data-muted-head", self.muted_header)
             .children((
                 self.caption
                     .as_ref()

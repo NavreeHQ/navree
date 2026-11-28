@@ -11,7 +11,7 @@
 [data-ui-sr]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scrollbar-color:var(--line-3) transparent}
 html[data-ui-loading]::before{content:"";position:fixed;inset:0 0 auto;height:2px;background:var(--accent);z-index:100;animation:ui-load 1s ease-out .1s both}
-body{margin:0;background:var(--ink-0);color:var(--fg-1);font:400 14px/1.5 var(--font-sans);-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--ink-0);color:var(--fg-1);font:var(--text-body-weight,400) var(--text-body-size,14px)/var(--text-body-line,1.5) var(--text-body-face,var(--font-sans));letter-spacing:var(--text-body-tracking);-webkit-font-smoothing:antialiased}
 h1,h2,h3,h4,p,ul,ol,figure,fieldset,legend{margin:0;padding:0}
 ul,ol{list-style:none}
 fieldset{border:0;min-width:0}

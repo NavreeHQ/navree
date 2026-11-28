@@ -5,7 +5,7 @@ description: "Headings whose level is the document's, and paragraphs in four loo
 
 <UiPreview example="typography/thumb" />
 
-`Heading` writes `<h1>` to `<h6>`; its look follows its level. `Text` writes a paragraph, or a `<span>` with `.inline()`. The body text is 14 px Geist; secondary text is 13 px.
+`Heading` writes `<h1>` to `<h6>`; its look follows its level. `Text` writes a paragraph, or a `<span>` with `.inline()`. The body text is 14 px Geist; secondary text is 13 px. `h1` to `h3` draw in the display face, which is the text face until the app gives one (`AppFont::as_face`), and a theme's [type scale](/docs/ui/themes/#type) sets each level's size, line height, weight, tracking and face.
 
 ```rust
 use navree::ui::*;

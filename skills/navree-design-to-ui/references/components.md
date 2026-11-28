@@ -22,12 +22,16 @@ is dropped.
 |---|---|---|
 | App frame: sidebar, top bar, content | `Shell` (registered once), `AppShell` (extractor), `AppPage` | `shell.page(title).crumb(..).actions(..).body(..)` |
 | Sidebar group, link, nested link, count | `NavGroup::new(label)`, `NavGroup::plain()`, `NavItem::new(label, href).icon(..).count(..).sub(..)` | `NavItem::current(true)` when several links differ only in their query |
-| Product name, environment tag | `Shell::new(name)`, `.context("Production")` | the context is text, not a pill |
+| Product name, environment tag | `Shell::new(name)`, `.context("Production")`; `.badge(Badge::new("Internal").variant(BadgeVariant::Solid))` at the end of the brand row, `AppShell::badge(..)` for one request | the context is a line under the name; a badge takes its place and hides when the sidebar folds |
+| The app's mark | `Shell::logo(src)`, `.logo_dark(src)` for a dark sidebar, `.logo_style(LogoStyle::Bare)` for the mark alone (22 px, no tile, a 30 px row) | the name takes the theme's `brand` text style |
 | Search in the top bar | `Shell::search(node)` | a form with `Input::search`, or a command palette: `Node::list((Command::trigger(id, label), palette))` |
-| User at the foot of the sidebar | `UserMenu::new(name, email).link(..).action(..)`; `AppShell::user_menu(menu)` for one request | `action` posts; the avatar is an icon, never initials |
-| A workspace switcher under the app's name | `Shell::header_slot(node)`; `AppShell::header_slot(node)` for one request | `navree_workspace::WorkspaceSwitcher` is the node |
-| Breadcrumbs | `AppPage::crumb(label, href)`; on a plain page `Breadcrumb::new().link(..).current(..)` | |
-| Page title and page buttons | `shell.page(title)`, `.actions(..)` | one primary action per page |
+| User at the foot of the sidebar | `UserMenu::new(name, email).link(..).action(..)`; `AppShell::user_menu(menu)` for one request | `action` posts; `.avatar(Avatar::initials(name).shape(AvatarShape::Circle))` in place of the person icon, `.chevron(false)` for a row with no chevron; the name takes the theme's `sidebar_user` text and the second line `shell_muted` |
+| A tile at the foot of the sidebar, above the user (seats, a plan) | `Shell::footer_slot(node)`; `AppShell::footer_slot(node)` for one request | 12 px above the user, hidden when the sidebar folds; the tile is the app's composition (`Card`, `Stat`, `Button`) |
+| A workspace switcher under the app's name | `Shell::header_slot(node)`; `AppShell::header_slot(node)` for one request | `navree_workspace::WorkspaceSwitcher` is the node; a two-line card with the organisation's tile is `.variant(SwitcherVariant::Card).media(Avatar::initials(name).solid()).description("City · Role")`, in the theme's `card` colour and `field` corner, lined up with the sidebar's rows |
+| Breadcrumbs | `AppPage::crumb(label, href)`; on a plain page `Breadcrumb::new().link(..).current(..)` | a last part that differs from the title is `AppPage::current_crumb(label)`, a code in mono `.current_crumb_mono()` (`Breadcrumb::current_mono`); the theme's `breadcrumb` text sets the size and the last part's weight |
+| Page title and page buttons | `shell.page(title)`, `.actions(..)` | one primary action per page; buttons at the end of the top bar are `.topbar_actions(..)` |
+| Badges beside the title, a line under it, a title in mono | `.title_aside((Badge::new(..), ..))`, `.subtitle(text)`, `.title_face(Face::Mono)` | the subtitle is the shell's muted text, 6 px under the title |
+| No fold button and no separator in the top bar | `Shell::collapse(Collapse::Never)` | the separator goes with the button on wide screens |
 | A page outside the shell (sign-in, receipt) | `View::new(title).body(..)` | |
 | A module's own frame (a tool page) | `Shell::for_request(path, &headers)` | |
 | Sidebar layouts, folding | `Shell::layout(ShellLayout::Sidebar \| Inset \| Floating \| Header)`, `Shell::collapse(Collapse::Icons \| Offcanvas \| Never)` | the choice is a cookie read on the server |
@@ -52,14 +56,18 @@ is dropped.
 |---|---|
 | Headings | `Heading::h1..h4(text)`: the level is the document's |
 | Paragraph, secondary text, lead, code | `Text::new`, `Text::muted`, `.variant(TextVariant::Lead)`, `Text::code`; `.inline()` |
-| Panel, card, tile | `Card::new()` / `Card::titled(..)`, `.description(..)`, `.action(..)`, `.body(..)`, `.footer(..)` |
-| Status label, tag, chip | `Badge::new(text).variant(BadgeVariant::Neutral \| Outline \| Success \| Warning \| Danger).icon(..)`: 4 px corners, not a pill |
+| Panel, card, tile | `Card::new()` / `Card::titled(..)`, `.description(..)`, `.action(..)`, `.body(..)`, `.footer(..)`; `.raised()` for the theme's soft shadow under it |
+| A status as a dot and a word with no chip ("Awaiting signature") | `StatusDot::new(word).tone(Tone::Success)` |
+| Dark card or band on a light page (a light one on a dark page), with a white button on it | `Card::titled(..).variant(CardVariant::Inverse)`: the inverse surface, everything in it reading the flipped colours; a `Button::primary` on it is the surface's text colour with the surface's colour as its text. Its colours are the theme's `Roles::inverse` |
+| Code panel, dark on a light page, with a copy button | `CodeBlock::new(lang, code).copy_button().inverse()` |
+| Status label, tag, chip | `Badge::new(text).variant(BadgeVariant::Neutral \| Outline \| Success \| Warning \| Danger).icon(..)`: the theme's corners, a pill when its shape says `Corners::badge(Corner::Pill)` |
 | Inline message, banner | `Alert::new(AlertTone::Neutral \| Success \| Warning \| Danger).title(..).body(..)` |
-| Figure with label and change | `Stat::new(label, value).trend(text, good)` |
+| Figure with label and change | `Stat::new(label, value).trend(text, good)`; a dark tile on a light page: `.variant(StatVariant::Inverse)` |
 | Small bar chart | `Bars::new(description, &[values])`: SVG on the server |
 | Line chart, area chart or bar chart (several series, stacked, to 100%, horizontal) | `Chart::line(title)` / `Chart::area(title)` / `Chart::bar(title)` with `.days(..)`, `.categories(..)` or `.times(..)`, `.series(Series::new(name, values))`, `.stacked()`, `.horizontal()`, `.toggles()`, `.annotation(..)`; a table of the same numbers comes with it |
 | Donut chart, pie | `Donut::new(title).part(name, value)`, `.part_tone(name, value, tone)`, `.pie()`, `.center(big, small)` |
 | Funnel | `Funnel::new(title).stage(Stage::new(name, count))` |
+| Waterfall: a settlement after fees, profit after costs, each bar floating at the running total | `Waterfall::new(title).start(label, amount).step(label, signed_amount).total(label)`, `.colors(added, deducted, total)`, `.format(NumberFormat::currency("₹"))` |
 | Trend beside a figure | `Stat::new(..).chart(Sparkline::new(title, values))` |
 | A report over a date window (Reports) | `Report::from_query(..)`, `report.chart(Chart::bar(title)).series(..)` |
 | A ring of progress, a score in a circle | `Ring::new(title, value).max(goal).label(..).sublabel(..)`; several against their goals: `Rings::new(title).ring(RingValue::new(name, value).max(goal))` |
@@ -67,9 +75,10 @@ is dropped.
 | A day round a clock face | `DayClock::new(title).values(24 values).category(..).moment(Moment::new(hour, name))` |
 | A bar split into parts, sleep stages, time in zones | `Meter::new(title).segment(Segment::new(name, value).ink(..))`, `.minutes()`, `.compact()` in a table cell |
 | Small stacked columns per item | `MiniColumns::new(title).part(name, ink).column(MiniColumn::new(name, [values]))` |
-| A strip of coloured cells over time | `ColorStrip::new(title)` with `.category(..)` and `.cells(..)`, or `.colors(ColorScale)` and `.readings(..)` |
+| A strip of coloured cells over time | `ColorStrip::new(title)` with `.category(..)` and `.cells(..)`, or `.colors(ColorScale)` and `.readings(..)`; strips stacked under one legend: `.hide_legend()` on all but one, the same categories declared on each |
 | A reading on a scale between two ends | `RangeScale::new(title, value).range(min, max).ends(low, high).track(Gradient)` |
 | A change with an arrow, green or red | `Trend::new(change)`, `.up_is_bad()`, on a figure with `Stat::change(..)` |
+| A grid of rows by columns (days by hours, people by weeks, stores by days), one legend for all rows | `Heatmap::new(title).columns(..).row(name, values)`, `.range(low, high)` and `.ink(..)` for five steps, `.colors(ColorScale)` for bands (a soft ink is a light band: diverging scales), `.category(name, ink)` and `.category_row(name, names)` for categories, `.row_summary(RowSummary::Average)`; a missing cell is hollow |
 | A habit calendar, a contribution grid | `CalendarHeatmap::new(title).days((date, Some(value)))`, `.steps(HeatSteps::at(a, b, c))`; a missing day is hollow |
 | A correlation matrix, ranked pairs | `MatrixHeatmap::new(title).metrics(..).relation(a, b, Relation::new(r))`, `RelationList::new(title).relation(..)` |
 | A scatter plot | `Scatter::new(title).series(PointSeries::new(name, pairs))` |
@@ -82,8 +91,8 @@ is dropped.
 | A link or key with a Copy button | `CopyField::new(id, label, value)` |
 | A paced breathing circle | `BreathingGuide::new(id, title)` |
 | A responsive image, light and dark screenshots | `Picture::new(src, alt, width, height).srcset(..).webp(..).dark(..)` |
-| Person picture | `Avatar::image(src, alt)`, `Avatar::placeholder(label)`: no initials, no letter tile |
-| People side by side, the rest as `+N` | `AvatarGroup::new(label).max(3).total(count).children((Avatar::placeholder(..), ..))` |
+| Person or organisation picture, letter tile | `Avatar::image(src, alt)`, `Avatar::initials(name)`, `Avatar::placeholder(label)`; `.tone(Tone::Info)` for a tinted tile, `.solid()` for a tile filled with the accent, `.shape(AvatarShape::Circle)` for a round one | the initials are the first letters of the first and last words; the theme's `Corners::avatar` rounds every avatar, `AvatarShape::Circle` only this one (an 8 px organisation tile beside round people) |
+| People side by side, the rest as `+N` | `AvatarGroup::new(label).max(3).total(count).children((Avatar::initials(..), ..))` |
 | List row with media and actions | `Item::new(title).media(..).description(..).actions(..).href(..)`, `ItemVariant` |
 | File tile | `Attachment::new(name).meta(..).icon(..).href(..).action(..)` |
 | Chat | `Message::new(BubbleSide::Start \| End).avatar(..).header(..).content(..)`, `Bubble`, `Marker` |
@@ -94,8 +103,8 @@ is dropped.
 | A part the user may not see, a record that is gone, a part that needs sign-in | `Forbidden::new().what(..)` (never says whether the thing exists), `NotFound::new().what(..)`, `SignInRequired::new(sign_in_url).what(..)`; each also `.compact()` for one line |
 | A whole error page (401, 403, 404, 500, ...) | `UiModule` draws it for every page route; your own is `ErrorPage::not_found()` or `ErrorPage::of(StateKind::..)` |
 | Session ended notice | `SessionEnded::new()` |
-| Figure with a label and a detail | `FactCard::new(label, value).detail(..)` in a `FactGrid` |
-| History of events, in a time zone | `Timeline::new(id, label).time_zone("Asia/Kolkata", 19_800).event(TimelineEvent::new(..).at(secs).tone(Tone::Success).detail(..).meta(Meta::icon(..)))` |
+| Figure with a label and a detail | `FactCard::new(label, value).detail(..)` in a `FactGrid`; `.min_tile(px)` for tiles narrower than 14 rem (eight in a row: 128) |
+| History of events, in a time zone | `Timeline::new(id, label).time_zone("Asia/Kolkata", 19_800).event(TimelineEvent::new(..).at(secs).tone(Tone::Success).detail(..).meta(Meta::icon(..)))`; a plain log with no rail or dots (a time column, a bold title, a muted detail): `.variant(TimelineVariant::Plain)` |
 | Steps of a run: an agent, an import, a deploy | `Trace::new(title).step(TraceStep::new(title).description(..).state(TraceState::Done \| Running \| Pending \| Failed).detail(..))` |
 | Recent activity feed | `ActivityFeed::new(id, label).summary(..).item(ActivityItem::new(who, what).object(..).tone(..).icon(..).time_text(..))` |
 | Divider | `Separator::horizontal()`, `Separator::vertical()` |
@@ -114,11 +123,12 @@ the app's own: `icon_file!` and `icon_set!` compile it from an SVG file
 
 | Design element | navree-ui |
 |---|---|
-| Button | `Button::primary`, `Button::outline`, `Button::ghost`, `Button::destructive`, `Button::new(..).variant(ButtonVariant::Secondary \| Link)`; `.size(Size::Xs \| Sm \| Md \| Lg)`, `.icon(..)`, `.icon_end(..)`, `.block()`, `.disabled(..)`, `.pending(..)` |
-| Link styled as a button | `Button::...(..).href(url)`; `.prefetch()` for safe links |
+| Button | `Button::primary`, `Button::outline`, `Button::ghost`, `Button::destructive`, `Button::new(..).variant(ButtonVariant::Secondary \| Link \| DestructiveOutline)` (DestructiveOutline: danger text with a faint danger line, no fill: "Delete deal", "Refund"; a white button on a dark card is `primary` inside `CardVariant::Inverse`); `.size(Size::Xs \| Sm \| Md \| Lg)`, `.icon(..)`, `.icon_end(..)`, `.block()`, `.disabled(..)`, `.pending(..)` |
+| Link styled as a button | `Button::...(..).href(url)`; `.prefetch()` for safe links; `.current(true)` on the link to the page shown (`aria-current="page"`, drawn raised) |
 | Icon-only button | `Button::icon_only(icons::NAME, "Accessible name")` |
 | Button that opens a dialog | `.opens_dialog(id)`, `.closes_dialog(id)` |
-| Button group | `ButtonGroup::new(label).children(..)`, `.vertical()` |
+| Button group | `ButtonGroup::new(label).children(..)`, `.vertical()`, `.block()` (fills the width, shared equally) |
+| Segmented control of links, a pill track between two places (Mine / Team) | `ButtonGroup::new(label).segmented().children((Button::new(..).href(..).current(true), ..))`: a track in `segment-track`, the current link raised in `segment-on` with `shadow-raised`, the toggle corner; items stay links, no script. Item height is the control height less the track's 6 px |
 | Two-state button | `Toggle::new(name, label).pressed(..)`: a checkbox underneath, so it posts |
 | Segmented control, view switch | `ToggleGroup::single(name, label).item(ToggleItem::new(value, label))`, `.value(..)`, `.variant(ToggleVariant::Outline)`, `.joined()`; `ToggleGroup::multiple(..)` for several on. Radios and checkboxes underneath, so it posts |
 | Menu from a button | `DropdownMenu::new(id, label).item(MenuItem::link(..) \| action(..) \| post(..))`, `.separator()`, `.group(MenuGroup::new(..))`, `.checkbox(..)`, `.radios(..)`, `.submenu(MenuSub::new(..))`; `DropdownMenu::icon(id, icon, label)` for a row's menu, `.align(PopupAlign::End)` |
@@ -133,7 +143,7 @@ the app's own: `icon_file!` and `icon_set!` compile it from an SVG file
 | Confirmation | `AlertDialog::new(id, title, description).cancel(..).action(..)` |
 | Side panel | `Sheet::new(id, title).side(SheetSide::Right \| Left \| Top \| Bottom)` |
 | Bottom drawer on phones | `Drawer::new(id, title)` |
-| Popover | `Popover::new(id, trigger).side(..).align(..).body(..)` |
+| Popover | `Popover::new(id, trigger).side(..).align(..).body(..)`; `.trigger_label(..)` names the button when it shows a count; `Popover::icon_only(id, icons::BELL, "Notifications")` for an icon button that opens it |
 | Tooltip | `Tooltip::new(id, trigger, text).side(..)` |
 | Hover card | `HoverCard::new(id, trigger).body(..)` |
 | Tabs | `Tabs::new(id, label).tab(Tab::new(key, label).panel(..))`, `.active_from(query.tab)`, `.variant(TabsVariant::Segmented)`, `.vertical()`; `Tab::lazy(src)` loads a panel when first shown |
@@ -171,6 +181,10 @@ form can't be a struct.
 | Something with a prefix or unit | input group | `#[form(addon = "other_field")]`, or `InputGroup::new(input).start(..).end(..)` |
 | A file | upload | `String` with `widget = file`: the form posts `multipart/form-data` and `Submit<T>` stores the file through the app's `Uploads`, giving the handler its path (a field holds the first file posted under its name); `FormView::upload(field, Upload::new(..).send_to(route))` sends it first, and the route answers with `Received::into_keyed_response_for(&signer, owner.as_str())`, where `owner: UploadOwner` is the signed-in person's id (nothing for a guest): the field takes a file key only from that person, for a file directly in its own `Uploads` folder and still within its limits (`file_key` keys are not taken by a form's file field) |
 | A hidden value | hidden input | `widget = hidden`, or `#[form(skip)]` to keep it off the client |
+| An ID, a tax or account number, a key, in mono | text input in the mono face | `#[form(mono)]` on a field typed into; the face is the theme's `Face::Mono` font |
+| Taller fields than the page's (44 px inputs on a sign-in form) | the theme's field step | `#[form(size = lg)]` on the struct (or a field), with the theme's `FieldSizes::lg`; inputs, selects, addons and pickers take it |
+| The submit button in another look (outline, pill, full width, an icon) | the form's submit button | `FormView::submit_variant(ButtonVariant::Outline)`, or `FormView::submit_button(Button::outline(..).size(Size::Lg).block())`; `FormView::without_actions()` for buttons elsewhere (`form_id()`) |
+| A choice drawn as a toggle group, chips or segments inside the form | a control of the app's own in the field's place | a `FieldControl` given with `#[form(control = PATH)]` whose `draw` returns the component (`ToggleGroup`, `RadioGroup`, `Checkbox`es) under the field's name, and whose `check` holds the value on the server. Never markup. A group outside the form: `ToggleGroup::form(form_id)` |
 
 A form too long for one screen, one question at a time (an onboarding, a
 survey): `Questionnaire::new(action).question(Question::single(name, text)
@@ -233,7 +247,10 @@ filters, sort, pages, selection, bulk actions and export run on the server.
 | Search box over the table | `#[col(search)]` on the searched columns |
 | Filter per column | `#[col(filter = text \| range \| date \| select \| multi \| boolean \| relation)]`; choices `options = LIST` or `.options(col, Vec<FilterOption>)` from the server |
 | A filter row under the headers | `.filter_row()` |
-| Filters in a bar over the table | `.filter_bar()`, or `#[derive(FilterBar)]` for a toolbar of your own |
+| Filters in a bar over the table | `.filter_bar()` for the columns' filters, as buttons that open each |
+| A toolbar of filters of the page's own: chips, selects, a tick, a sort select | `#[derive(FilterBar)]` and `TableQuery<Row, Filters>`: chips `#[filter(multi)]` on `Option<Many<T>>`, a select an `Option<T>` enum or `#[filter(options = LIST)]` (`options = page` with `.options(name, ..)` for choices from the database), a tick `#[filter(boolean)]` on `Option<bool>`, a select that always holds a value `#[filter(default = "...")]`; the page applies `query.filter()`. Name a sort select `order`, not `sort`, which is the table's own |
+| The chosen row (the one whose detail the page shows) | `.current_row(fn)`, drawn in the theme's `Roles::selected_row` (#F6F9FE in the design gives it); not `.bulk` selection |
+| Header text (12 px, 500, muted) | the theme's `TypeScale::table_head(TextStyle::px(12).weight(500))` and `.muted_header()` on the table |
 | Pages and page size | `#[table(per = 25, per_pages(10, 25, 50, 100))]`; `#[table(cursor)]` for huge tables |
 | Status column | `#[col(badge = tone_fn)]` |
 | Link in a cell, whole-row link | `#[col(link = "/deals/{id}")]`, `.row_href(fn)` |
@@ -265,6 +282,8 @@ Other lists and moves:
 | Design element | navree-ui |
 |---|---|
 | Step bar | `Stepper::new(label).step(Step::new(..).state(StepState::Error)).current(n)`, `.vertical()`, a step that is a link: `Step::new(..).link(href)` |
+| Setup progress as bordered tiles (done tinted green with a tick, current outlined) | `Stepper::new(..).variant(StepperVariant::Tiles)`: card corner, success tint, 1.5 px accent line on the current tile; every name kept on a phone |
+| A thing's place in its life as an inline track (dots joined by hairlines, current dot green, later ones hollow) | `Stepper::new(..).variant(StepperVariant::Track)`: a muted box with the panel corner, 8 px dots, 24 px hairlines, 13 px names, the current one 600; names only, always a row |
 | A form in steps, with a review | `Wizard::new(id).base(url).step(WizardStep::of::<T>(id, label)).review()`; each step is a `Form` struct, progress is a `Draft` on the server (`DraftStore`) |
 | Tree of folders, links or choices | `Tree::new(id, label).node(TreeNode::branch(..) \| leaf(..) \| lazy(id, label, src))`, `.select(TreeSelect::Single \| Multiple)`, `.cascade()` |
 | Row of tools with a More menu | `Toolbar::new(id, label).item(ToolbarItem::button(..) \| icon_toggle(..) \| radios(..) \| link(..) \| group(..) \| separator())` |
@@ -290,6 +309,9 @@ second at the most.
 | A brand typeface, a backdrop or rhythm a theme can't say, the app's logo | `AppFont`, `AppSheet` and `AppImage`, compiled in and served by the toolkit; `Shell::font(..)`, `.stylesheet(..)`, `.logo(..)` |
 | How the browser's tab reads | `Shell::title_template("{} · App")`, `AppPage::document_title(..)` |
 | Sign-in and sign-up pages with the app's panel beside the form | `AuthPages` with `.sign_up()`, `.aside(..)`, `.theme_menu()`; a guest page of your own in an `AuthLayout` |
+| A sign-in board with the panel on the right, inset from the edges with large corners, dark on a light page | `AuthLayout::aside_end()`, `.aside_inset()` (corner from the theme's `Corners::panel`), `.aside_inverse()` (colours from `Roles::inverse`) |
+| A brand above the sign-in form that stays on a phone, a footer line under it, a narrower form column | `AuthLayout::brand(Brand::new(..).mark(..))`, `.footer(..)`, `.body_width(400)`; on `AuthPages`, the same through `.layout(\|l\| l.brand(..)..)` |
+| A sign-in page with its own heading and line, "Work email", no card around the form, no product-name line, links as ghost buttons | `AuthPages::words(AuthWords::new().sign_in(title, lead).email_label("Work email"))`, `.form_style(AuthForm::Plain)`, `.app_name_line(false)`, `.links_as(ButtonVariant::Ghost)` |
 
 ## Public pages
 

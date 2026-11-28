@@ -219,15 +219,24 @@ fn auth_layout(cx: &mut Cx, element: &Element) -> Read {
     };
     parts.done()?;
     let mut parts = Parts::of(main);
+    // The app's brand over the column is a browser's, as the corner is: the app draws its own.
+    if parts.slot("auth-brand").is_some() {
+        cx.dropped.push("auth-brand".to_owned());
+    }
     if parts.slot("auth-corner").is_some() {
         cx.dropped.push("auth-corner".to_owned());
     }
     let Some(body) = parts.slot("auth-body") else {
         return fail("an auth layout with no body");
     };
+    // A line at the column's foot is the column's: it is said after the form.
+    let footer = parts.slot("auth-footer");
     parts.done()?;
     let mut column = Vec::new();
     form_column(flat(body.child_nodes()), &mut column);
+    if let Some(footer) = footer {
+        form_column(flat(footer.child_nodes()), &mut column);
+    }
     Ok(cx.flat_sequence(&column))
 }
 
@@ -2111,8 +2120,9 @@ mod tests {
     #[test]
     fn what_the_toolkit_has_beyond_what_is_read_is_a_named_miss_and_never_a_guess() {
         use crate::charts::{
-            CalendarHeatmap, ColorStrip, DayClock, Gauge, MatrixHeatmap, Meter, MiniColumn,
-            MiniColumns, RangeScale, Ring, RingValue, Rings, Scatter, Segment,
+            CalendarHeatmap, ColorStrip, DayClock, Gauge, Heatmap, MatrixHeatmap, Meter,
+            MiniColumn, MiniColumns, RangeScale, Ring, RingValue, Rings, Scatter, Segment,
+            Waterfall,
         };
         use crate::native::TestNative;
         use crate::{CopyField, DayPager, Dock, DockItem, InfoTip, View};
@@ -2152,6 +2162,21 @@ mod tests {
             (
                 MatrixHeatmap::new("Relations").into(),
                 "chart:matrix-heatmap",
+            ),
+            (
+                Heatmap::new("Deals by week")
+                    .columns(["Mon", "Tue"])
+                    .row("North", [3, 5])
+                    .into(),
+                "chart:heatmap",
+            ),
+            (
+                Waterfall::new("Settlement")
+                    .start("Paid", 1200)
+                    .step("Fees", -90)
+                    .total("Net")
+                    .into(),
+                "chart:waterfall",
             ),
             (Scatter::new("Pairs").into(), "chart:scatter"),
             (

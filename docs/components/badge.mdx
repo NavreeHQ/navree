@@ -27,6 +27,8 @@ Use a badge for a status or a category that a reader scans for. Green means good
 
 <UiPreview example="badge/variants" />
 
+`BadgeVariant::Solid` fills the badge with the accent and draws its text in the accent's ink, as a primary button is drawn: a marker that stands out, such as "Internal" at the end of the [app shell's](/docs/ui/app-shell/#the-brand-row) brand row. The pair is one every theme is checked for, in light and in dark. Its styles come with the parts stylesheet, which a page links only when it draws one.
+
 ## With an icon
 
 `.icon(...)` puts an icon before the text and `.icon_end(...)` after it.
@@ -45,13 +47,28 @@ A tone colours a badge by what it means. `Tone` has five built-in values (`Neutr
 
 <UiPreview example="badge/dot" />
 
+## A status dot
+
+`StatusDot` is a dot and a word with no chip around them, for a status that sits in a line of text or under a heading: "Awaiting signature" beside a green dot. The word carries the meaning, so the dot is never the only sign. `.tone(Tone)` colours the dot; with none it is grey. It links the looks stylesheet.
+
+```rust
+use navree::ui::*;
+
+Row::gap(4).children((
+    StatusDot::new("Awaiting signature").tone(Tone::Success),
+    StatusDot::new("No deals yet"),
+))
+```
+
+<UiPreview example="badge/status-dot" />
+
 ## Outcome chips
 
 `Badge::outcome(label, reached)` is a chip for something that did or did not happen: paid, packed, shipped. When it did, it carries a check and its tone. When it did not, it carries a dash and a quiet, dashed outline. A screen reader hears "yes" or "no" after the label; change the words with `.outcome_words("oui", "non")`.
 
 <UiPreview example="badge/outcome" />
 
-Badges keep a 4 px corner. There is no pill shape.
+A badge's corner is the theme's: 4 px by default. A theme of your own gives badges a corner of their own with `Corners::badge`, from 0 to 32 px or `Corner::Pill` for round ends (see [a theme's corners](/docs/ui/themes/#corners)).
 
 ## Status
 
@@ -88,6 +105,10 @@ The text says the status, so the color is never alone. To show which way a figur
 ### BadgeVariant
 
 <UiProps type="BadgeVariant" />
+
+### StatusDot
+
+<UiProps type="StatusDot" />
 
 ### Tone
 

@@ -5,7 +5,7 @@ description: "Seven built-in themes in light, dark or the device's mode, themes 
 
 <UiPreview example="themes/built-in" />
 
-A theme is a typed Rust value: a palette of colour tokens for light and one for dark, the corners, the density and a font from a safe list. The server writes the reader's theme and mode on `<html>` and links what the page needs in the head, so the first paint is already right. No script decides how a page looks, and a page with nothing set renders exactly as it always did: dark Navree.
+A theme is a typed Rust value: a palette of colour tokens for light and one for dark, the corners, the density and a font from a safe list. A theme of your own can say more with a [shape](#a-themes-shape) (the corners of each kind of part, the type scale, the sizes of controls, the shell and the page, and soft shadows) and [colour roles](#colour-roles) (white cards beside an off-white sidebar, the inverse surface). The server writes the reader's theme and mode on `<html>` and links what the page needs in the head, so the first paint is already right. No script decides how a page looks, and a page with nothing set renders exactly as it always did: dark Navree.
 
 ## Built-in themes
 
@@ -87,9 +87,206 @@ Build one in the [theme builder](/docs/ui/theme-builder/) and paste its Rust exp
 let theme = Theme::custom(ThemeId::parse("agra")?, "Agra", spec)?;
 ```
 
-`Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>-<build>.css`, where the file's name is the theme's values in a short form, then the toolkit's build. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density and a font from the list. It is cached for good, and two readers of one theme share one file; when you upgrade the toolkit, the build in the name changes, so no reader keeps an old sheet. A name from another build is still answered, as this build writes the sheet, and checked again each time.
+`Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>-<build>.css`, where the file's name is the theme's values in a short form, then the toolkit's build. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density, a font from the list and the values of a [shape](#a-themes-shape) and [roles](#colour-roles), each in range. It is cached for good, and two readers of one theme share one file; when you upgrade the toolkit, the build in the name changes, so no reader keeps an old sheet. A name from another build is still answered, as this build writes the sheet, and checked again each time.
 
 A stored theme is JSON: `theme.to_json()` writes it, and `Theme::from_json` reads it back, checking every field and naming each one that is wrong.
+
+## A theme's shape
+
+A theme of your own can say more than its spec. `ThemeSpec` is a struct that apps and the Rust export build field by field, so it can't gain a field in a minor release, and a `Palette` is an array of exactly 31 colours. What a theme says beyond them is a value of its own that the theme carries beside its spec: a `Shape`, given with `Theme::with_shape`, for everything but colours, and [colour roles](#colour-roles), given with `Theme::with_roles`, for colours. Every value a theme can say beyond its spec is a part of one of the two.
+
+```rust title="src/theme.rs"
+use navree::ui::theme::{Corner, Corners, Shape, Theme, ThemeId};
+
+pub fn agra_theme() -> Theme {
+    let shape = Shape::new().corners(
+        Corners::new()
+            .button(Corner::Pill)
+            .badge(Corner::Pill)
+            .field(Corner::Px(12))
+            .card(Corner::Px(16)),
+    );
+    Theme::OCEAN
+        .renamed(ThemeId::parse("agra").expect("a theme id"), "Agra")
+        .with_shape(shape)
+        .expect("every value of the shape in range")
+}
+```
+
+Each value is a CSS custom property, set through a typed Rust value and never through text. The stylesheet reads it with what the toolkit drew before behind it, as in `var(--radius-button,var(--radius))`, and the theme's stylesheet writes it only when the shape sets it. So a theme with the default shape, and every built-in theme, is written exactly as it was: the same stylesheet, short form, key, stored theme and Rust export, and a page draws the same pixels. A test holds all of them to what Navree 1.7.0 wrote.
+
+- `with_shape` checks every value and refuses one out of range, naming it and saying why (`ImportError::Fields`). A built-in theme ships as it is: make it yours first with `renamed`.
+- The short form keeps the spec's part and adds a segment for what the shape sets, so the theme's stylesheet and the cookie carry it, read back by the same strict parser. The stored theme gains a `shape` object, each value by its token's name, and the Rust export a `.with_shape(..)` call. None of them change for a theme with the default shape.
+- A part of the page drawn in another theme, such as a card of the theme menu, is drawn without the shape.
+- `Theme::shape()` returns a theme's shape: the default, which sets nothing, for a built-in theme.
+
+### Corners
+
+The spec's `Radius` sets two corners: one for controls, one for surfaces. `Corners` gives a kind of part a corner of its own: `Corner::Px(n)` from 0 to 32, or `Corner::Pill`, round ends whatever the part's height. A part you don't set keeps the spec's corner.
+
+| Method | Parts | Token | Without it |
+|---|---|---|---|
+| `button` | Buttons, the outer corners of a button group | `--radius-button` | `--radius` |
+| `badge` | Badges, the count on a tab | `--radius-badge` | `--radius` |
+| `toggle` | Toggles, toggle group items, segmented tabs and their track, a segmented button group and its track, the switch and its thumb | `--radius-toggle` | `--radius`; the track `--radius-lg` |
+| `avatar` | Avatars | `--radius-avatar` | `--radius` |
+| `field` | Inputs, text areas, selects, input groups, the select and combobox controls, the phone input | `--radius-field` | `--radius` |
+| `nav` | The sidebar's items, brand and user rows, the top bar's links, the rows of menus and lists | `--radius-nav` | `--radius` |
+| `card` | Cards, stats, fact cards, items, tables | `--radius-card` | `--radius-lg` |
+| `panel` | Alerts, a tab's alert, code blocks | `--radius-panel` | `--radius-lg`; a code block `--radius` |
+| `overlay` | Popovers, hover cards, menus, the select's list, dialogs, drawers | `--radius-overlay` | `--radius-lg` |
+
+A checkbox keeps `--radius`: a round box reads as a radio.
+
+### Type
+
+A page has three faces: the text face (the theme's `Font`, or a font of the app's own), a display face for headings, the page title and the brand, and a mono face for code and figures. With no display face, those draw in the text face, as before. A face of the app's own is an `AppFont` made one of the page's faces with `as_face`; it is linked as any font is, by `Shell::font`, `View::font` or the sign-in pages' `font`, and its rule sets the face's custom property, `--font-sans`, `--font-display` or `--font-mono`. A family can't be written in a theme's short form, so a face belongs to the app's fonts, not to the theme. See [App styles and fonts](/docs/ui/app-styles/#fonts).
+
+`TypeScale` sets how each kind of text is drawn: a `TextStyle` of a size from 10 to 72 px, a line height from 1 to 2, a weight of 400, 500, 600 or 700, tracking from -0.06 to 0.1 em and a `Face`. A value it doesn't set keeps the toolkit's. Sizes are pixels, so text keeps its size under every density.
+
+```rust title="src/theme.rs"
+use navree::ui::theme::{Face, Shape, TextStyle, Theme, ThemeId, TypeScale};
+
+pub fn agra_theme() -> Theme {
+    let type_scale = TypeScale::new()
+        .page_title(TextStyle::px(28).line(1.15).weight(600).tracking(-0.025).face(Face::Display))
+        .brand(TextStyle::px(18).weight(600).tracking(-0.03).face(Face::Display))
+        .card_title(TextStyle::px(15).line(1.4).weight(600).tracking(-0.01))
+        .stat_value(TextStyle::px(22).weight(500).tracking(-0.02).face(Face::Mono))
+        .breadcrumb(TextStyle::px(14));
+    Theme::NAVREE
+        .renamed(ThemeId::parse("agra").expect("a theme id"), "Agra")
+        .with_shape(Shape::new().type_scale(type_scale))
+        .expect("every value of the shape in range")
+}
+```
+
+| Method | Text | Without it |
+|---|---|---|
+| `page_title` | A page's title in the shell | 20 px, 600, line 1.25, -0.01 em, display face |
+| `h1` to `h3` | `Heading::h1` to `h3` | 24, 20 and 16 px, 600, line 1.25, -0.01 em, display face |
+| `h4` | `Heading::h4` | 14 px, as `h1` otherwise, text face |
+| `card_title` | A card's title | 14 px, 600 |
+| `brand` | The app's name in the sidebar and a site's brand | 14 px, 500 in the sidebar; 17 px, 650, -0.015 em on a site; display face |
+| `body` | The page's text | 14 px, 400, line 1.5 |
+| `label` | A field's label | 13 px, 500, line 1.25 |
+| `button` | A button of the default size | 14 px, 500, line 1 |
+| `badge` | A badge | 12 px, 500 |
+| `input` | The text in an input, a text area and a select | 14 px |
+| `breadcrumb` | A breadcrumb trail; its weight is the current page's, and the links keep the text's | 13 px |
+| `stat_value` | A stat's figure | 24 px, 600, line 1.2 |
+| `table_head` | A table's column headings | 13 px, 500; 14 px in a data table |
+| `sidebar_user` | The signed-in person's name in the sidebar | 14 px, 500 |
+
+Each value is a custom property named for its kind of text and value, `--text-page-title-size`, `-line`, `-weight`, `-tracking` and `-face`, read with the toolkit's value behind it.
+
+### Sizes
+
+`Sizes` sets the heights of controls and fields, the shell's insets and the padding of the page and of cards, in pixels. A size you don't set keeps the toolkit's, which follows the theme's density; one you set is the pixels you give, whatever the density.
+
+```rust title="src/theme.rs"
+use navree::ui::theme::{
+    CardSizes, ControlSizes, FieldSizes, PageSizes, Shape, SidebarSizes, Sizes, Theme, ThemeId,
+    TopbarSizes,
+};
+
+pub fn agra_theme() -> Theme {
+    let sizes = Sizes::new()
+        .controls(ControlSizes::new().sm(32).md(36).lg(48))
+        .fields(FieldSizes::new().md(40).lg(44).padding_x(14))
+        .badge_height(22)
+        .sidebar(SidebarSizes::new().width(248).inset_y(16).inset_x(12).gap(18).item_height(36))
+        .topbar(TopbarSizes::new().height(60).inset_x(32))
+        .page(PageSizes::new().padding_top(28).padding_x(32).padding_bottom(40).gap(24).max_width(1240))
+        .cards(CardSizes::new().padding(18).stat_padding_y(16).stat_padding_x(18));
+    Theme::NAVREE
+        .renamed(ThemeId::parse("agra").expect("a theme id"), "Agra")
+        .with_shape(Shape::new().sizes(sizes))
+        .expect("every value of the shape in range")
+}
+```
+
+| Builder | Sets | Tokens | Without it |
+|---|---|---|---|
+| `ControlSizes` | Buttons, toggles and toggle group items of each `Size`, an icon-only one's width, and segmented tabs and segmented button groups, whose track is the step's height | `--control-xs` to `--control-lg` | 24, 28, 32 and 36 px |
+| `FieldSizes` | Inputs, input groups, native selects, the select and combobox controls and the phone input of each `Size`, and their side padding | `--field-xs` to `--field-lg`, `--field-px` | 24, 28, 32 and 36 px; 10 px |
+| `badge_height` | A badge | `--badge-h` | 20 px |
+| `SidebarSizes` | The sidebar's width, the space above its first block and below its last, at its sides and between its blocks, and its links' height | `--sidebar-w`, `--sidebar-pad-y`, `--sidebar-pad-x`, `--sidebar-gap`, `--sidebar-item-h` | 256 px; 8 px; 8 px; 8 px; 32 px |
+| `TopbarSizes` | The top bar's height and side padding | `--topbar-h`, `--topbar-px` | 48 px; 12 px |
+| `PageSizes` | The page's padding above, at the sides and below, the space between its parts, and the most it is wide, its padding included, centred on a wider window | `--page-pad-top`, `--page-pad-x`, `--page-pad-bottom`, `--page-gap`, `--page-max` | 24 px; 16 px; the whole width |
+| `CardSizes` | A card's padding, and a stat's above and below and at its sides | `--card-pad`, `--stat-pad-y`, `--stat-pad-x` | 16 px |
+
+A field takes a step with `Input::size`, so one page can draw 44 px fields and the others 36 px, each as the theme says. Each size has bounds (controls 16 to 64 px, the sidebar 160 to 400 px wide, insets 0 to 64 px, a page at most 480 to 2400 px wide), and `with_shape` names one outside them.
+
+### Elevation
+
+The toolkit draws flat parts with borders and no shadow. `Shape::elevation(Elevation::Soft)` gives two soft shadows: a small one under a raised part (the chosen segmented tab, the current sidebar link, a toggle that is on, the current button), `--shadow-raised`, and a wider one under a floating part (popovers, menus, dialogs, sheets, the select's list and a chart's tip), `--shadow-floating`. Their colour is the light palette's text colour at a low alpha in light mode and black in dark mode, written with `light-dark()` like the colours, so the dark form comes with them. There are two levels and no free values, and no glow.
+
+```rust title="src/theme.rs"
+use navree::ui::theme::{Elevation, Shape, Theme, ThemeId};
+
+pub fn agra_theme() -> Theme {
+    Theme::NAVREE
+        .renamed(ThemeId::parse("agra").expect("a theme id"), "Agra")
+        .with_shape(Shape::new().elevation(Elevation::Soft))
+        .expect("every value of the shape in range")
+}
+```
+
+## Colour roles
+
+One token paints several things: `ink-1` paints cards, inputs, the sidebar and a table's header, so a theme can't make its cards white beside an off-white sidebar by its palette alone. `Roles` gives such a thing a colour of its own, in light and in dark, falling back to the token it stands in for. The stylesheet reads each as `var(--card,var(--ink-1))`, and the theme's stylesheet writes a role only when it is set.
+
+```rust title="src/theme.rs"
+use navree::ui::theme::{Inverse, Rgb, Roles, Theme, ThemeId};
+
+pub fn agra_theme() -> Theme {
+    let rgb = Rgb::hex;
+    let roles = Roles::new()
+        .card(rgb(0xffffff), rgb(0x0f1411)) // light, then dark
+        .field(rgb(0xffffff), rgb(0x0f1411))
+        .ghost_text(rgb(0x0a0e0c), rgb(0xe9efeb))
+        .inverse(
+            Inverse::new()
+                .surface(rgb(0x0a0a0a), rgb(0xffffff))
+                .text(rgb(0xffffff), rgb(0x0a0a0a))
+                .muted(rgb(0xb5b5b0), rgb(0x3d3d3a)),
+        );
+    Theme::NAVREE
+        .renamed(ThemeId::parse("agra").expect("a theme id"), "Agra")
+        .with_roles(roles)
+        .expect("every colour role reads")
+}
+```
+
+| Method | Paints | Token | Without it |
+|---|---|---|---|
+| `card` | Cards, stats, fact cards, tables, dialogs, sheets, popovers, menus | `--card` | `ink-1`, which the sidebar and a table's header keep |
+| `field` | Inputs, text areas, selects, input groups, checkboxes and radios, the select and combobox controls, the phone input | `--field` | `ink-1` |
+| `ghost_text` | A ghost button's text, such as the top bar's icon buttons | `--ghost-fg` | `fg-2` |
+| `shell_muted` | The sidebar's quieter text: the brand's context line, the user's email, group labels, counts | `--shell-muted` | `fg-3` |
+| `segment_track` | The track of segmented tabs and of a segmented button group | `--segment-track` | `ink-2` |
+| `segment_on` | The chosen tab, or the current link, on that track | `--segment-on` | `ink-3` |
+| `selected_row` | A selected row of a table, and the row a data table's page shows (`.current_row`) | `--row-selected` | `ink-3` |
+| `inverse` | The inverse surface, below | | the other palette |
+
+`with_roles` checks each role as the token it stands in for: every text pair the components draw with that token is measured again with the role in its place, beside each other role that can sit with it (a ghost button on a card), in light and in dark. A role whose text falls short of WCAG AA is refused, named with its pair and ratio, such as `fg-3 on card is 3.21:1 in light`, as `ImportError::Fields`. (A role can't be named by a `Shortfall`, whose pair is made of tokens.) The short form, the stored theme (a `roles` object) and the Rust export carry the roles, and a part of the page drawn in another theme is drawn without them.
+
+### The inverse surface
+
+The inverse surface is a part of a page drawn on the theme's other palette: a dark card on a light page, a light one on a dark page. A part that draws it is marked `data-inverse`, and the stylesheet flips its colour scheme, so every token in it reads its other value and any component inside reads with no work of its own. Three components draw it when you ask: a card with `CardVariant::Inverse`, a figure tile with `StatVariant::Inverse` and a code panel with `CodeBlock::inverse()`. A theme with no inverse colours shows its other palette there, which passes every pair already.
+
+`Inverse` sets the surface's own colours, each for a page in light mode and then in dark mode. Each part you set takes the place of tokens inside the surface; the tones, the charts and anything else stay the other palette's.
+
+| Method | Sets inside the surface |
+|---|---|
+| `surface` | `ink-0`, `ink-1`, `card`, `field`, and `accent-ink` |
+| `raised` | `ink-2`, `ink-3`, `segment-track`, `segment-on`, `row-selected` |
+| `line` | `line`, `line-2` |
+| `text` | `fg`, `fg-1`, `ghost-fg`, and the accent: `accent`, `accent-text`, `ring`, so a primary button there is the text's colour with the surface's text on it |
+| `muted` | `fg-2`, `fg-3`, `shell-muted` |
+
+The surface is checked as a palette of its own: the other palette with these colours in place, every text pair, in both modes. A colour that doesn't read on it is refused under the part that sets it, such as `inverse-fg on inverse is 1.36:1 in dark, on the inverse surface`.
 
 ## Layouts
 
@@ -143,6 +340,70 @@ Charts read `--chart-1` to `--chart-8` and `--bar`; status reads `--success`, `-
 ### Theme
 
 <UiProps type="Theme" />
+
+### Shape
+
+<UiProps type="Shape" />
+
+### Corners
+
+<UiProps type="Corners" />
+
+### Corner
+
+<UiProps type="Corner" />
+
+### TypeScale
+
+<UiProps type="TypeScale" />
+
+### TextStyle
+
+<UiProps type="TextStyle" />
+
+### Face
+
+<UiProps type="Face" />
+
+### Sizes
+
+<UiProps type="Sizes" />
+
+### ControlSizes
+
+<UiProps type="ControlSizes" />
+
+### FieldSizes
+
+<UiProps type="FieldSizes" />
+
+### SidebarSizes
+
+<UiProps type="SidebarSizes" />
+
+### TopbarSizes
+
+<UiProps type="TopbarSizes" />
+
+### PageSizes
+
+<UiProps type="PageSizes" />
+
+### CardSizes
+
+<UiProps type="CardSizes" />
+
+### Elevation
+
+<UiProps type="Elevation" />
+
+### Roles
+
+<UiProps type="Roles" />
+
+### Inverse
+
+<UiProps type="Inverse" />
 
 ### Appearance
 

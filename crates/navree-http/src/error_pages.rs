@@ -83,6 +83,11 @@ pub struct ErrorContext {
     /// The signed-in user, when the request reached authentication and had one.
     /// A panic or a timeout cannot say, and leaves it `None`.
     pub user: Option<Uuid>,
+    /// The user acting as [`user`](Self::user) in an impersonation (navree-contracts'
+    /// `Impersonator`, which the authenticator sets), so a page can say so and offer to stop
+    /// it. `None` when the request is no impersonation, has no user, or ended in a panic or a
+    /// timeout, which cannot say.
+    pub impersonator: Option<Uuid>,
     /// `http.api_prefix`: paths under it belong to the JSON API.
     pub api_prefix: Arc<str>,
     /// The route the request reached, filled in as it reaches one.
@@ -93,8 +98,8 @@ pub struct ErrorContext {
 
 impl ErrorContext {
     /// A context for `method` and `uri` in the app `ctx`, with no headers, no request id, no
-    /// route and no user, and `/api` as the API prefix. Set the public fields for what your
-    /// test or tool knows.
+    /// route, no user and no impersonator, and `/api` as the API prefix. Set the public fields
+    /// for what your test or tool knows.
     pub fn new(method: Method, uri: Uri, ctx: AppContext) -> Self {
         Self {
             method,
@@ -104,6 +109,7 @@ impl ErrorContext {
             request_id: None,
             route: None,
             user: None,
+            impersonator: None,
             api_prefix: Arc::from("/api"),
             matched: None,
             finder: None,

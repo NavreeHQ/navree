@@ -149,6 +149,14 @@ permissions = ["deals.read"]
 | `domain` | the workspace's own verified domain (`crm.agra-corp.com`), marked by `DomainsModule` | list it first: `resolvers = ["domain", "header"]`; workspaces only |
 | `session` | the workspace a browser signed in on the session cookie switched to (`POST /workspace/switch`, `workspace.switch_path`; a form with `workspace` and `next`, or JSON); `WorkspaceSwitcher` posts to it | list it first for Navree UI pages: `resolvers = ["session", "header"]`; with `workspace.session_default = true` a browser that has chosen none is in the first workspace its account belongs to |
 
+`WorkspaceSwitcher` (feature `ui`) draws an outline button by default;
+`.variant(SwitcherVariant::Card)` draws a card for the sidebar's header slot
+(`AppShell::header_slot(switcher)`): `.media(Avatar::initials(name).solid())`
+before the name, `.description("Ludhiana · Admin")` as its second line, and
+`.workspace_with(value, name, current, media)` for a picture per workspace in
+the menu. The card changes the drawing only: the forms, the route, the token
+and `next` are the same.
+
 Order: `workspace.resolvers` (default `["header", "path", "subdomain",
 "claim"]`, env `APP_WORKSPACE__RESOLVERS=subdomain,header`); first hit wins.
 A UUID is looked up by id, anything else by slug. Navree's own access tokens

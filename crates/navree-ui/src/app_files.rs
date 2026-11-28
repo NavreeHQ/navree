@@ -277,9 +277,9 @@ impl FontDisplay {
 ///
 /// A page that links it ([`View::font`](crate::View::font)) preloads the file, so the text
 /// is drawn in it on first paint, and links the rule, which says `font-display` (swap by
-/// default). Use the family in the app's stylesheet: `font-family: "Fraunces", serif`, or
-/// as the page's text face with `:root { --font-sans: "Fraunces", system-ui, sans-serif }`.
-/// A variable font gives a range of [`weights`](Self::weights).
+/// default). [`as_face`](Self::as_face) makes it one of the page's faces: the text face,
+/// the display face of headings, the page title and the brand, or the mono face. A variable
+/// font gives a range of [`weights`](Self::weights).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AppFont {
     name: &'static str,
@@ -290,6 +290,8 @@ pub struct AppFont {
     italic: bool,
     display: FontDisplay,
     preload: bool,
+    /// The page's face it is, if any.
+    role: Option<crate::theme::Face>,
     file_hash: u64,
     face_hash: u64,
 }
@@ -341,6 +343,7 @@ impl AppFont {
             italic: false,
             display: FontDisplay::Swap,
             preload: true,
+            role: None,
             file_hash: fnv(FNV_START, bytes),
             face_hash: 0,
         }
@@ -403,6 +406,27 @@ impl AppFont {
         self
     }
 
+    /// Makes it one of the page's faces: its rule also sets the face's custom property, with
+    /// a system stack behind the family. [`Face::Text`](crate::theme::Face::Text) is the
+    /// page's text (`--font-sans`, in place of the theme's font, and the toolkit's Geist is no
+    /// longer preloaded); [`Face::Display`](crate::theme::Face::Display) draws headings, the
+    /// page title and the brand (`--font-display`); [`Face::Mono`](crate::theme::Face::Mono)
+    /// draws code and figures (`--font-mono`). A page with no display face draws those in its
+    /// text face, as before.
+    ///
+    /// ```
+    /// use navree_ui::AppFont;
+    /// use navree_ui::theme::Face;
+    ///
+    /// static TIGHT: AppFont =
+    ///     AppFont::new("tight", "Inter Tight", b"wOF2....", 1024).weights(500, 700).as_face(Face::Display);
+    /// assert!(TIGHT.face().ends_with(r#":root{--font-display:"Inter Tight",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}"#));
+    /// ```
+    pub const fn as_face(mut self, face: crate::theme::Face) -> Self {
+        self.role = Some(face);
+        self.rehash()
+    }
+
     /// The face's hash follows the file and everything its rule says, so the rule's
     /// address changes whenever the rule does.
     const fn rehash(mut self) -> Self {
@@ -412,6 +436,10 @@ impl AppFont {
         hash = fnv(hash, &self.weight.1.to_le_bytes());
         hash = fnv(hash, &[self.italic as u8]);
         hash = fnv(hash, self.display.as_str().as_bytes());
+        // A font that is no face of the page keeps the rule and the address it always had.
+        if let Some(role) = self.role {
+            hash = fnv(hash, role.property().as_bytes());
+        }
         self.face_hash = hash;
         self
     }
@@ -436,6 +464,11 @@ impl AppFont {
         self.preload
     }
 
+    /// The page's face it is, if [`as_face`](Self::as_face) made it one.
+    pub const fn role(&self) -> Option<crate::theme::Face> {
+        self.role
+    }
+
     /// The name it is served under before its hash: `{namespace}.{name}`, or `{name}`.
     pub(crate) fn stem(&self) -> String {
         stem_of(self.namespace, self.name)
@@ -458,20 +491,29 @@ impl AppFont {
     }
 
     /// The `@font-face` rule: the family, the file's address, the weights, the style and
-    /// the display.
+    /// the display; for a face of the page, then the face's custom property on the root.
     pub fn face(&self) -> String {
         let weight = if self.weight.0 == self.weight.1 {
             self.weight.0.to_string()
         } else {
             format!("{} {}", self.weight.0, self.weight.1)
         };
-        format!(
+        let mut rule = format!(
             "@font-face{{font-family:\"{}\";src:url({}) format(\"woff2\");font-weight:{weight};font-style:{};font-display:{}}}",
             self.family,
             self.url(),
             if self.italic { "italic" } else { "normal" },
             self.display.as_str(),
-        )
+        );
+        if let Some(role) = self.role {
+            rule.push_str(&format!(
+                ":root{{--{}:\"{}\",{}}}",
+                role.property(),
+                self.family,
+                role.fallback()
+            ));
+        }
+        rule
     }
 }
 

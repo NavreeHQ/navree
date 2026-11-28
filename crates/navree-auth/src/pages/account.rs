@@ -9,14 +9,16 @@ use http::Method;
 use navree_http::extract::Query;
 use navree_http::{ApiMeta, AppError, CurrentPrincipal, IntoResponse, RouteDef};
 use navree_session::Session;
-use navree_ui::form::{FormView, Rejected};
+use navree_ui::form::{FormView, Rejected, csrf_field};
 use navree_ui::html::SafeHtml;
-use navree_ui::{Alert, AlertTone, Form, Node, Reply, Stack, Submit, Text, Validate, el};
+use navree_ui::{Alert, AlertTone, Button, Form, Node, Reply, Stack, Submit, Text, Validate, el};
 use serde::Deserialize;
 
-use super::{PagesController, Paths, api, finishes_hand_over, link, onward, page, plain_link};
+use super::{
+    Label, Page, PagesController, Paths, api, finishes_hand_over, link, onward, page, plain_link,
+};
 use crate::session_auth::{
-    STOP_IMPERSONATING_PATH, TWO_FACTOR_CONFIRM_PATH, TWO_FACTOR_SETUP_PATH,
+    SIGN_OUT_PATH, STOP_IMPERSONATING_PATH, TWO_FACTOR_CONFIRM_PATH, TWO_FACTOR_SETUP_PATH,
 };
 use crate::{
     AuthError, AuthService, ClientMeta, TwoFactorSetup, not_while_impersonating, two_factor_enabled,
@@ -57,29 +59,55 @@ fn safe_next(paths: &Paths, next: Option<&str>) -> Option<String> {
         .map(|next| next.as_str().to_owned())
 }
 
-/// The page that says where two-factor authentication stands.
-fn status_page(paths: &Paths, enabled: bool, form: FormView<SetupStartForm>) -> navree_ui::View {
+/// The Sign out button of the set-up page, when the app asks for it
+/// ([`AuthPages::setup_sign_out`](super::AuthPages::setup_sign_out)): a form that posts to
+/// the sign-out route with the session's `token`, as the shell's user menu does. A user who
+/// must set two-factor authentication up reaches that route and the set-up routes only.
+fn sign_out(paths: &Paths, token: &str) -> Option<Node> {
+    let dressing = &paths.dressing;
+    dressing.setup_sign_out.then(|| {
+        let button = Button::new("Sign out").submit();
+        let button = match dressing.links {
+            Some(variant) => button.variant(variant).block(),
+            None => button,
+        };
+        el("form")
+            .attr("method", "post")
+            .attr("action", SIGN_OUT_PATH)
+            .flag("data-ui-form", true)
+            .children((csrf_field(token.to_owned()), button))
+            .into()
+    })
+}
+
+/// The page that says where two-factor authentication stands. `token` is the session's,
+/// for the Sign out button.
+fn status_page(
+    paths: &Paths,
+    enabled: bool,
+    form: FormView<SetupStartForm>,
+    token: &str,
+) -> navree_ui::View {
     if enabled {
         return page(
             paths,
-            "Two-factor authentication",
-            "It is on: signing in asks for a code from your authenticator app.",
+            Page::TwoFactorOn,
             Stack::gap(4)
                 .children((
                     Alert::new(AlertTone::Success).title("Two-factor authentication is on."),
-                    link("Continue", &paths.home),
+                    link(paths, "Continue", &paths.home),
                 ))
                 .into(),
         );
     }
     page(
         paths,
-        "Set up two-factor authentication",
-        "Signing in will ask for a code from an authenticator app on your phone, as well as your password.",
+        Page::TwoFactorSetup,
         Stack::gap(4)
             .children((
                 Node::from(form.one_column().submit("Set it up")),
-                link("Not now", &paths.home),
+                link(paths, "Not now", &paths.home),
+                sign_out(paths, token),
             ))
             .into(),
     )
@@ -100,12 +128,14 @@ async fn new_key(
         .map_err(AuthError::into_app_error)
 }
 
-/// The page with the secret to scan or type, and the form for the first code.
+/// The page with the secret to scan or type, and the form for the first code. `token` is
+/// the session's, for the Sign out button.
 fn setup_page(
     paths: &Paths,
     setup: &TwoFactorSetup,
     form: FormView<SetupConfirmForm>,
     mistake: bool,
+    token: &str,
 ) -> navree_ui::View {
     let mistake = mistake.then(|| {
         Alert::new(AlertTone::Danger)
@@ -114,10 +144,10 @@ fn setup_page(
                 "We made a new key. Scan it again, then type the code your app shows now.",
             ))
     });
+    let form = paths.labelled(form, &[("code", Label::AuthenticatorCode)]);
     page(
         paths,
-        "Set up two-factor authentication",
-        "Scan the picture with an authenticator app, or type the key into it, then enter the code it shows.",
+        Page::TwoFactorSecret,
         Stack::gap(4)
             .children((
                 mistake,
@@ -128,6 +158,7 @@ fn setup_page(
                 Text::muted("Or type this key into the app:"),
                 Text::code(setup.secret.clone()),
                 Node::from(form.one_column().submit("Turn it on")),
+                sign_out(paths, token),
             ))
             .into(),
     )
@@ -139,14 +170,13 @@ fn setup_page(
 fn codes_page(paths: &Paths, codes: &[String], next: &str) -> navree_ui::View {
     const CONTINUE: &str = "I have saved them, continue";
     let on = if finishes_hand_over(next) {
-        Node::from(plain_link(CONTINUE, next))
+        plain_link(paths, CONTINUE, next, None)
     } else {
-        link(CONTINUE, next)
+        link(paths, CONTINUE, next)
     };
     page(
         paths,
-        "Save your recovery codes",
-        "Each code works once, if you lose your phone. They are shown only now.",
+        Page::RecoveryCodes,
         Stack::gap(4)
             .children((
                 Alert::new(AlertTone::Success).title("Two-factor authentication is on."),
@@ -186,13 +216,16 @@ impl PagesController {
                             .await
                             .map_err(AuthError::into_app_error)?;
                         let enabled = user.as_ref().is_some_and(two_factor_enabled);
+                        let token = session.csrf_token();
                         let form = FormView::<SetupStartForm>::new()
                             .post(TWO_FACTOR_SETUP_PATH)
-                            .csrf(session.csrf_token())
+                            .csrf(token.clone())
                             .of(&SetupStartForm {
                                 next: safe_next(&paths, query.next.as_deref()),
                             });
-                        Ok::<_, AppError>(status_page(&paths, enabled, form).into_response())
+                        Ok::<_, AppError>(
+                            status_page(&paths, enabled, form, &token).into_response(),
+                        )
                     }
                 },
             )
@@ -227,7 +260,7 @@ impl PagesController {
                             Ok(Submit(input)) => input,
                             Err(rejected) => {
                                 return Ok(rejected.respond(move |form| {
-                                    status_page(&paths, false, form.csrf(token))
+                                    status_page(&paths, false, form.csrf(token.clone()), &token)
                                 }));
                             }
                         };
@@ -236,13 +269,14 @@ impl PagesController {
                             Ok(setup) => {
                                 let form = FormView::<SetupConfirmForm>::new()
                                     .post(TWO_FACTOR_CONFIRM_PATH)
-                                    .csrf(token)
+                                    .csrf(token.clone())
                                     .of(&SetupConfirmForm {
                                         code: String::new(),
                                         next,
                                     });
                                 Ok::<_, AppError>(
-                                    setup_page(&paths, &setup, form, false).into_response(),
+                                    setup_page(&paths, &setup, form, false, &token)
+                                        .into_response(),
                                 )
                             }
                             // Already on: the page says so.
@@ -288,7 +322,7 @@ impl PagesController {
                                 // new one starts the setup again.
                                 let setup = new_key(&service, me.user_id, &meta).await?;
                                 return Ok(rejected.respond(move |form| {
-                                    setup_page(&paths, &setup, form.csrf(token), false)
+                                    setup_page(&paths, &setup, form.csrf(token.clone()), false, &token)
                                 }));
                             }
                         };
@@ -308,13 +342,13 @@ impl PagesController {
                                 let setup = new_key(&service, me.user_id, &meta).await?;
                                 let form = FormView::<SetupConfirmForm>::new()
                                     .post(TWO_FACTOR_CONFIRM_PATH)
-                                    .csrf(token)
+                                    .csrf(token.clone())
                                     .of(&SetupConfirmForm {
                                         code: String::new(),
                                         next,
                                     });
                                 let mut response =
-                                    setup_page(&paths, &setup, form, true).into_response();
+                                    setup_page(&paths, &setup, form, true, &token).into_response();
                                 *response.status_mut() = http::StatusCode::UNPROCESSABLE_ENTITY;
                                 Ok(response)
                             }

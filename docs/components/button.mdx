@@ -1,6 +1,6 @@
 ---
 title: "Button"
-description: "A button, or a link that looks like one: six variants, four sizes, icons, and a pending state."
+description: "A button, or a link that looks like one: seven variants, four sizes, icons, and a pending state."
 ---
 
 <UiPreview example="button/default" />
@@ -25,9 +25,21 @@ Use a button for an action: saving, opening a dialog, submitting a form. Give ea
 
 ## Variants
 
-`primary` is the one green button of a view. `Button::new` is the quiet default, `outline` and `ghost` step further back, `destructive` deletes, and `ButtonVariant::Link` reads as a link.
+`primary` is the one green button of a view. `Button::new` is the quiet default, `outline` and `ghost` step further back, `destructive` deletes, and `ButtonVariant::Link` reads as a link. `ButtonVariant::DestructiveOutline` is a destructive action that waits beside others, such as "Delete deal" in a row of actions: the danger colour with a faint line of it and no fill, and a thin tint of it on hover. It links the looks stylesheet; the other variants link nothing.
 
 <UiPreview example="button/variants" />
+
+## On the inverse surface
+
+A button inside a part drawn on the inverse surface, such as a card with `CardVariant::Inverse`, reads the flipped colours with no variant of its own. A `primary` button there takes the surface's text colour and the surface's colour as its text: a white button with dark text on a near-black card. An `outline` button has the surface's lines and text.
+
+```rust
+use navree::ui::*;
+
+Card::titled("Need 64 or more seats?")
+    .variant(CardVariant::Inverse)
+    .footer((Button::primary("Request a quote"), Button::outline("Talk to us")))
+```
 
 ## Sizes
 
@@ -58,6 +70,8 @@ Controls are 32 px tall by default. `Size::Xs`, `Sm` and `Lg` make them 24, 28 a
 With `.href`, the button is an `<a>`. Use it to go somewhere, not to change something. `.prefetch()` lets the page fetch a link ahead of the click; only use it for a `GET` that changes nothing.
 
 <UiPreview example="button/link" />
+
+`.current(true)` marks the link to the page being shown with `aria-current="page"`, and draws it raised; `.current(false)` writes nothing, so you can pass a comparison. In a [segmented ButtonGroup](/docs/components/button-group/#segmented-links) the current link is the chosen segment.
 
 ## Submitting a form
 

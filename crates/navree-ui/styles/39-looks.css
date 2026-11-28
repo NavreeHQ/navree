@@ -1,0 +1,70 @@
+/*
+ * navree-ui's stylesheet: the looks a component takes only when a page asks for one, in a
+ * sheet of their own that such a page links. Written for Navree; every colour is a token or a
+ * colour role, every corner, height and shadow a value of the theme. The sheet every page
+ * loads draws each component's own look, which none of these rules touches.
+ */
+
+/* A segmented button group: a track, its links or buttons on it, and the current one raised,
+   drawn as segmented tabs are. A block group shares its width among its buttons. */
+[data-slot=button-group][data-variant=segmented]{gap:.125rem;padding:.1875rem;border-radius:var(--radius-toggle,var(--radius-lg));background:var(--segment-track,var(--ink-2));
+  & > [data-slot=button]{height:calc(var(--control-md,2.25rem) - .375rem);margin:0;border-radius:var(--radius-toggle,var(--radius));background:transparent;color:var(--fg-2);
+    &:hover{background:transparent;color:var(--fg)}
+    &[aria-current]{border-color:var(--line-2);background:var(--segment-on,var(--ink-3));color:var(--fg)}
+    &[data-size=sm]{height:calc(var(--control-sm,1.875rem) - .375rem)}
+    &[data-size=lg]{height:calc(var(--control-lg,2.625rem) - .375rem)}
+  }
+  &[data-orientation=vertical] > [data-slot=button]{border-radius:var(--radius-toggle,var(--radius))}
+}
+[data-slot=button-group][data-block]{display:flex;& > [data-slot=button]{flex:1}}
+
+/* A destructive button with a line: the danger colour on no fill, a faint line of it, and a thin
+   tint of it on hover, the destructive button's own tint at rest. */
+[data-slot=button][data-variant=destructive-outline]{border-color:color-mix(in oklab,var(--danger) 30%,transparent);background:transparent;color:var(--danger);&:hover{background:color-mix(in oklab,var(--danger) 10%,transparent)}}
+
+/* A stepper of tiles: each step a bordered tile, the done ones tinted in the success tone, the
+   current one outlined 1.5 px in the accent (a line and a half-pixel ring inside it, since a
+   browser draws a border in whole pixels). On a phone every tile keeps its name and they wrap
+   onto more rows. */
+[data-slot=stepper][data-variant=tiles]{
+  & > [data-slot=stepper-list]{gap:.5rem}
+  &[data-orientation=horizontal] > [data-slot=stepper-list] > [data-slot=step]{flex:1 1 9rem}
+  & > [data-slot=stepper-list] > [data-slot=step]::after{display:none}
+  & [data-slot=step-trigger]{flex:1;align-items:center;padding:.75rem;border:1px solid var(--line);border-radius:var(--radius-card,var(--radius-lg))}
+  & [data-state=current] > [data-slot=step-trigger]{border-color:var(--accent);box-shadow:inset 0 0 0 .5px var(--accent)}
+  & [data-state=done] > [data-slot=step-trigger]{border-color:color-mix(in oklab,var(--success) 30%,transparent);background:color-mix(in oklab,var(--success) 12%,transparent);color:color-mix(in oklab,var(--success) 80%,var(--fg));
+    & [data-slot=step-title],& [data-slot=step-description],& [data-slot=step-indicator]{color:inherit}
+    & [data-slot=step-indicator]{border-color:currentColor;background:transparent}
+  }
+}
+@container (max-width:36rem){[data-slot=stepper][data-variant=tiles] > [data-slot=stepper-list] > [data-slot=step] [data-slot=step-text]{position:static;width:auto;height:auto;margin:0;overflow:visible;clip-path:none;white-space:normal}}
+
+/* A track: the steps in a row in a muted box, small dots joined by hairlines, the current dot in
+   the success tone and its name bold, the steps after it hollow and quieter. Names only. */
+[data-slot=stepper][data-variant=track]{padding:.875rem 1.125rem;border:1px solid var(--line);border-radius:var(--radius-panel,var(--radius-lg));background:var(--ink-1);
+  & > [data-slot=stepper-list]{align-items:center}
+  & > [data-slot=stepper-list] > [data-slot=step]{flex:none;align-items:center;&::after{flex:none;width:1.5rem;min-width:0;height:1px;margin:0 .75rem;background:var(--line-2)}}
+  & [data-slot=step-trigger]{align-items:center;gap:.5rem;padding:0}
+  & [data-slot=step-indicator]{width:.5rem;height:.5rem;border:1.5px solid var(--line-3);background:transparent;font-size:0;& > *{display:none}}
+  & [data-state=done] [data-slot=step-indicator]{border-color:var(--fg-2);background:var(--fg-2)}
+  & [data-state=current] [data-slot=step-indicator]{border-color:var(--success);background:var(--success)}
+  & [data-state=error] [data-slot=step-indicator]{border-color:var(--danger);background:var(--danger)}
+  & [data-slot=step-text]{padding:0;max-width:none}
+  & [data-slot=step-title]{font-size:13px}
+  & [data-state=upcoming] [data-slot=step-title]{color:var(--fg-3)}
+  & :is([data-slot=step-description],[data-slot=step-note]){display:none}
+}
+
+/* A status dot: a dot in a tone and its word, with no chip around them. */
+:where([data-slot=status-dot]){--tone:var(--fg-3)}
+[data-slot=status-dot]{display:inline-flex;align-items:center;gap:.375rem;color:var(--fg-1);font-size:13px;&::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--tone)}}
+
+/* A plain timeline: a time column, a bold title and a quieter detail, with no rail and no dot. */
+[data-slot=timeline][data-variant=plain] [data-slot=timeline-event]{grid-template-columns:4.5rem minmax(0,1fr);&::before{display:none}&[data-untimed]{grid-template-columns:minmax(0,1fr)}& [data-slot=timeline-dot]{display:none}& [data-slot=timeline-title]{font-weight:600}}
+
+/* Fact tiles as narrow or as wide as a page asks, as many as fit; fixed columns win. */
+[data-slot=fact-grid][data-tile]:not([data-cols]){grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile)),1fr))}
+[data-slot=fact-grid][data-tile="96"]{--tile:96px}[data-slot=fact-grid][data-tile="112"]{--tile:112px}[data-slot=fact-grid][data-tile="128"]{--tile:128px}[data-slot=fact-grid][data-tile="144"]{--tile:144px}[data-slot=fact-grid][data-tile="160"]{--tile:160px}[data-slot=fact-grid][data-tile="176"]{--tile:176px}[data-slot=fact-grid][data-tile="192"]{--tile:192px}[data-slot=fact-grid][data-tile="208"]{--tile:208px}[data-slot=fact-grid][data-tile="256"]{--tile:256px}[data-slot=fact-grid][data-tile="320"]{--tile:320px}
+
+/* A raised card: the theme's soft shadow under it, none in a flat theme. */
+[data-slot=card][data-raised]{box-shadow:var(--shadow-raised)}

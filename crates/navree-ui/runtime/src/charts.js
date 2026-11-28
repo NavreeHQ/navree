@@ -98,13 +98,17 @@ function show(body, i, keyed) {
     ax = r.right - box.left;
     ay = r.top - box.top;
   }
-  // The tooltip: the table row's name, then a value for each line the server wrote.
+  // The tooltip: the table row's name, then a value for each line the server wrote. A grid of
+  // rows by columns has a table of the same rows and columns: the cell's row, at its column.
   const table = /** @type {HTMLTableElement | null} */ ($(figure, "[data-slot=chart-table] table"));
-  const cells = table?.tBodies[0]?.rows[i]?.cells;
+  const cross = cell && body.hasAttribute("data-cross"), col = +(cell?.dataset.c ?? 0) + 1;
+  const row = table?.tBodies[0]?.rows[cross ? +(cell.dataset.r ?? 0) : i];
+  const cells = cross ? row && [row.cells[0], row.cells[col]] : row?.cells;
   const tip = /** @type {HTMLElement | null} */ ($(body, "[data-slot=chart-tip]"));
   if (!cells || !tip) return;
   const [head, ...lines] = /** @type {HTMLElement[]} */ ([...tip.children]);
-  head.textContent = shown(cells[0]);
+  const column = cross && table?.tHead?.rows[0]?.cells[col];
+  head.textContent = column ? `${shown(cells[0])}, ${shown(column)}` : shown(cells[0]);
   tip.setAttribute("data-open", "");
   const said = [head.textContent];
   lines.forEach((line, c) => {

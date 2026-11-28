@@ -133,6 +133,15 @@ pub fn all() -> Vec<Example> {
         .fill()
         .width(1100)
         .height(640),
+        single!(
+            "auth-layout",
+            "inset",
+            "The panel after the form, inset and inverse, with a brand and a footer",
+            auth_layout_inset
+        )
+        .fill()
+        .width(1100)
+        .height(640),
         // A view switcher
         single!("tabs", "view-switcher", "A view switcher", view_switcher)
             .start()
@@ -582,4 +591,35 @@ fn auth_layout_default() -> AuthLayout {
             Text::muted("An example day, not real data."),
         )))
         .aside_label("About Kesar")
+}
+
+fn auth_layout_inset() -> AuthLayout {
+    AuthLayout::new(
+        Stack::gap(6).children((
+            Stack::gap(2).children((
+                Heading::h1("Sign in to Kesar"),
+                Text::muted("Sleep, heart and steps, scored every day."),
+            )),
+            Stack::gap(4).children((
+                Field::new("auth-inset-email", "Email")
+                    .control(Input::email("email").autocomplete("email")),
+                Button::primary("Continue").block(),
+                Button::ghost("Email me a sign-in link")
+                    .href("/sign-in/link")
+                    .block(),
+            )),
+        )),
+    )
+    .brand(marketing::Brand::new("Kesar", "/").icon(icons::SUN))
+    .footer(Text::muted("Every sign-in is checked for a new device."))
+    .aside(Stack::gap(4).children((
+        Heading::h2("Your health, clearly understood."),
+        Text::new("Sleep, heart, recovery and movement, scored every day from the phone and watch you already have."),
+        Text::muted("An example day, not real data."),
+    )))
+    .aside_label("About Kesar")
+    .aside_end()
+    .aside_inset()
+    .aside_inverse()
+    .body_width(400)
 }

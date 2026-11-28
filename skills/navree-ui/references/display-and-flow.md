@@ -122,7 +122,10 @@ lives in a `Draft` kept on the server, so a person can leave and come back
 from any device. Every move is a plain post, and the last step checks every
 step again. `MemoryDrafts` suits tests and an app with one process; a real
 app implements `DraftStore` over a table.
-**Stepper** is the step bar on its own.
+**Stepper** is the step bar on its own. `.variant(StepperVariant::Tiles)` draws
+each step as a bordered tile (a setup's steps), `.variant(StepperVariant::Track)`
+an inline track of dots (where an order or a booking stands); the states,
+their words and the links are the same in each.
 
 **Slider** is one value or a range that posts without script; `SliderSpec`
 holds a post to the same grid the browser drew.

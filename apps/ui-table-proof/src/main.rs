@@ -17,6 +17,7 @@
 //! | `/wide` | 30 columns |
 //! | `/tasks` | a model as its own row, in the simplest form |
 //! | `/extras` | the rest: a card with bleed, sticky rows, a footer, row links, rows that can't be ticked, the grid keys, header groups |
+//! | `/picked` | the row the page shows, a muted header and the page's own filters (chips, the page's choices, a checkbox, a default), in a theme of its own that follows the device |
 //! | `/rtl` | right to left, in another language |
 //! | `/rich` | custom cells: an avatar and tags, a progress bar, cells that edit in place, a filter bar |
 //! | `/live`, `/live-stream`, `/refreshable` | a table that refreshes by polling, when an event stream speaks, or when its button is pressed |
@@ -173,6 +174,7 @@ fn shell() -> Shell {
                 .item(NavItem::new("Filter row", "/deals-row").icon(icons::LIST_FILTER))
                 .item(NavItem::new("Read-only", "/viewer").icon(icons::EYE))
                 .item(NavItem::new("Extras", "/extras").icon(icons::SPARKLES))
+                .item(NavItem::new("Picked", "/picked").icon(icons::EYE))
                 .item(NavItem::new("Rich cells", "/rich").icon(icons::PENCIL))
                 .item(NavItem::new("Live", "/live").icon(icons::ACTIVITY))
                 .item(NavItem::new("Right to left", "/rtl").icon(icons::GLOBE)),
@@ -560,6 +562,136 @@ async fn extras(
     Ok(shell
         .page("Extras")
         .body(Card::titled("In a card").body(table)))
+}
+
+/// `/picked`: a deal as the page that shows it lists it.
+#[derive(Clone, TableRow)]
+#[table(per = 10, per_pages(10, 25))]
+pub struct PickedRow {
+    #[col(skip)]
+    pub id: i64,
+    /// Deal
+    #[col(sortable, search, strong)]
+    pub title: String,
+    #[col(badge = tone, options = STAGES)]
+    pub stage: String,
+    #[col(sortable, numeric, kind = money)]
+    pub amount: Option<Money>,
+    #[col(align = center)]
+    pub active: bool,
+}
+
+const SHOWN: &[(&str, &str)] = &[("all", "All deals"), ("open", "Open deals")];
+
+/// `/picked`: the page's own filters, as chips, a select of the page's choices, a checkbox
+/// and a select with a default.
+#[derive(Default, serde::Deserialize, navree::ui::FilterBar)]
+pub struct PickedFilter {
+    /// Stage
+    #[filter(multi, options = STAGES)]
+    pub stage: Option<navree::ui::form::Many<String>>,
+    /// Company
+    #[filter(options = page)]
+    pub company: Option<i64>,
+    /// Active only
+    #[filter(boolean)]
+    pub active: Option<bool>,
+    /// Show
+    #[filter(options = SHOWN, default = "all")]
+    pub show: Option<String>,
+}
+
+/// A theme that gives the row a page shows and the table's headings a look of their own: the
+/// chosen row tinted, the headings 12 px and 500.
+fn picked_theme() -> navree::ui::theme::Theme {
+    use navree::ui::theme::{Rgb, Roles, Shape, TextStyle, Theme, ThemeId, Token, TypeScale};
+    let rgb = Rgb::hex;
+    let mut spec = *Theme::NEUTRAL.spec();
+    spec.light.set(Token::Ink1, rgb(0xfafaf9));
+    Theme::custom(
+        ThemeId::parse("proof-picked").expect("a theme id"),
+        "Picked",
+        spec,
+    )
+    .and_then(|theme| {
+        theme.with_shape(
+            Shape::new().type_scale(TypeScale::new().table_head(TextStyle::px(12).weight(500))),
+        )
+    })
+    .and_then(|theme| {
+        theme.with_roles(
+            Roles::new()
+                .card(rgb(0xffffff), rgb(0x121212))
+                .selected_row(rgb(0xf6f9fe), rgb(0x16201b)),
+        )
+    })
+    .expect("the picked theme reads and its values are in range")
+}
+
+/// `/picked`: the row a page shows marked beside the table, a header in the muted colour, and
+/// filters of the page's own, in a theme that follows the device's light or dark.
+async fn picked(
+    shell: AppShell,
+    uow: Uow,
+    query: TableQuery<PickedRow, PickedFilter>,
+) -> Result<AppPage, AppError> {
+    let filter = query.filter();
+    let mut deals = Deal::query();
+    if let Some(stages) = filter.stage.as_ref().filter(|stages| !stages.is_empty()) {
+        deals = deals
+            .where_(col("stage").is_in(stages.iter().map(|stage| Value::String(stage.clone()))));
+    }
+    if let Some(company) = filter.company {
+        deals = deals.where_(col("company_id").eq(Value::I64(company)));
+    }
+    if filter.active == Some(true) {
+        deals = deals.where_(col("active").eq(Value::Bool(true)));
+    }
+    if filter.show.as_deref() == Some("open") {
+        deals =
+            deals.where_(col("stage").is_in(
+                ["lead", "qualified", "proposal"].map(|stage| Value::String(stage.to_owned())),
+            ));
+    }
+    let names = companies(&uow).await?;
+    let options: Vec<FilterOption> = names
+        .iter()
+        .take(12)
+        .map(|company| FilterOption::new(company.id, company.name.clone()))
+        .collect();
+    let page = query
+        .load_as(deals, &uow, |record| {
+            let deal = record.into_inner();
+            PickedRow {
+                id: deal.id,
+                title: deal.title,
+                stage: deal.stage,
+                amount: deal.amount.map(Money),
+                active: deal.active,
+            }
+        })
+        .await?;
+    // The page shows the first deal of the list beside it.
+    let shown = page.rows.first().map(|row| (row.id, row.title.clone()));
+    let shown_id = shown.as_ref().map(|(id, _)| *id);
+    let table = DataTable::new("picked", &query, &page)
+        .caption("Deals, one shown")
+        .options("company", options)
+        .current_row(move |row| Some(row.id) == shown_id)
+        .muted_header();
+    Ok(shell
+        .page("Picked")
+        .appearance(navree::ui::theme::Appearance::new(
+            picked_theme(),
+            navree::ui::theme::Mode::System,
+        ))
+        .body(
+            navree::ui::Stack::gap(4).children((
+                table,
+                Card::titled("Shown")
+                    .body(shown.map_or_else(|| "Nothing".to_owned(), |(_, title)| title)),
+            )),
+        ))
 }
 
 /// `/rich`: columns drawn from the whole row.
@@ -1046,6 +1178,7 @@ impl Controller for Pages {
             )
             .public(),
             RouteDef::on(Method::GET, "!/extras", extras).public(),
+            RouteDef::on(Method::GET, "!/picked", picked).public(),
             RouteDef::on(Method::GET, "!/rich", rich).public(),
             RouteDef::on(Method::POST, "!/deal/{id}/field/{field}", edit_field).public(),
             RouteDef::on(Method::GET, "!/deals/export.xlsx", export_xlsx).public(),

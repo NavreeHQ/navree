@@ -19,7 +19,7 @@ AvatarGroup::new("Reviewers")
     ))
 ```
 
-The group is named, and assistive technology reads that name before the people. Each avatar is named too, as `Avatar::placeholder` and `Avatar::image` require, so the group can be read person by person.
+The group is named, and assistive technology reads that name before the people. Each avatar is named too, as `Avatar::placeholder`, `Avatar::initials` and `Avatar::image` require, so the group can be read person by person. Avatars of initials in tones (`Avatar::initials(name).tone(Tone::Info).shape(AvatarShape::Circle)`) overlap as pictures do.
 
 ## When there are more than fit
 

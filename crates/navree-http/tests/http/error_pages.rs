@@ -48,6 +48,7 @@ struct Seen {
     route: Option<String>,
     kind: Option<RouteKind>,
     user: bool,
+    impersonator: Option<uuid::Uuid>,
     api_prefix: String,
 }
 
@@ -73,6 +74,7 @@ impl ErrorPages for Pages {
                 route: request.route.as_ref().and_then(|meta| meta.name.clone()),
                 kind: request.route.as_ref().map(|meta| meta.kind),
                 user: request.user.is_some(),
+                impersonator: request.impersonator,
                 api_prefix: request.api_prefix.to_string(),
             });
             match self.mode {
@@ -437,6 +439,49 @@ async fn the_signed_in_user_is_known_for_an_error_the_route_raised() {
     assert!(seen[0].user, "{:?}", seen[0]);
     assert!(!seen[1].user, "{:?}", seen[1]);
     assert_eq!(seen[1].status, 401);
+    assert_eq!(seen[0].impersonator, None, "a request of the user's own");
+}
+
+#[tokio::test]
+async fn an_impersonation_is_known_for_an_error_so_a_page_can_offer_to_stop_it() {
+    let (app, seen) = app(Mode::Page).await;
+    let user = "6f9619ff-8b86-d011-b42d-00cf4fc964ff";
+    let admin = "0e8b2a5c-1d3f-4e6a-9b7c-2f4d6e8a0b1c";
+    app.send(
+        Request::get("/api/mine")
+            .header("x-user-id", user)
+            .header("x-impersonator", admin)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    // A guest has no one acting as them, whatever the request says.
+    app.send(
+        Request::get("/api/page")
+            .header("x-impersonator", admin)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    // A panic cannot say who the user is, nor who acts as them.
+    app.send(
+        Request::get("/api/boom")
+            .header("x-user-id", user)
+            .header("x-impersonator", admin)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let seen = seen.lock().unwrap();
+    assert!(seen[0].user, "{:?}", seen[0]);
+    assert_eq!(
+        seen[0].impersonator,
+        Some(uuid::Uuid::parse_str(admin).unwrap()),
+        "{:?}",
+        seen[0]
+    );
+    assert_eq!(seen[1].impersonator, None, "{:?}", seen[1]);
+    assert_eq!(seen[2].impersonator, None, "{:?}", seen[2]);
 }
 
 #[tokio::test]

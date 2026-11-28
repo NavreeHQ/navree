@@ -241,17 +241,60 @@ impl Attachment {
     }
 }
 
-/// A picture of a person: an image, or a neutral icon when there is none.
-/// There is no way to put initials in it.
+/// The shape of an [`Avatar`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AvatarShape {
+    /// The theme's corner for avatars ([`Corners::avatar`](crate::theme::Corners::avatar)),
+    /// 4 px unless the theme says otherwise: the default.
+    #[default]
+    Rounded,
+    /// A circle, whatever the theme's corner.
+    Circle,
+}
+
+/// A picture of a person or an organisation: an image, their initials, or a neutral icon
+/// when there is neither.
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Avatar {
     el: Element,
     inner: Node,
     size: Size,
+    tone: Option<&'static str>,
+    solid: bool,
+    shape: AvatarShape,
+}
+
+/// Up to two letters for `name`: the first letter or digit of its first word and of its
+/// last, in capitals. `None` when no word has a letter or a digit.
+fn initials_of(name: &str) -> Option<String> {
+    let mut firsts = name
+        .split_whitespace()
+        .filter_map(|word| word.chars().find(|c| c.is_alphanumeric()));
+    let capital = |c: char| c.to_uppercase().next().unwrap_or(c);
+    let first = firsts.next()?;
+    let mut letters = String::with_capacity(8);
+    letters.push(capital(first));
+    if let Some(last) = firsts.next_back() {
+        letters.push(capital(last));
+    }
+    Some(letters)
 }
 
 impl Avatar {
+    /// The avatar around `inner`, in its root element `el`.
+    fn of(el: Element, inner: Node) -> Self {
+        Self {
+            el,
+            inner,
+            size: Size::Md,
+            tone: None,
+            solid: false,
+            shape: AvatarShape::Rounded,
+        }
+    }
+
     /// An image, described by `alt`.
     pub fn image(src: impl Into<Href>, alt: impl Into<String>) -> Self {
         let image = el("img")
@@ -260,28 +303,75 @@ impl Avatar {
             .attr("loading", "lazy")
             .attr("width", 32_i64)
             .attr("height", 32_i64);
-        Self {
-            el: el("span").slot("avatar"),
-            inner: image.into(),
-            size: Size::Md,
-        }
+        Self::of(el("span").slot("avatar"), image.into())
     }
 
     /// No image: the person icon, labelled `label`.
     pub fn placeholder(label: impl Into<String>) -> Self {
-        Self {
-            el: el("span")
+        Self::of(
+            el("span")
                 .slot("avatar")
                 .attr("role", "img")
                 .attr("aria-label", label.into()),
-            inner: icon(icons::USER_ROUND),
-            size: Size::Md,
+            icon(icons::USER_ROUND),
+        )
+    }
+
+    /// The initials of `name`, a person's or an organisation's: the first letter of its
+    /// first word and of its last, in capitals (`DO` for "Dalbir Oberoi", `N` for
+    /// "Narmada", `ਗਸ` for "ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ"). A screen reader says the whole name. A name
+    /// with no letter or digit in it draws the person icon, as
+    /// [`placeholder`](Self::placeholder) does. Its styles come with the parts stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Avatar, AvatarShape, Tone, render};
+    ///
+    /// let html = render(&Avatar::initials("Dalbir Oberoi").shape(AvatarShape::Circle).into());
+    /// assert!(html.contains(r#"aria-label="Dalbir Oberoi" data-initials"#));
+    /// assert!(html.contains(">DO</span>"));
+    /// let tile = render(&Avatar::initials("Narmada Roadways").tone(Tone::Info).into());
+    /// assert!(tile.contains(r#"data-tone="info""#));
+    /// ```
+    pub fn initials(name: impl Into<String>) -> Self {
+        let name = name.into();
+        match initials_of(&name) {
+            Some(letters) => Self::of(
+                el("span")
+                    .slot("avatar")
+                    .attr("role", "img")
+                    .attr("aria-label", name)
+                    .flag("data-initials", true)
+                    .uses(Uses::PARTS_STYLES),
+                Node::from(letters),
+            ),
+            None => Self::placeholder(name),
         }
     }
 
     /// Sets the size.
     pub fn size(mut self, size: Size) -> Self {
         self.size = size;
+        self
+    }
+
+    /// Colours it in `tone`: a thin tint of the tone behind the initials or the icon, drawn
+    /// in the tone, as a [`Badge`] in a tone is. [`Tone::Neutral`] leaves it as it is.
+    pub fn tone(mut self, tone: Tone) -> Self {
+        self.tone = tone.value();
+        self
+    }
+
+    /// Fills it with the accent and draws its initials or icon in the accent's ink, as a
+    /// primary button is drawn: an organisation's tile beside its name. A filled avatar
+    /// takes no tone.
+    pub fn solid(mut self) -> Self {
+        self.solid = true;
+        self
+    }
+
+    /// Sets its shape: the theme's corner (the default) or a circle.
+    pub fn shape(mut self, shape: AvatarShape) -> Self {
+        self.shape = shape;
         self
     }
 
@@ -297,10 +387,18 @@ impl Avatar {
     }
 
     fn into_node(self) -> Node {
-        self.el
+        let circle = self.shape == AvatarShape::Circle;
+        let mut el = self
+            .el
             .attr_opt("data-size", self.size.as_str())
-            .child(self.inner)
-            .into()
+            .attr_opt("data-tone", self.tone.filter(|_| !self.solid))
+            .flag("data-solid", self.solid)
+            .attr_opt("data-shape", circle.then_some("circle"));
+        // Only an option that draws something brings its styles.
+        if self.solid || circle || self.tone.is_some() {
+            el = el.uses(Uses::PARTS_STYLES);
+        }
+        el.child(self.inner).into()
     }
 }
 
@@ -407,6 +505,11 @@ pub enum BadgeVariant {
     Warning,
     /// Bad news.
     Danger,
+    /// Filled with the accent, its text in the accent's ink, as a primary button is drawn: a
+    /// marker that stands out, such as "Internal" in the brand row. Its styles come with the
+    /// parts stylesheet. A table's badge column (`#[col(badge = ..)]`) draws it as
+    /// [`Neutral`](Self::Neutral): a cell is no place for a marker.
+    Solid,
 }
 
 /// A short label beside something.
@@ -482,6 +585,10 @@ impl Badge {
             BadgeVariant::Success => self.el.attr("data-variant", "success"),
             BadgeVariant::Warning => self.el.attr("data-variant", "warning"),
             BadgeVariant::Danger => self.el.attr("data-variant", "danger"),
+            BadgeVariant::Solid => self
+                .el
+                .attr("data-variant", "solid")
+                .uses(Uses::PARTS_STYLES),
         };
         self
     }
@@ -536,6 +643,8 @@ pub struct Breadcrumb {
     el: Element,
     label: &'static str,
     items: Vec<(Node, Option<Href>)>,
+    /// Whether the current page's name is drawn in the mono face.
+    mono: bool,
     prefetch: bool,
     max: usize,
     hidden_label: &'static str,
@@ -548,6 +657,7 @@ impl Breadcrumb {
             el: el("nav").slot("breadcrumb"),
             label: "Breadcrumb",
             items: Vec::new(),
+            mono: false,
             prefetch: false,
             max: usize::MAX,
             hidden_label: "Show hidden pages",
@@ -587,6 +697,22 @@ impl Breadcrumb {
         self
     }
 
+    /// Adds the current page, its name in the mono face: a name that is a code
+    /// ("INV-2041"). Its style comes with the parts stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Breadcrumb, render};
+    ///
+    /// let html = render(&Breadcrumb::new().link("Invoices", "/invoices").current_mono("INV-2041").into());
+    /// assert!(html.contains(r#"<span aria-current="page" data-mono>INV-2041</span>"#));
+    /// ```
+    pub fn current_mono(mut self, label: impl Into<Node>) -> Self {
+        self.items.push((label.into(), None));
+        self.mono = true;
+        self.el = self.el.uses(Uses::PARTS_STYLES);
+        self
+    }
+
     /// Fetches the trail's links when the pointer rests on one or it takes focus, so
     /// the page is often there before the click. Off unless asked, as for every link.
     pub fn prefetch(mut self) -> Self {
@@ -596,13 +722,17 @@ impl Breadcrumb {
 
     fn into_node(self) -> Node {
         let prefetch = self.prefetch;
+        let mono = self.mono;
         let item = |(label, href): (Node, Option<Href>)| {
             el("li").child(match href {
                 Some(href) => el("a")
                     .href(href)
                     .flag("data-ui-prefetch", prefetch)
                     .child(label),
-                None => el("span").attr("aria-current", "page").child(label),
+                None => el("span")
+                    .attr("aria-current", "page")
+                    .flag("data-mono", mono)
+                    .child(label),
             })
         };
         let count = self.items.len();
@@ -687,6 +817,43 @@ impl Bubble {
     }
 }
 
+/// A status as a dot and a word, with no chip around them: "Awaiting signature" beside a
+/// green dot. The word carries the meaning, so the dot is never the only sign; the dot takes
+/// the [`Tone`]'s colour, grey with none.
+///
+/// ```
+/// use navree_ui::{StatusDot, Tone, render};
+///
+/// let html = render(&StatusDot::new("Awaiting signature").tone(Tone::Success).into());
+/// assert_eq!(html, r#"<span data-slot="status-dot" data-tone="success">Awaiting signature</span>"#);
+/// ```
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct StatusDot {
+    el: Element,
+    word: Node,
+}
+
+impl StatusDot {
+    /// A dot beside `word`.
+    pub fn new(word: impl Into<Node>) -> Self {
+        Self {
+            el: el("span").slot("status-dot").uses(Uses::LOOKS),
+            word: word.into(),
+        }
+    }
+
+    /// Colours the dot. A [`Tone::Named`] colour comes from the stylesheet.
+    pub fn tone(mut self, tone: Tone) -> Self {
+        self.el = self.el.attr_opt("data-tone", tone.value());
+        self
+    }
+
+    fn into_node(self) -> Node {
+        self.el.child(self.word).into()
+    }
+}
+
 /// How a [`Card`] is drawn.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
@@ -700,6 +867,11 @@ pub enum CardVariant {
     Ghost,
     /// A dashed line: a place to add something.
     Dashed,
+    /// The inverse surface: the card drawn on the theme's other palette, a dark card on a
+    /// light page and a light one on a dark page. Everything in it (its text, a badge, a
+    /// button) reads the flipped colours, and a theme's
+    /// [`Roles::inverse`](crate::theme::Roles::inverse) sets them to its own.
+    Inverse,
 }
 
 /// A surface for related content.
@@ -751,25 +923,54 @@ impl Card {
         self
     }
 
-    /// Sets how the card is drawn. The default needs nothing more; the others link the
-    /// parts stylesheet.
+    /// Sets how the card is drawn. The default and the inverse surface need nothing more; the
+    /// others link the parts stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Button, Card, CardVariant, render};
+    ///
+    /// let seats = Card::titled("Seats")
+    ///     .variant(CardVariant::Inverse)
+    ///     .footer(Button::primary("Add seats"));
+    /// let html = render(&seats.into());
+    /// assert!(html.starts_with(r#"<div data-slot="card" data-variant="inverse" data-inverse>"#));
+    /// ```
     pub fn variant(mut self, variant: CardVariant) -> Self {
         let name = match variant {
             CardVariant::Default => None,
             CardVariant::Muted => Some("muted"),
             CardVariant::Ghost => Some("ghost"),
             CardVariant::Dashed => Some("dashed"),
+            CardVariant::Inverse => Some("inverse"),
         };
-        if name.is_some() {
+        if name.is_some() && variant != CardVariant::Inverse {
             self.el = self.el.uses(Uses::PARTS_STYLES);
         }
-        self.el = self.el.attr_opt("data-variant", name);
+        self.el = self
+            .el
+            .attr_opt("data-variant", name)
+            .flag("data-inverse", variant == CardVariant::Inverse);
         self
     }
 
     /// Sets the description.
     pub fn description(mut self, description: impl Into<Node>) -> Self {
         self.description = Some(description.into());
+        self
+    }
+
+    /// Raises the card on the theme's soft shadow
+    /// ([`Elevation::Soft`](crate::theme::Elevation::Soft)); a flat theme draws none. It links
+    /// the looks stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Card, render};
+    ///
+    /// let html = render(&Card::titled("Plan").raised().into());
+    /// assert!(html.starts_with(r#"<div data-slot="card" data-raised>"#));
+    /// ```
+    pub fn raised(mut self) -> Self {
+        self.el = self.el.flag("data-raised", true).uses(Uses::LOOKS);
         self
     }
 
@@ -1997,6 +2198,19 @@ impl Text {
     }
 }
 
+/// How a [`Stat`] is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StatVariant {
+    /// A line around a surface, as a card: the default.
+    #[default]
+    Default,
+    /// The inverse surface: the tile drawn on the theme's other palette, a dark tile on a light
+    /// page, for the one figure a page leads with. Its label, figure and caption read the
+    /// flipped colours.
+    Inverse,
+}
+
 /// One figure and what it is: a tile for a dashboard.
 ///
 /// A plain stat is a label, a figure and how it moved. The same tile can carry what a
@@ -2131,6 +2345,27 @@ impl Stat {
     /// Makes the whole tile a link to `href`; the label is the link's name.
     pub fn href(mut self, href: impl Into<Href>) -> Self {
         self.href = Some(href.into());
+        self
+    }
+
+    /// Sets how the tile is drawn. Neither look links a stylesheet of its own.
+    ///
+    /// ```
+    /// use navree_ui::{Stat, StatVariant, render};
+    ///
+    /// let due = Stat::new("Invoices due", "₹9,12,400")
+    ///     .caption("this week")
+    ///     .variant(StatVariant::Inverse);
+    /// let html = render(&due.into());
+    /// assert!(html.starts_with(r#"<div data-slot="stat" data-variant="inverse" data-inverse>"#));
+    /// ```
+    pub fn variant(mut self, variant: StatVariant) -> Self {
+        if variant == StatVariant::Inverse {
+            self.el = self
+                .el
+                .attr("data-variant", "inverse")
+                .flag("data-inverse", true);
+        }
         self
     }
 
@@ -2389,8 +2624,8 @@ impl Bars {
     }
 }
 
-root_methods!(Stat, Bars);
-into_node!(Stat, Bars);
+root_methods!(Stat, Bars, StatusDot);
+into_node!(Stat, Bars, StatusDot);
 
 root_methods!(
     Alert,

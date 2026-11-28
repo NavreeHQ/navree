@@ -35,6 +35,14 @@ pub fn all() -> Vec<Example> {
             .start()
             .height(440),
         single!(
+            "forms",
+            "own-parts",
+            "A mono field, fields a size larger and the submit button's look",
+            forms_own_parts
+        )
+        .start()
+        .height(460),
+        single!(
             "commands",
             "toggle",
             "Toggle, with no request",
@@ -147,6 +155,39 @@ fn forms_errors() -> FormView<NewDeal> {
         .submit("Create deal")
         .with_values(vec![("amount".to_owned(), "1,25,000".to_owned())])
         .with_errors(errors)
+}
+
+/// A plan, chosen in the form.
+#[derive(Clone, Copy, Debug, Deserialize, Options)]
+#[serde(rename_all = "snake_case")]
+pub enum Plan {
+    Starter,
+    Growth,
+    Scale,
+}
+
+/// A checkout: the plan, the company and its tax number, in fields a size larger.
+#[derive(Debug, Deserialize, Validate, Form)]
+#[form(size = lg)]
+pub struct Checkout {
+    /// Plan
+    #[validate(skip)]
+    #[form(wide, help = "You can change it at any time.")]
+    pub plan: Plan,
+    /// Company
+    #[validate(length(min = 1, max = 120))]
+    pub company: String,
+    /// GSTIN
+    #[validate(length(min = 15, max = 15))]
+    #[form(mono, placeholder = "22AAAAA0000A1Z5")]
+    pub gstin: String,
+}
+
+fn forms_own_parts() -> FormView<Checkout> {
+    FormView::<Checkout>::new()
+        .post("/checkout")
+        .with_values(vec![("plan".to_owned(), "growth".to_owned())])
+        .submit_button(Button::primary("Pay and start").icon(icons::LOCK).block())
 }
 
 fn commands_toggle() -> Stack {

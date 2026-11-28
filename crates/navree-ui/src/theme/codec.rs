@@ -1,7 +1,10 @@
 //! A theme written down three ways, each read back by a strict parser:
 //!
 //! - the **short form**, `v1-0406-d-g-<dark>-<light>`, only `[0-9a-z-]`: the
-//!   theme's stylesheet URL and what a cookie carries;
+//!   theme's stylesheet URL and what a cookie carries. A theme that says more than
+//!   its spec adds a segment for each group of what it says (`-c` and the corners
+//!   of each part, `-r` and its colour roles); one that doesn't keeps the form it
+//!   always had;
 //! - the **stored theme**, JSON with a schema name, for a database column or a
 //!   file to share;
 //! - **Rust**, a function returning the [`Theme`], to paste into an app.
@@ -11,8 +14,8 @@ use std::fmt::Write as _;
 use serde_json::{Map, Value};
 
 use super::{
-    Density, Font, LengthError, Palette, Radius, Rgb, Shortfall, Side, TOKEN_COUNT, Theme,
-    ThemeSpec, Token,
+    Density, Extras, Font, LengthError, Palette, Radius, Rgb, Roles, Shape, Shortfall, Side,
+    TOKEN_COUNT, Theme, ThemeSpec, Token,
 };
 
 /// A theme's id: `[a-z][a-z0-9-]*`, at most 32 characters, no `--` and no
@@ -105,9 +108,12 @@ pub const JSON_MOST: usize = 16 * 1024;
 
 const PALETTE_DIGITS: usize = TOKEN_COUNT * 6;
 
-/// The length of every short form.
+/// The length of the short form of a theme that says nothing beyond its spec.
 pub(crate) const FORM_LEN: usize =
     2 + 1 + 4 + 1 + 1 + 1 + 1 + 1 + PALETTE_DIGITS + 1 + PALETTE_DIGITS;
+
+/// The longest short form read: the spec's and room for everything a theme says beyond it.
+pub(crate) const FORM_MOST: usize = 1024;
 
 const fn density_char(density: Density) -> char {
     match density {
@@ -127,7 +133,16 @@ const fn font_char(font: Font) -> char {
     }
 }
 
-/// The short form of `spec`.
+/// The short form of `spec` and what the theme says beyond it: the spec's form, then a
+/// segment for each group of what it says.
+pub(crate) fn to_form_with(spec: &ThemeSpec, extras: &Extras) -> String {
+    let mut out = to_form(spec);
+    extras.shape.form(&mut out);
+    extras.roles.form(&mut out);
+    out
+}
+
+/// The short form of `spec` alone.
 pub(crate) fn to_form(spec: &ThemeSpec) -> String {
     let mut out = String::with_capacity(FORM_LEN);
     let _ = write!(
@@ -148,8 +163,37 @@ pub(crate) fn to_form(spec: &ThemeSpec) -> String {
     out
 }
 
-/// The spec a short form holds: `None` for anything that isn't exactly one,
-/// in its one canonical spelling.
+/// The spec a short form holds, and what it says beyond: `None` for anything that isn't
+/// exactly one, in its one canonical spelling.
+pub(crate) fn from_form_with(form: &str) -> Option<(ThemeSpec, Extras)> {
+    if form.len() > FORM_MOST || form.len() < FORM_LEN || !form.is_ascii() {
+        return None;
+    }
+    let (base, more) = form.split_at(FORM_LEN);
+    let spec = from_form(base)?;
+    if more.is_empty() {
+        return Some((spec, Extras::NONE));
+    }
+    let mut extras = Extras::NONE;
+    let mut groups = more.strip_prefix('-')?.split('-');
+    let mut shape = Shape::new();
+    for group in groups.by_ref() {
+        let tag = group.chars().next()?;
+        if tag == 'r' {
+            extras.roles = Roles::read_form(&group[1..])?;
+        } else if Shape::has_group(tag) {
+            shape.read_group(tag, &group[1..])?;
+        } else {
+            return None;
+        }
+    }
+    extras.shape = shape;
+    // One spelling: groups in their order, each once, written as the theme writes them.
+    (to_form_with(&spec, &extras) == form).then_some((spec, extras))
+}
+
+/// The spec a short form of a theme that says nothing beyond it holds: `None` for anything
+/// that isn't exactly one, in its one canonical spelling.
 pub(crate) fn from_form(form: &str) -> Option<ThemeSpec> {
     if form.len() != FORM_LEN || !form.is_ascii() {
         return None;
@@ -234,13 +278,22 @@ impl Theme {
         root.insert("font".to_owned(), Value::String(spec.font.id().to_owned()));
         root.insert("dark".to_owned(), palette(&spec.dark));
         root.insert("light".to_owned(), palette(&spec.light));
+        let extras = self.extras();
+        if !extras.shape.is_default() {
+            root.insert("shape".to_owned(), extras.shape.json());
+        }
+        if !extras.roles.is_default() {
+            root.insert("roles".to_owned(), extras.roles.json());
+        }
         serde_json::to_string_pretty(&Value::Object(root)).unwrap_or_default()
     }
 
     /// Reads a stored theme. Every field is checked: the schema, an id, a name,
-    /// the corners in px, a density and a font from the lists, and a colour for
-    /// every token of both palettes, each through [`Rgb::parse`]. Unknown fields
-    /// are refused, so a misspelt one isn't lost. Then the contrast is checked.
+    /// the corners in px, a density and a font from the lists, a colour for
+    /// every token of both palettes, each through [`Rgb::parse`], and the
+    /// [`Shape`]'s values and the [`Roles`]' colours when it has them, each in
+    /// range. Unknown fields are refused, so a misspelt one isn't lost. Then the
+    /// contrast is checked, the roles' too.
     pub fn from_json(text: &str) -> Result<Self, ImportError> {
         if text.len() > JSON_MOST {
             return Err(fields("theme", "This file is larger than a theme."));
@@ -257,7 +310,16 @@ impl Theme {
         for key in root.keys() {
             if !matches!(
                 key.as_str(),
-                "schema" | "id" | "name" | "radius" | "density" | "font" | "dark" | "light"
+                "schema"
+                    | "id"
+                    | "name"
+                    | "radius"
+                    | "density"
+                    | "font"
+                    | "dark"
+                    | "light"
+                    | "shape"
+                    | "roles"
             ) {
                 error(&clip(key), "This field is not part of a theme.");
             }
@@ -371,6 +433,12 @@ impl Theme {
                 }
             }
         }
+        let shape = root
+            .get("shape")
+            .map_or_else(Shape::new, |value| Shape::from_json(value, &mut errors));
+        let roles = root
+            .get("roles")
+            .map_or_else(Roles::new, |value| Roles::from_json(value, &mut errors));
         errors.append(&mut missing);
         if !errors.is_empty() {
             return Err(ImportError::Fields(errors));
@@ -391,7 +459,9 @@ impl Theme {
                 density,
                 font,
             },
-        )
+        )?
+        .with_shape(shape)?
+        .with_roles(roles)
     }
 
     /// The theme as Rust: a function returning it, for an app's code. `path` is
@@ -400,11 +470,22 @@ impl Theme {
         let spec = self.spec();
         // `_theme` keeps a keyword id (`type`, `match`) from naming the function.
         let function = format!("{}_theme", self.id().replace('-', "_"));
+        let extras = self.extras();
         let mut out = String::with_capacity(4096);
-        let _ = writeln!(
-            out,
-            "use {path}::theme::{{Density, Font, Palette, Radius, Rgb, Theme, ThemeId, ThemeSpec}};\n"
-        );
+        let mut names = vec![
+            "Density",
+            "Font",
+            "Palette",
+            "Radius",
+            "Rgb",
+            "Theme",
+            "ThemeId",
+            "ThemeSpec",
+        ];
+        names.extend(extras.shape.rust_names());
+        names.extend(extras.roles.rust_names());
+        names.sort_unstable();
+        let _ = writeln!(out, "use {path}::theme::{{{}}};\n", names.join(", "));
         let name = self.name().replace('\\', "\\\\").replace('"', "\\\"");
         let _ = writeln!(out, "/// The \"{}\" theme.", name.replace('\n', " "));
         let _ = writeln!(out, "pub fn {function}() -> Theme {{");
@@ -433,11 +514,25 @@ impl Theme {
         let _ = writeln!(out, "        density: Density::{:?},", spec.density);
         let _ = writeln!(out, "        font: Font::{:?},", spec.font);
         out.push_str("    };\n");
+        if !extras.shape.is_default() {
+            let _ = writeln!(out, "    let shape = {};", extras.shape.rust());
+        }
+        if !extras.roles.is_default() {
+            let _ = writeln!(out, "    let roles = {};", extras.roles.rust());
+        }
         let _ = writeln!(
             out,
             "    Theme::custom(ThemeId::parse(\"{}\").expect(\"a theme id\"), \"{name}\", spec)\n        .expect(\"every text pair reaches WCAG AA\")",
             self.id()
         );
+        if !extras.shape.is_default() {
+            out.push_str("        .with_shape(shape)\n        .expect(\"every value of the shape in range\")\n");
+        }
+        if !extras.roles.is_default() {
+            out.push_str(
+                "        .with_roles(roles)\n        .expect(\"every colour role reads\")\n",
+            );
+        }
         out.push_str("}\n");
         out
     }
@@ -449,7 +544,7 @@ fn fields(at: &str, what: &str) -> ImportError {
 }
 
 /// A key from the file, cut short and stripped of control characters, for a message.
-fn clip(key: &str) -> String {
+pub(crate) fn clip(key: &str) -> String {
     clean_text(key, 40)
 }
 

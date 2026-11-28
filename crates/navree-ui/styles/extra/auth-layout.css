@@ -1,0 +1,27 @@
+/*
+ * navree-ui's stylesheet: what an auth layout's options draw, linked only by a layout that uses
+ * one. A plain auth layout is drawn by the app blocks' sheet alone, as it always was. This one
+ * adds the panel after the form, the panel inset from the window's edges in the theme's panel
+ * corner, the app's brand at the top of the form's column and a line at its foot, and a form
+ * column of another width. Every colour is a token; a panel on the inverse surface is the
+ * theme's own (`data-inverse`), which needs nothing here.
+ */
+@media (min-width:960px){
+  /* The panel after the form: the columns swap, and its edge faces the form */
+  [data-slot=auth-layout][data-aside~=end]{grid-template-columns:minmax(0,6fr) minmax(0,5fr);& > aside{border-inline:1px solid var(--line);border-inline-end:0}}
+  /* An inset panel: off the edges, in the panel corner; the form's column grows from 35rem and the panel from 30rem, by equal parts */
+  [data-slot=auth-layout][data-aside~=inset]{display:flex;& > main{flex:1 1 35rem}& > aside{flex:1 1 30rem;margin:.75rem;padding:3.5rem;gap:2.5rem;border:0;border-radius:var(--radius-panel,var(--radius-lg))}}
+}
+/* A brand at the top of the form's column and a line at its foot, at every width, the form centred between them */
+[data-slot=auth-main]:has(> [data-slot=auth-brand],> [data-slot=auth-footer]){gap:3rem;padding:2rem clamp(1rem,3vw,2.5rem)}
+[data-slot=auth-body]{margin-block:auto}
+[data-slot=auth-brand],[data-slot=auth-footer]{align-self:flex-start}
+[data-slot=auth-brand]{color:var(--fg);font-size:var(--text-brand-size,1.0625rem);font-weight:var(--text-brand-weight,650);line-height:var(--text-brand-line);letter-spacing:var(--text-brand-tracking,-.015em);font-family:var(--text-brand-face,var(--font-display));
+  & a{display:flex;align-items:center;gap:.625rem;color:inherit;text-decoration:none}
+  & :is(img,svg){display:block}
+}
+[data-slot=auth-footer]{color:var(--fg-2);font-size:12px}
+/* The form's column at another width than 28rem */
+[data-body="360"] [data-slot=auth-body]{width:min(100%,22.5rem)}
+[data-body="400"] [data-slot=auth-body]{width:min(100%,25rem)}
+[data-body="480"] [data-slot=auth-body]{width:min(100%,30rem)}

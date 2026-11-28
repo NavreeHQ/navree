@@ -5,11 +5,11 @@
  * Navree's own. See THIRD_PARTY.md.
  */
 /* Dialogs: the browser's <dialog>. Closed ones stay display:none by default. */
-[data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer]{padding:0;border:1px solid var(--line-2);background:var(--ink-1);color:var(--fg-1);overflow:auto;
+[data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer]{padding:0;border:1px solid var(--line-2);background:var(--card,var(--ink-1));color:var(--fg-1);overflow:auto;box-shadow:var(--shadow-floating);
   &::backdrop{background:var(--scrim,rgb(1 3 2/.72))}
   &[open]{display:flex;flex-direction:column;animation:ui-in .1s ease-out}
 }
-[data-slot=dialog],[data-slot=alert-dialog]{width:calc(100% - 2rem);max-width:32rem;max-height:calc(100dvh - 2rem);margin:auto;border-radius:var(--radius-lg)}
+[data-slot=dialog],[data-slot=alert-dialog]{width:calc(100% - 2rem);max-width:32rem;max-height:calc(100dvh - 2rem);margin:auto;border-radius:var(--radius-overlay,var(--radius-lg))}
 [data-slot=alert-dialog]{max-width:26rem}
 [data-slot=sheet]{position:fixed;margin:0;max-width:none;max-height:none;
   /* SheetBackdrop::Light: the page behind stays readable. Part of the mode's scrim, so a light page dims less too. */
@@ -21,7 +21,7 @@
   &[data-side=top]{bottom:auto;top:0;border-width:0 0 1px}
   &[data-side=bottom]{top:auto;bottom:0;border-width:1px 0 0}
 }
-[data-slot=drawer]{position:fixed;left:0;right:0;top:auto;bottom:0;margin:0;width:100%;max-width:none;max-height:85dvh;border-width:1px 0 0;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+[data-slot=drawer]{position:fixed;left:0;right:0;top:auto;bottom:0;margin:0;width:100%;max-width:none;max-height:85dvh;border-width:1px 0 0;border-radius:var(--radius-overlay,var(--radius-lg)) var(--radius-overlay,var(--radius-lg)) 0 0}
 [data-slot=dialog-header]{display:flex;flex-direction:column;gap:.25rem;padding:1rem 2.75rem .25rem 1rem}
 [data-slot=alert-dialog] [data-slot=dialog-header]{padding-inline-end:1rem}
 [data-slot=dialog-title]{color:var(--fg);font-size:1rem;font-weight:600;line-height:1.25}
@@ -31,13 +31,13 @@
 [data-slot=dialog-close]{position:absolute;top:.625rem;inset-inline-end:.625rem;display:flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border:0;border-radius:var(--radius);background:transparent;color:var(--fg-2);cursor:pointer;&:hover{background:var(--ink-2);color:var(--fg)}}
 
 /* Popups: the browser's popover. The overlay module places them. */
-[data-slot=popover-content],[data-slot=hover-card-content],[data-slot=info-tip-content]{position:fixed;inset:auto;margin:0;padding:.75rem;width:max-content;max-width:min(20rem,calc(100vw - 1rem));border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);color:var(--fg-1);
+[data-slot=popover-content],[data-slot=hover-card-content],[data-slot=info-tip-content]{position:fixed;inset:auto;margin:0;padding:.75rem;width:max-content;max-width:min(20rem,calc(100vw - 1rem));border:1px solid var(--line-2);border-radius:var(--radius-overlay,var(--radius-lg));background:var(--card,var(--ink-1));color:var(--fg-1);box-shadow:var(--shadow-floating);
   &:popover-open{animation:ui-in .1s ease-out}
   &:not([style]){margin:auto;inset:0;height:fit-content}
 }
 [data-slot=popover-content]:focus{outline:0}
 [data-slot=popover-content]:has([data-slot=menu-link]){padding:.25rem;min-width:11rem}
-[data-slot=menu-link]{display:flex;align-items:center;gap:.5rem;width:100%;height:2rem;padding:0 .5rem;border:0;border-radius:var(--radius);background:none;color:var(--fg-1);font:inherit;text-align:start;text-decoration:none;cursor:pointer;& [data-slot=icon]{flex:none;width:14px;height:14px;color:var(--fg-3)}&:hover,&:focus-visible{background:var(--ink-2);color:var(--fg);outline:0}&[data-active]{color:var(--accent-text);& [data-slot=icon]{color:var(--accent-text)}}&[data-destructive]{color:var(--danger);& [data-slot=icon]{color:var(--danger)}}}
+[data-slot=menu-link]{display:flex;align-items:center;gap:.5rem;width:100%;height:2rem;padding:0 .5rem;border:0;border-radius:var(--radius-nav,var(--radius));background:none;color:var(--fg-1);font:inherit;text-align:start;text-decoration:none;cursor:pointer;& [data-slot=icon]{flex:none;width:14px;height:14px;color:var(--fg-3)}&:hover,&:focus-visible{background:var(--ink-2);color:var(--fg);outline:0}&[data-active]{color:var(--accent-text);& [data-slot=icon]{color:var(--accent-text)}}&[data-destructive]{color:var(--danger);& [data-slot=icon]{color:var(--danger)}}}
 [data-slot=tooltip-content]{position:fixed;inset:auto;margin:0;padding:.25rem .5rem;width:max-content;max-width:18rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font-size:12px;pointer-events:none}
 [data-slot=tooltip-trigger],[data-slot=hover-card-trigger]{display:inline-flex}
 

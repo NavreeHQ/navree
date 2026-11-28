@@ -16,11 +16,21 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(820),
         single!("card", "plain", "Body only", card_plain).start(),
+        single!("card", "inverse", "On the inverse surface", card_inverse)
+            .start()
+            .width(520)
+            .height(200),
         single!("badge", "default", "Badges", badge_default),
         gallery!("badge", "variants", "Variants", badge_variants).narrow(),
         single!("badge", "icon", "With an icon", badge_icon),
         single!("avatar", "default", "Avatars", avatar_default),
         gallery!("avatar", "sizes", "Sizes", avatar_sizes).narrow(),
+        single!(
+            "avatar",
+            "initials",
+            "Initials, in a tone and filled",
+            avatar_initials
+        ),
         single!("item", "thumb", "An item", item_thumb).start(),
         single!("item", "default", "Items", item_default).start(),
         gallery!("item", "variants", "Variants", item_variants).wide(),
@@ -73,6 +83,18 @@ fn card_plain() -> Card {
     ))
 }
 
+fn card_inverse() -> Card {
+    Card::titled("Security, in every mode")
+        .variant(CardVariant::Inverse)
+        .body(Text::new(
+            "Every team works in its own pipeline, with its own contacts.",
+        ))
+        .footer((
+            Button::primary("Request a quote"),
+            Button::outline("Read the details"),
+        ))
+}
+
 fn badge_default() -> Row {
     Row::gap(2).wrap().children((
         Badge::new("Draft"),
@@ -91,6 +113,7 @@ fn badge_variants() -> impl IntoIterator<Item = (&'static str, Badge)> {
             Badge::new("At risk").variant(BadgeVariant::Warning),
         ),
         ("Danger", Badge::new("Lost").variant(BadgeVariant::Danger)),
+        ("Solid", Badge::new("Internal").variant(BadgeVariant::Solid)),
     ]
 }
 
@@ -108,6 +131,19 @@ fn avatar_default() -> Row {
         Avatar::placeholder("Gurpreet Singh"),
         Avatar::placeholder("Harleen Kaur"),
         Avatar::placeholder("Manpreet Gill"),
+    ))
+}
+
+fn avatar_initials() -> Row {
+    Row::gap(2).children((
+        Avatar::initials("Narmada Roadways").solid(),
+        Avatar::initials("Dalbir Oberoi").shape(AvatarShape::Circle),
+        Avatar::initials("Harleen Kaur")
+            .tone(Tone::Info)
+            .shape(AvatarShape::Circle),
+        Avatar::initials("ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ")
+            .tone(Tone::Success)
+            .shape(AvatarShape::Circle),
     ))
 }
 

@@ -29,11 +29,14 @@ mod table;
 /// }
 /// ```
 ///
-/// On the type: `id = "..."`. On a field: `label`, `placeholder`, `help`,
-/// `prompt` and `error` (text), `rows` (a number), `addon = "other_field"`,
-/// `widget = text | email | url | tel | password | search | number | date |
-/// time | datetime | date_picker | time_picker | textarea | select | radio | checkbox |
-/// switch | hidden | money`, and the flags `autofocus`, `wide` and `skip`.
+/// On the type: `id = "..."` and `size = xs | sm | md | lg` (every field's
+/// height, a step of the theme's field sizes). On a field: `label`,
+/// `placeholder`, `help`, `prompt` and `error` (text), `rows` (a number),
+/// `addon = "other_field"`, `widget = text | email | url | tel | password |
+/// search | number | date | time | datetime | date_picker | time_picker |
+/// textarea | select | radio | checkbox | switch | hidden | money`, `size = lg`
+/// (its own height), and the flags `autofocus`, `wide`, `mono` (its text in the
+/// mono face, for a field typed into) and `skip`.
 #[proc_macro_derive(Form, attributes(form))]
 pub fn derive_form(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
@@ -79,7 +82,11 @@ pub fn derive_table_row(input: TokenStream) -> TokenStream {
 
 /// Implements `FilterBar` for a struct: each field is a control of the table's
 /// toolbar, and a parameter in the URL. `#[filter(search)]` is a search box;
-/// an `Option` of an enum with `Options` is a select.
+/// an `Option` of an enum with `Options` is a select; `#[filter(multi)]` on an
+/// `Option<Many<T>>` is chips; `#[filter(boolean)]` on an `Option<bool>` is a
+/// checkbox; `options = LIST` or `options = page` (the page's
+/// `DataTable::options`) give a select's or chips' choices; and
+/// `default = "..."` is the value a select holds when the URL names none.
 #[proc_macro_derive(FilterBar, attributes(filter))]
 pub fn derive_filter_bar(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);

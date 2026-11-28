@@ -178,6 +178,7 @@ pub const GROUPS: &[Group] = &[
             "donut-chart",
             "sparkline",
             "funnel",
+            "waterfall",
             "ring",
             "rings",
             "gauge",
@@ -187,6 +188,7 @@ pub const GROUPS: &[Group] = &[
             "color-strip",
             "range-scale",
             "trend",
+            "heatmap",
             "calendar-heatmap",
             "matrix-heatmap",
             "relation-list",
@@ -488,11 +490,11 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "badge",
         "Badge",
-        &["Badge", "BadgeVariant", "Tone"],
+        &["Badge", "BadgeVariant", "StatusDot", "Tone"],
         "default",
     )
     .parts("default"),
-    component("avatar", "Avatar", &["Avatar"], "default").parts("default"),
+    component("avatar", "Avatar", &["Avatar", "AvatarShape"], "default").parts("default"),
     component("item", "Item", &["Item", "ItemVariant"], "thumb").parts("default"),
     component(
         "typography",
@@ -519,7 +521,7 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "timeline",
         "Timeline",
-        &["Timeline", "TimelineEvent", "TimelineState", "Meta"],
+        &["Timeline", "TimelineEvent", "TimelineState", "TimelineVariant", "Meta"],
         "thumb",
     )
     .parts("default"),
@@ -671,7 +673,7 @@ pub const COMPONENTS: &[Component] = &[
         "app-shell",
         "App shell",
         &[
-            "Shell", "NavGroup", "NavItem", "UserMenu", "AppPage", "AppShell",
+            "Shell", "NavGroup", "NavItem", "UserMenu", "AppPage", "AppShell", "LogoStyle",
         ],
         "default",
     )
@@ -704,7 +706,7 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "stepper",
         "Stepper",
-        &["Stepper", "Step", "StepState", "StepperLabels"],
+        &["Stepper", "Step", "StepState", "StepperLabels", "StepperVariant"],
         "thumb",
     )
     .parts("default"),
@@ -785,7 +787,7 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .parts("default"),
-    component("stat", "Stat and Bars", &["Stat", "Bars"], "thumb").parts("default"),
+    component("stat", "Stat and Bars", &["Stat", "StatVariant", "Bars"], "thumb").parts("default"),
     component(
         "sortable",
         "Sortable",
@@ -850,6 +852,14 @@ pub const COMPONENTS: &[Component] = &[
     component("donut-chart", "Donut chart", &["Donut"], "thumb")
         .about("One whole split into a few parts, with the total in the middle. A pie has no hole.")
         .parts("default"),
+    component(
+        "waterfall",
+        "Waterfall",
+        &["Waterfall", "WaterfallLabels"],
+        "thumb",
+    )
+    .about("An amount built up and taken down a step at a time, each bar floating at the running total, with totals from zero.")
+    .parts("default"),
     component("sparkline", "Sparkline", &["Sparkline"], "thumb")
         .about("A small line with no axes, beside a figure: the shape of a series at a glance.")
         .parts("default"),
@@ -893,6 +903,14 @@ pub const COMPONENTS: &[Component] = &[
     component("trend", "Trend", &["Trend"], "thumb")
         .about("Which way something moved and by how much: an arrow, a signed change and a colour for what it means.")
         .parts("default"),
+    component(
+        "heatmap",
+        "Heat map",
+        &["Heatmap", "RowSummary", "GridLabels"],
+        "thumb",
+    )
+    .about("Rows by columns, a cell for each: a reading in five steps of one colour or in the bands of a scale, or a category, with one legend for the whole grid.")
+    .parts("default"),
     component(
         "calendar-heatmap",
         "Calendar heat map",
@@ -1003,6 +1021,22 @@ pub const COMPONENTS: &[Component] = &[
         "Themes",
         &[
             "Theme",
+            "Shape",
+            "Corners",
+            "Corner",
+            "TypeScale",
+            "TextStyle",
+            "Face",
+            "Sizes",
+            "ControlSizes",
+            "FieldSizes",
+            "SidebarSizes",
+            "TopbarSizes",
+            "PageSizes",
+            "CardSizes",
+            "Elevation",
+            "Roles",
+            "Inverse",
             "Appearance",
             "Mode",
             "ThemeSetting",

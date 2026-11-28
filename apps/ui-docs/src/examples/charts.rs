@@ -1,4 +1,4 @@
-//! Line, area and bar charts, donut and pie, sparkline, funnel, and reports.
+//! Line, area and bar charts, donut and pie, sparkline, funnel, waterfall, and reports.
 //!
 //! The rupee amounts are written in lakh grouping (`12_50_000`), as the pages print them.
 #![allow(clippy::inconsistent_digit_grouping)]
@@ -337,6 +337,36 @@ pub fn all() -> Vec<Example> {
         .start()
         .width(820)
         .height(275),
+        // Waterfall
+        single!("waterfall", "thumb", "A waterfall", waterfall_thumb)
+            .start()
+            .width(520)
+            .height(250),
+        single!(
+            "waterfall",
+            "default",
+            "A settlement in seven rows, in rupees",
+            waterfall_default
+        )
+        .start()
+        .height(400),
+        single!(
+            "waterfall",
+            "subtotals",
+            "A subtotal between the steps, in tones",
+            waterfall_subtotals
+        )
+        .start()
+        .height(400),
+        single!(
+            "waterfall",
+            "states",
+            "Loading, failed and empty",
+            waterfall_states
+        )
+        .start()
+        .width(820)
+        .height(300),
         // Reports
         single!("reports", "thumb", "A report's controls", reports_thumb)
             .start()
@@ -1006,6 +1036,84 @@ fn funnel_rates() -> Funnel {
                 .rate("31% of sellers with an order")
                 .tone(Tone::Success),
         )
+}
+
+fn waterfall_thumb() -> Waterfall {
+    Waterfall::new("Settlement")
+        .id("waterfall-thumb")
+        .hide_title()
+        .table(TableMode::ScreenReader)
+        .locale("en-IN")
+        .format(NumberFormat::currency("₹").max_decimals(0))
+        .start("Orders", 2_50_000)
+        .step("Fees", -29_500)
+        .step("Returns", -12_000)
+        .total("Paid")
+}
+
+fn waterfall_default() -> Waterfall {
+    Waterfall::new("This month's settlement")
+        .id("waterfall-default")
+        .description("From what the store's customers paid to what reached the bank")
+        .locale("en-IN")
+        .format(NumberFormat::currency("₹").max_decimals(0))
+        .start("Orders", 2_50_000)
+        .step("Store fee", -25_000)
+        .step("Tax on the fee", -4_500)
+        .step("Returns", -12_000)
+        .step("Promotions refunded", 3_000)
+        .step("Tax withheld", -2_500)
+        .total("Paid to the bank")
+}
+
+fn waterfall_subtotals() -> Waterfall {
+    Waterfall::new("Studio profit, October")
+        .id("waterfall-subtotals")
+        .description("Classes and retail, less what they cost")
+        .locale("en-IN")
+        .format(NumberFormat::currency("₹").max_decimals(0))
+        .step("Classes", 4_20_000)
+        .step("Retail", 85_000)
+        .total("Revenue")
+        .step("Instructors", -1_90_000)
+        .step("Premises", -95_000)
+        .step("Stock", -42_000)
+        .total("Profit")
+        .colors(
+            Ink::tone(Tone::Success),
+            Ink::tone(Tone::Danger),
+            Ink::slot(7),
+        )
+}
+
+fn waterfall_states() -> Grid {
+    let state = |caption: &'static str, chart: Waterfall| {
+        Stack::gap(2).children((Text::muted(caption), chart))
+    };
+    Grid::cols(3).gap(4).children((
+        state(
+            "Loading",
+            Waterfall::new("This month's settlement")
+                .id("waterfall-loading")
+                .loading(),
+        ),
+        state(
+            "Failed",
+            Waterfall::new("This month's settlement")
+                .id("waterfall-failed")
+                .failed(None)
+                .retry("/settlements"),
+        ),
+        state(
+            "Empty",
+            Waterfall::new("This month's settlement")
+                .id("waterfall-empty")
+                .empty(
+                    "No settlement yet",
+                    Some("The month's settlement appears after its first order.".to_owned()),
+                ),
+        ),
+    ))
 }
 
 fn funnel_states() -> Grid {

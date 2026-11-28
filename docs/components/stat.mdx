@@ -91,6 +91,20 @@ Grid::fit(14).gap(4).children((
 
 The tile and the grid use theme tokens only, so they follow light and dark. A tile with an icon, a unit, a status, a caption, an aside or a link loads the app blocks stylesheet (about 2 KB gzip); a plain stat loads nothing more.
 
+### A tile on the inverse surface
+
+`.variant(StatVariant::Inverse)` draws the tile on the theme's other palette, a dark tile on a light page, for the one figure a page leads with. Its label, figure, caption and status read the flipped colours, and a theme's `Roles::inverse` sets them to colours of its own, checked for contrast. It links nothing more.
+
+```rust
+use navree::ui::*;
+
+Stat::new("Invoices due, Mon 16 Nov", "₹9,12,400")
+    .caption("to the account ending 4521")
+    .variant(StatVariant::Inverse)
+```
+
+<UiPreview example="stat/inverse" />
+
 ## Keyboard and accessibility
 
 <UiA11y>
@@ -109,6 +123,10 @@ The tile and the grid use theme tokens only, so they follow light and dark. A ti
 ### Stat
 
 <UiProps type="Stat" />
+
+### StatVariant
+
+<UiProps type="StatVariant" />
 
 ### Bars
 

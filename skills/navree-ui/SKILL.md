@@ -38,8 +38,13 @@ around them.
 4. **A page route starts with `!`** (`#[get("!/contacts")]`), so it sits at
    the site's root. A route without `!` sits under `http.api_prefix`
    (`/api`), where errors are JSON.
-5. **Corners are 4 px on controls and 6 px on surfaces. No pills, no letter
-   tiles, no glow.** The components already follow this. Do not override it.
+5. **Corners are the theme's.** 4 px on controls and 6 px on surfaces by
+   default; a theme of the app's own gives each kind of part its own corner,
+   pills included, with its shape (`Theme::with_shape`,
+   `references/themes.md`). Surfaces are flat unless the theme's shape says
+   `Elevation::Soft`. Initials are `Avatar::initials`. No glow, and no
+   stylesheet that restyles a component: a value the design needs goes in
+   the theme.
 6. **Every page has its other states**: empty, loading, failed, read-only and
    forbidden. Build them with the components below.
 7. **Test each page** with `TestView` (no browser), and look at it at 1440
@@ -126,7 +131,11 @@ pub struct HomeModule;
 
 `shell.page(title)` builds the page; `.crumb(label, href)` adds a
 breadcrumb, `.actions(..)` the buttons beside the title (one primary action
-per page) and `.body(..)` the content. A page outside the shell (a sign-in
+per page) and `.body(..)` the content. `.topbar_actions(..)` puts buttons at
+the end of the top bar, `.title_aside(..)` badges after the title,
+`.subtitle(text)` a muted line under it, `.title_face(Face::Mono)` a title in
+mono, and `.current_crumb(label)` (with `.current_crumb_mono()`) a last crumb
+other than the title. A page outside the shell (a sign-in
 page, a receipt) is `View::new(title).body(..)`. Add `HomeModule` to the app
 root with `.module(HomeModule)`. Components carry no outer margin: space
 between them comes from `Stack`, `Row` and `Grid`.
@@ -433,6 +442,32 @@ impl ErrorsModule {
 }
 ```
 
+The `ErrorContext` names the user and, during an impersonation, the user
+acting as them (`request.impersonator`): an `ErrorShell` that sees one adds
+`.action("Stop impersonating", "/impersonate/stop")` to the `UserMenu`.
+
+A guest's page, and a 401, 429 or 503 for anyone, stands on its own in
+Navree's own look unless you ask. `shell_look()` gives it the registered
+`Shell`'s look (default appearance, offered themes, stylesheets, typefaces,
+title template), with the reader's theme cookie and `?theme=`/`?mode=` over
+it; an app with an `ErrorShell` gives `appearance(..)`, `stylesheet(..)` and
+`font(..)` instead. `offer_sign_in(true)` adds Sign in beside a guest's
+own actions. `stop_impersonating(path)` makes an error page seen during an
+impersonation say so and offer a Stop impersonating form, in the shell and
+on its own. An error page in the shell reads the address's query, so
+`?mode=light` holds there as on every page.
+
+```rust
+pub fn ui_in_the_apps_look() -> impl Module {
+    UiModule::with_pages(
+        PagesOptions::default()
+            .shell_look()
+            .offer_sign_in(true)
+            .stop_impersonating("/impersonate/stop"),
+    )
+}
+```
+
 The same markup fits places inside a page. `Forbidden` is for a card, tab
 or row the user may not see (it never says whether the thing exists),
 `NotFound` for a record that is gone, `SignInRequired` for a part that
@@ -479,12 +514,24 @@ picks the control:
 
 `#[form(...)]` takes `label`, `placeholder`, `help`, `prompt`, `error`
 (replaces any failed rule's message), `addon = "field"`, `rows`, `max`,
-`autofocus`, `wide` and `skip` (never drawn, never read). `FormView` draws
-the form: `.post(url)`, `.submit(label)`, `.cancel(label, href)`,
+`autofocus`, `wide`, `mono` (a field typed into, in the theme's mono face),
+`size = xs | sm | md | lg` (the theme's field height of that step; on the
+struct, for every field) and `skip` (never drawn, never read). `FormView`
+draws the form: `.post(url)`, `.submit(label)`, `.cancel(label, href)`,
 `.options(field, choices)`, `.choices(field, choices)`, `.search(field,
-url)`, `.one_column()`, `.csrf(token)` and `.id_prefix(prefix)`, which keeps
+url)`, `.one_column()`, `.label(field, text)` (a label chosen at run time,
+from words the app knows, never a reader's text), `.csrf(token)` and
+`.id_prefix(prefix)`, which keeps
 two forms of one type on a page (two dialogs) from repeating their ids; call
 `Rejected::id_prefix` with the same prefix when you answer a refusal.
+
+The submit button takes another look with `.submit_variant(ButtonVariant)`,
+or is a `Button` of your own with `.submit_button(button)` (the form makes it
+submit); `.without_actions()` draws no buttons, for a dialog's footer that
+names `form_id()`. A field drawn by something of your own (a `ToggleGroup`
+of plans, chips, option cards) is a `FieldControl` given with
+`#[form(control = PATH)]`: never write markup for a control the form can't
+draw.
 
 A picker reads back as text, and the form does not know the value was one of
 the options. Check it on the server before you save:
@@ -511,6 +558,9 @@ checks bulk actions.
 | A toolbar of the search box only | `.without_columns_picker()` and `.without_density_switch()`: the table draws its starting columns and the default density, and ignores `cols` and `density` |
 | Filter per column | `#[col(filter = text \| range \| date \| select \| multi \| boolean \| relation)]`, choices from `options = LIST` or `.options(col, Vec<FilterOption>)` |
 | Filters under the headers or in a bar | `.filter_row()` or `.filter_bar()` |
+| Filters of the page's own in the toolbar (not a column's) | `#[derive(FilterBar)]` on a struct of `Option` fields, `TableQuery<Row, Filters>`: an enum is a select, `#[filter(search)]` a search box, `#[filter(multi)]` on `Option<Many<T>>` chips, `#[filter(boolean)]` on `Option<bool>` a checkbox, `#[filter(options = LIST)]` or `options = page` (with `.options(name, Vec<FilterOption>)`) the choices, `#[filter(default = "...")]` a select that always holds one; the page applies `query.filter()` itself, and a name is never one the table reads (`search`, `sort`, `page`...) |
+| The row whose details the page shows beside the table | `.current_row(fn)`: `aria-current="true"` and the theme's `Roles::selected_row` colour; a mark, not a selection |
+| Column headings in the muted colour | `.muted_header()`; their size, weight and face are the theme's `TypeScale::table_head` |
 | Page size | `#[table(per = 25, per_pages(10, 25, 50, 100))]` |
 | Huge tables | `#[table(cursor)]` for keyset pages; `capped = n` or `no_count` to stop counting |
 | Status badge, link, row link | `badge = fn`, `link = "/contacts/{id}"`, `.row_href(fn)` |
@@ -519,6 +569,12 @@ checks bulk actions.
 | Export | `.export(url)` and `TableQuery::export_csv` |
 | Saved views | `.views(&views, url)`; the table `navree_ui_table_views` comes from your migration |
 | Empty, loading, failed | `.empty(..)`, `.loading()`, `.failed(message)` |
+
+Build the table after the handler's last `.await`: it keeps its row
+functions as closures that need not be `Send`, so a table held across an
+`.await` makes the handler's future not `Send` and the route fails to
+compile ("future cannot be sent between threads safely ... `DataTable`").
+Load first, then build the table and return the page.
 
 ```rust
 use http::StatusCode;
@@ -740,10 +796,11 @@ Workspaces: add `WorkspaceModule::from_config()` and set
 `workspace.session_default = true` (a browser that has chosen none is in the
 first workspace its account belongs to). `WorkspaceSwitcher` is an
 extractor and a component: put it in the sidebar's header with
-`AppShell::header_slot(switcher)`, or beside the page heading
-(`AppPage::actions(switcher)`); `CurrentWorkspace` gives the workspace, the
-role and `has_permission`; read and write a workspace's rows through
-`WorkspaceRepo::<Model>`.
+`AppShell::header_slot(switcher)`, as a two-line card with the workspace's
+picture if you like (`.variant(SwitcherVariant::Card).media(..).description(..)`),
+or beside the page heading (`AppPage::actions(switcher)`); `CurrentWorkspace`
+gives the workspace, the role and `has_permission`; read and write a
+workspace's rows through `WorkspaceRepo::<Model>`.
 
 The shell is registered once and static, so draw the person and the
 workspace per request: take the `AppShell` extractor and set
@@ -757,7 +814,16 @@ app made by `navree new` does this in one extractor, `Desk`
 (`src/ui/shell.rs`): take `Desk` where this skill says `AppShell`. On the
 `AppShell`, `header_slot(node)` puts a workspace switcher under the app's name
 (`Shell::header_slot` for every page) and `csrf(token)` gives the shell's own
-forms the session's token.
+forms the session's token. `footer_slot(node)` (on `Shell` or `AppShell`)
+puts a tile above the person, such as the plan's seats;
+`UserMenu::avatar(Avatar::initials(name).shape(AvatarShape::Circle))` draws
+the person's initials in place of the icon and `UserMenu::chevron(false)`
+leaves out the chevron. The brand row takes the app's
+mark (`Shell::logo(src)`, `.logo_dark(src)` for dark mode,
+`.logo_style(LogoStyle::Bare)` for the mark alone with no tile) and a badge
+at its end in place of the context line (`Shell::badge(..)`,
+`AppShell::badge(..)` for a request:
+`Badge::new("Internal").variant(BadgeVariant::Solid)`).
 
 ## What is not shipped
 
@@ -1004,7 +1070,7 @@ come from the component catalog of the docs
 | Actions | `Button`, `ButtonGroup`, `Toggle`, `ToggleGroup`, `DropdownMenu`, `ContextMenu`, `Menubar` |
 | Inputs | `Field`, `Input`, `InputGroup`, `Textarea`, `NativeSelect`, `Select`, `Combobox`, `MultiSelect`, `Checkbox`, `Switch`, `RadioGroup`, `PhoneInput`, `InputOtp`, `ColorPicker`, `Upload`, `Questionnaire`, and Forms (`FormView`, `Submit`) |
 | Date and time | `Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker` |
-| Display | `Card`, `Badge`, `Avatar`, `AvatarGroup`, `Item`, Heading and Text, `Kbd`, `Attachment`, Message and Bubble, `Timeline`, `ActivityFeed`, `Trace`, FactCard and FactGrid, `Markdown`, `CodeBlock` |
+| Display | `Card`, `Badge`, `StatusDot`, `Avatar`, `AvatarGroup`, `Item`, Heading and Text, `Kbd`, `Attachment`, Message and Bubble, `Timeline`, `ActivityFeed`, `Trace`, FactCard and FactGrid, `Markdown`, `CodeBlock` |
 | Feedback | `Alert`, `Toast`, `Empty`, `EmptyState`, `ErrorPage`, `Forbidden`, `NotFound`, `SignInRequired`, `Progress`, `Skeleton`, `Spinner` |
 | Overlays | `Dialog`, `AlertDialog`, `Sheet`, `Drawer`, `Popover`, `Tooltip`, `HoverCard` |
 | Layout | Stack, Row, Grid and Container, `SplitPane`, `Accordion`, `Collapsible`, `ScrollArea`, `Separator`, `AspectRatio`, `Direction`, `Carousel` |
@@ -1016,10 +1082,23 @@ come from the component catalog of the docs
 | Page SEO | `View::seo` with `Seo`, JSON-LD (`JsonLd`, `Organization`, `WebSite`, `FaqPage`), `Sitemap`, `RobotsTxt`; in `navree::ui::seo` |
 | Sign-in pages | `AuthPages` (navree-auth): sign-in, sign-up, two-factor and password pages in the app's look, in an `AuthLayout` |
 | Assistant | `Conversation`, `ChatMessage`, `PromptInput`, `ToolCallCard` and `Reasoning`, `ApprovalCard`, `SurfaceFrame`, `Suggestions`, `Sources` and `Citation`, `ThreadList` (the parts of a page where people talk with an assistant; see https://navree.com/docs/ai/generative-ui/) |
-| Charts | the line chart, area chart and bar chart (`Chart::line`, `area`, `bar`), the donut chart (`Donut`, and a pie), `Funnel`, `Sparkline`, and Reports (`Report`, for a date window); radial: `Ring`, `Rings`, `Gauge`, the day clock (`DayClock`); linear: `Meter`, mini columns (`MiniColumns`), a colour strip (`ColorStrip`), a range scale (`RangeScale`); grids: the calendar heat map (`CalendarHeatmap`), the matrix heat map (`MatrixHeatmap`), the relation list (`RelationList`), the scatter chart (`Scatter`); in `navree::ui::charts`. Chart pictures (`ChartImage`, `Tile`, `Block`): a chart drawn as a PNG on the server; the `ui-image` feature, in `navree::ui::image` |
+| Charts | the line chart, area chart and bar chart (`Chart::line`, `area`, `bar`), the donut chart (`Donut`, and a pie), `Funnel`, the waterfall (`Waterfall`), `Sparkline`, and Reports (`Report`, for a date window); radial: `Ring`, `Rings`, `Gauge`, the day clock (`DayClock`); linear: `Meter`, mini columns (`MiniColumns`), a colour strip (`ColorStrip`), a range scale (`RangeScale`); grids: the heat map of rows by columns (`Heatmap`), the calendar heat map (`CalendarHeatmap`), the matrix heat map (`MatrixHeatmap`), the relation list (`RelationList`), the scatter chart (`Scatter`); in `navree::ui::charts`. Chart pictures (`ChartImage`, `Tile`, `Block`): a chart drawn as a PNG on the server; the `ui-image` feature, in `navree::ui::image` |
 | Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Islands (`Island`, `IslandScript`), Errors and states |
 
 Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
+`ButtonGroup::segmented()` draws buttons with an `href` as a segmented control
+between places (two halves of an app), each a real link and the one you are on
+`Button::current(true)` (`aria-current="page"`), in the same colours, corner and
+shadow as segmented tabs; `CardVariant::Inverse`, `StatVariant::Inverse` and
+`CodeBlock::inverse()` draw a card, a figure tile or a code panel on the inverse
+surface (a dark card on a light page), everything in them reading the flipped
+colours; `StatusDot::new(word).tone(..)` is a dot and a word with no chip;
+`Timeline::variant(TimelineVariant::Plain)` a log with no rail or dots;
+`FactGrid::min_tile(px)` tiles narrower than 14 rem; `Card::raised()` the
+theme's soft shadow under a card; `Popover::icon_only(id, icon, label)` and
+`Popover::trigger_label(..)` name the button that opens a popover;
+`ThreadList::group(label, threads)` lists conversations under "Today" and
+"Earlier";
 `Toast` has four tones, a title and one action; `Message` and `Bubble` draw
 a chat; `Empty` is the plain version of `EmptyState`; `Table` is the small
 static table and `DataTable` the paged, sorted, filtered one; `Pagination`
@@ -1029,7 +1108,10 @@ and `Bars` a small bar chart drawn on the server; `Text::tone(Tone::Danger)`
 cell too, where a `Badge` pill would say too much. A real chart is a
 `Chart` (line, area or bar, with series, stacks and a table of the same
 numbers), a `Donut`, a `Funnel` or a `Sparkline` under a `Stat`; a `Report`
-reads its window from the address and counts per period. `AvatarGroup`
+reads its window from the address and counts per period.
+`Avatar::initials(name)` draws a person's or an organisation's initials,
+with `.tone(..)` for a tint, `.solid()` for the accent's fill and
+`.shape(AvatarShape::Circle)` for a round one; `AvatarGroup`
 overlaps avatars and counts the rest in a `+N` tile; `Trace` lists the steps
 of a run (an agent, an import) with a spoken state each; `ColorPicker` is the
 browser's colour field, posting `#rrggbb`; `DateTimePicker` puts a date and a

@@ -71,7 +71,7 @@ use crate::form::{Form, FormView};
 /// # }
 /// ```
 pub fn form<T: Form>(view: &FormView<T>) -> n::Form {
-    let element = view.without_actions();
+    let element = view.bare();
     let mut cx = Cx::new(false);
     let mut form = match cx.form(&element) {
         Ok(form) => form,

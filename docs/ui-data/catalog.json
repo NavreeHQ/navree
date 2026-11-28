@@ -171,6 +171,7 @@
         "donut-chart",
         "sparkline",
         "funnel",
+        "waterfall",
         "ring",
         "rings",
         "gauge",
@@ -180,6 +181,7 @@
         "color-strip",
         "range-scale",
         "trend",
+        "heatmap",
         "calendar-heatmap",
         "matrix-heatmap",
         "relation-list",
@@ -282,7 +284,8 @@
       "examples": [
         "button-group/thumb",
         "button-group/default",
-        "button-group/vertical"
+        "button-group/vertical",
+        "button-group/segmented"
       ]
     },
     {
@@ -657,7 +660,8 @@
       "examples": [
         "forms/thumb",
         "forms/default",
-        "forms/errors"
+        "forms/errors",
+        "forms/own-parts"
       ]
     },
     {
@@ -886,7 +890,8 @@
         "card/thumb",
         "card/default",
         "card/stats",
-        "card/plain"
+        "card/plain",
+        "card/inverse"
       ]
     },
     {
@@ -898,6 +903,7 @@
       "types": [
         "Badge",
         "BadgeVariant",
+        "StatusDot",
         "Tone"
       ],
       "thumb": "badge/default",
@@ -907,6 +913,7 @@
         "badge/variants",
         "badge/icon",
         "badge/dot",
+        "badge/status-dot",
         "badge/tones",
         "badge/outcome",
         "badge/status"
@@ -916,16 +923,18 @@
       "id": "avatar",
       "name": "Avatar",
       "url": "/docs/components/avatar/",
-      "summary": "A picture of a person: an image, or a neutral icon when there is none. There is no way to put initials in it.",
+      "summary": "A picture of a person or an organisation: an image, their initials, or a neutral icon when there is neither.",
       "group": "display",
       "types": [
-        "Avatar"
+        "Avatar",
+        "AvatarShape"
       ],
       "thumb": "avatar/default",
       "anatomy": "avatar/default",
       "examples": [
         "avatar/default",
-        "avatar/sizes"
+        "avatar/sizes",
+        "avatar/initials"
       ]
     },
     {
@@ -1039,7 +1048,8 @@
         "code-block/thumb",
         "code-block/default",
         "code-block/copy",
-        "code-block/languages"
+        "code-block/languages",
+        "code-block/inverse"
       ]
     },
     {
@@ -1073,6 +1083,7 @@
         "Timeline",
         "TimelineEvent",
         "TimelineState",
+        "TimelineVariant",
         "Meta"
       ],
       "thumb": "timeline/thumb",
@@ -1085,7 +1096,8 @@
         "timeline/meta",
         "timeline/hidden",
         "timeline/empty",
-        "timeline/text"
+        "timeline/text",
+        "timeline/plain"
       ]
     },
     {
@@ -1123,7 +1135,8 @@
       "examples": [
         "fact-card/thumb",
         "fact-card/default",
-        "fact-card/single"
+        "fact-card/single",
+        "fact-card/narrow"
       ]
     },
     {
@@ -1416,7 +1429,8 @@
       "examples": [
         "popover/thumb",
         "popover/default",
-        "popover/sides"
+        "popover/sides",
+        "popover/icon"
       ]
     },
     {
@@ -1635,7 +1649,8 @@
         "NavItem",
         "UserMenu",
         "AppPage",
-        "AppShell"
+        "AppShell",
+        "LogoStyle"
       ],
       "thumb": "app-shell/default",
       "anatomy": "app-shell/default",
@@ -1752,7 +1767,8 @@
         "Stepper",
         "Step",
         "StepState",
-        "StepperLabels"
+        "StepperLabels",
+        "StepperVariant"
       ],
       "thumb": "stepper/thumb",
       "anatomy": "stepper/default",
@@ -1761,7 +1777,9 @@
         "stepper/default",
         "stepper/vertical",
         "stepper/links",
-        "stepper/narrow"
+        "stepper/narrow",
+        "stepper/tiles",
+        "stepper/track"
       ]
     },
     {
@@ -1903,6 +1921,8 @@
         "data-table/bulk",
         "data-table/filter-row",
         "data-table/compact",
+        "data-table/current",
+        "data-table/page-filters",
         "data-table/states"
       ]
     },
@@ -1937,6 +1957,7 @@
       "group": "data",
       "types": [
         "Stat",
+        "StatVariant",
         "Bars"
       ],
       "thumb": "stat/thumb",
@@ -1945,6 +1966,7 @@
         "stat/thumb",
         "stat/default",
         "stat/bars",
+        "stat/inverse",
         "stat/tile",
         "stat/tile-ring",
         "stat/tiles"
@@ -2099,6 +2121,25 @@
         "donut-chart/pie",
         "donut-chart/center",
         "donut-chart/states"
+      ]
+    },
+    {
+      "id": "waterfall",
+      "name": "Waterfall",
+      "url": "/docs/components/waterfall/",
+      "summary": "An amount built up and taken down a step at a time, each bar floating at the running total, with totals from zero.",
+      "group": "charts",
+      "types": [
+        "Waterfall",
+        "WaterfallLabels"
+      ],
+      "thumb": "waterfall/thumb",
+      "anatomy": "waterfall/default",
+      "examples": [
+        "waterfall/thumb",
+        "waterfall/default",
+        "waterfall/subtotals",
+        "waterfall/states"
       ]
     },
     {
@@ -2320,6 +2361,27 @@
       ]
     },
     {
+      "id": "heatmap",
+      "name": "Heat map",
+      "url": "/docs/components/heatmap/",
+      "summary": "Rows by columns, a cell for each: a reading in five steps of one colour or in the bands of a scale, or a category, with one legend for the whole grid.",
+      "group": "charts",
+      "types": [
+        "Heatmap",
+        "RowSummary",
+        "GridLabels"
+      ],
+      "thumb": "heatmap/thumb",
+      "anatomy": "heatmap/default",
+      "examples": [
+        "heatmap/thumb",
+        "heatmap/default",
+        "heatmap/bands",
+        "heatmap/categories",
+        "heatmap/states"
+      ]
+    },
+    {
       "id": "calendar-heatmap",
       "name": "Calendar heat map",
       "url": "/docs/components/calendar-heatmap/",
@@ -2536,7 +2598,8 @@
       "anatomy": null,
       "examples": [
         "auth-layout/thumb",
-        "auth-layout/default"
+        "auth-layout/default",
+        "auth-layout/inset"
       ]
     },
     {
@@ -2686,7 +2749,8 @@
       "thumb": "thread-list/default",
       "anatomy": null,
       "examples": [
-        "thread-list/default"
+        "thread-list/default",
+        "thread-list/groups"
       ]
     },
     {
@@ -2710,10 +2774,26 @@
       "id": "themes",
       "name": "Themes",
       "url": "/docs/ui/themes/",
-      "summary": "A theme: an id, a name and a `ThemeSpec`. The built-in ones are associated constants; `Theme::custom` makes your own.",
+      "summary": "A theme: an id, a name and a `ThemeSpec`. The built-in ones are associated constants; `Theme::custom` makes your own, `with_shape` gives it a `Shape` and `with_roles` its `Roles`.",
       "group": null,
       "types": [
         "Theme",
+        "Shape",
+        "Corners",
+        "Corner",
+        "TypeScale",
+        "TextStyle",
+        "Face",
+        "Sizes",
+        "ControlSizes",
+        "FieldSizes",
+        "SidebarSizes",
+        "TopbarSizes",
+        "PageSizes",
+        "CardSizes",
+        "Elevation",
+        "Roles",
+        "Inverse",
         "Appearance",
         "Mode",
         "ThemeSetting",
@@ -2730,7 +2810,8 @@
         "themes/menu",
         "themes/inset",
         "themes/floating",
-        "themes/header"
+        "themes/header",
+        "themes/shape"
       ]
     },
     {
@@ -3293,7 +3374,7 @@
       "slug": "variants",
       "title": "Variants",
       "kind": "gallery",
-      "code": "[\n    (\"Primary\", Button::primary(\"Save\")),\n    (\"Secondary\", Button::new(\"Save\")),\n    (\"Outline\", Button::outline(\"Save\")),\n    (\"Ghost\", Button::ghost(\"Save\")),\n    (\"Destructive\", Button::destructive(\"Delete\")),\n    (\n        \"Link\",\n        Button::new(\"Read more\").variant(ButtonVariant::Link),\n    ),\n]",
+      "code": "[\n    (\"Primary\", Button::primary(\"Save\")),\n    (\"Secondary\", Button::new(\"Save\")),\n    (\"Outline\", Button::outline(\"Save\")),\n    (\"Ghost\", Button::ghost(\"Save\")),\n    (\"Destructive\", Button::destructive(\"Delete\")),\n    (\n        \"Destructive outline\",\n        Button::new(\"Delete deal\").variant(ButtonVariant::DestructiveOutline),\n    ),\n    (\n        \"Link\",\n        Button::new(\"Read more\").variant(ButtonVariant::Link),\n    ),\n]",
       "src": "/ui-preview/button/variants.html",
       "height": 120,
       "layout": "center",
@@ -3310,6 +3391,7 @@
         "Outline",
         "Ghost",
         "Destructive",
+        "Destructive outline",
         "Link"
       ],
       "slots": []
@@ -3626,6 +3708,40 @@
                   "children": []
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "button-group/segmented",
+      "component": "button-group",
+      "slug": "segmented",
+      "title": "Segmented links",
+      "kind": "single",
+      "code": "ButtonGroup::new(\"Mode\").segmented().children((\n    Button::new(\"Mine\").href(\"/deals/mine\").current(true),\n    Button::new(\"Team\").href(\"/deals/team\"),\n))",
+      "src": "/ui-preview/button-group/segmented.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "button-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "a",
+              "count": 2,
+              "children": []
             }
           ]
         }
@@ -14728,6 +14844,73 @@
       ]
     },
     {
+      "id": "card/inverse",
+      "component": "card",
+      "slug": "inverse",
+      "title": "On the inverse surface",
+      "kind": "single",
+      "code": "Card::titled(\"Security, in every mode\")\n    .variant(CardVariant::Inverse)\n    .body(Text::new(\n        \"Every team works in its own pipeline, with its own contacts.\",\n    ))\n    .footer((\n        Button::primary(\"Request a quote\"),\n        Button::outline(\"Read the details\"),\n    ))",
+      "src": "/ui-preview/card/inverse.html",
+      "height": 200,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-footer",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "badge/default",
       "component": "badge",
       "slug": "default",
@@ -14767,7 +14950,7 @@
       "slug": "variants",
       "title": "Variants",
       "kind": "gallery",
-      "code": "[\n    (\"Neutral\", Badge::new(\"Lead\")),\n    (\"Outline\", Badge::new(\"Lead\").variant(BadgeVariant::Outline)),\n    (\"Success\", Badge::new(\"Won\").variant(BadgeVariant::Success)),\n    (\n        \"Warning\",\n        Badge::new(\"At risk\").variant(BadgeVariant::Warning),\n    ),\n    (\"Danger\", Badge::new(\"Lost\").variant(BadgeVariant::Danger)),\n]",
+      "code": "[\n    (\"Neutral\", Badge::new(\"Lead\")),\n    (\"Outline\", Badge::new(\"Lead\").variant(BadgeVariant::Outline)),\n    (\"Success\", Badge::new(\"Won\").variant(BadgeVariant::Success)),\n    (\n        \"Warning\",\n        Badge::new(\"At risk\").variant(BadgeVariant::Warning),\n    ),\n    (\"Danger\", Badge::new(\"Lost\").variant(BadgeVariant::Danger)),\n    (\"Solid\", Badge::new(\"Internal\").variant(BadgeVariant::Solid)),\n]",
       "src": "/ui-preview/badge/variants.html",
       "height": 120,
       "layout": "center",
@@ -14783,7 +14966,8 @@
         "Outline",
         "Success",
         "Warning",
-        "Danger"
+        "Danger",
+        "Solid"
       ],
       "slots": []
     },
@@ -14893,6 +15077,40 @@
         "Lg"
       ],
       "slots": []
+    },
+    {
+      "id": "avatar/initials",
+      "component": "avatar",
+      "slug": "initials",
+      "title": "Initials, in a tone and filled",
+      "kind": "single",
+      "code": "Row::gap(2).children((\n    Avatar::initials(\"Narmada Roadways\").solid(),\n    Avatar::initials(\"Dalbir Oberoi\").shape(AvatarShape::Circle),\n    Avatar::initials(\"Harleen Kaur\")\n        .tone(Tone::Info)\n        .shape(AvatarShape::Circle),\n    Avatar::initials(\"ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ\")\n        .tone(Tone::Success)\n        .shape(AvatarShape::Circle),\n))",
+      "src": "/ui-preview/avatar/initials.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "avatar",
+              "tag": "span",
+              "count": 4,
+              "children": []
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "item/thumb",
@@ -16064,6 +16282,60 @@
       "slots": []
     },
     {
+      "id": "code-block/inverse",
+      "component": "code-block",
+      "slug": "inverse",
+      "title": "On the inverse surface",
+      "kind": "single",
+      "code": "CodeBlock::new(\n    \"sh\",\n    \"curl -fsSL https://get.example.com/crm | sh\\ncrm import --file \\\"$FILE\\\" # once\",\n)\n.copy_button()\n.inverse()",
+      "src": "/ui-preview/code-block/inverse.html",
+      "height": 170,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 620,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "code-block",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "code-block-bar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "code-block-language",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "timeline/thumb",
       "component": "timeline",
       "slug": "thumb",
@@ -16772,6 +17044,99 @@
               "tag": "p",
               "count": 1,
               "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timeline/plain",
+      "component": "timeline",
+      "slug": "plain",
+      "title": "Plain",
+      "kind": "single",
+      "code": "Timeline::new(\"deal-events\", \"Deal events\")\n    .variant(TimelineVariant::Plain)\n    .day(\n        \"Today\",\n        [\n            TimelineEvent::new(\"Deal 4 signed\")\n                .time_text(\"09:41\")\n                .detail(\"Eight seats added\"),\n            TimelineEvent::new(\"Rep assigned\")\n                .time_text(\"09:12\")\n                .detail(\"By Harleen Kaur\"),\n        ],\n    )",
+      "src": "/ui-preview/timeline/plain.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "timeline",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "timeline-day",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "timeline-day-title",
+                  "tag": "h3",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "timeline-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "timeline-event",
+                      "tag": "li",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "timeline-time",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "timeline-head",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "timeline-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "timeline-detail",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
@@ -17528,6 +17893,66 @@
       ]
     },
     {
+      "id": "fact-card/narrow",
+      "component": "fact-card",
+      "slug": "narrow",
+      "title": "Eight tiles in a row",
+      "kind": "single",
+      "code": "FactGrid::new()\n    .min_tile(128)\n    .cards((1..=8).map(|n| FactCard::new(format!(\"Rep {n}\"), \"Away\").detail(\"8 won\")))",
+      "src": "/ui-preview/fact-card/narrow.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1180,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "fact-grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "fact-card",
+              "tag": "div",
+              "count": 8,
+              "children": [
+                {
+                  "slot": "fact-body",
+                  "tag": "dl",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "fact-label",
+                      "tag": "dt",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "fact-value",
+                      "tag": "dd",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "fact-detail",
+                      "tag": "dd",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "badge/dot",
       "component": "badge",
       "slug": "dot",
@@ -17563,6 +17988,40 @@
                   "children": []
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "badge/status-dot",
+      "component": "badge",
+      "slug": "status-dot",
+      "title": "A status dot",
+      "kind": "single",
+      "code": "Row::gap(4).children((\n    StatusDot::new(\"Awaiting signature\").tone(Tone::Success),\n    StatusDot::new(\"No deals yet\"),\n))",
+      "src": "/ui-preview/badge/status-dot.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "status-dot",
+              "tag": "span",
+              "count": 2,
+              "children": []
             }
           ]
         }
@@ -21287,6 +21746,67 @@
         "Right"
       ],
       "slots": []
+    },
+    {
+      "id": "popover/icon",
+      "component": "popover",
+      "slug": "icon",
+      "title": "A button with a name of its own",
+      "kind": "single",
+      "code": "Row::gap(2).children((\n    Popover::icon_only(\"alerts\", icons::BELL, \"Notifications\").body(\"Nothing new.\"),\n    Popover::new(\"inbox\", \"3\")\n        .trigger_label(\"3 new messages\")\n        .body(\"Three messages.\"),\n))",
+      "src": "/ui-preview/popover/icon.html",
+      "height": 160,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "overlay-d30ab67a4ddf.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "popover-content",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "popover-content",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "tooltip/thumb",
@@ -30193,6 +30713,162 @@
       ]
     },
     {
+      "id": "stepper/tiles",
+      "component": "stepper",
+      "slug": "tiles",
+      "title": "Tiles",
+      "kind": "single",
+      "code": "Stepper::new(\"Import contacts\")\n    .variant(StepperVariant::Tiles)\n    .step(Step::new(\"File\").link(\"/imports/new/file\"))\n    .step(Step::new(\"Columns\").link(\"/imports/new/columns\"))\n    .step(Step::new(\"Matches\"))\n    .step(Step::new(\"Owners\"))\n    .step(Step::new(\"Import\"))\n    .current(2)",
+      "src": "/ui-preview/stepper/tiles.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stepper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stepper-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "step",
+                  "tag": "li",
+                  "count": 5,
+                  "children": [
+                    {
+                      "slot": "step-trigger",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step-indicator",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "step-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "step-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stepper/track",
+      "component": "stepper",
+      "slug": "track",
+      "title": "A track",
+      "kind": "single",
+      "code": "Stepper::new(\"Deal\")\n    .variant(StepperVariant::Track)\n    .steps([\"Lead\", \"Qualified\", \"Proposal\", \"Closing\", \"Won\"].map(Step::new))\n    .current(2)",
+      "src": "/ui-preview/stepper/track.html",
+      "height": 90,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stepper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stepper-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "step",
+                  "tag": "li",
+                  "count": 5,
+                  "children": [
+                    {
+                      "slot": "step-trigger",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step-indicator",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "step-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "step-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "stepper-count",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "wizard/thumb",
       "component": "wizard",
       "slug": "thumb",
@@ -36456,6 +37132,1215 @@
       ]
     },
     {
+      "id": "data-table/current",
+      "component": "data-table",
+      "slug": "current",
+      "title": "The row a page shows, and a muted header",
+      "kind": "single",
+      "code": "let query = TableQuery::<Deal>::parse(\"/deals\", \"\");\nlet page = TablePage::new(deals(), 5);\nDataTable::new(\"deals\", &query, &page)\n    .caption(\"Deals\")\n    .row_href(|deal| format!(\"/deals/{}\", deal.id))\n    .current_row(|deal| deal.id == 2)\n    .muted_header()\n    .into()",
+      "src": "/ui-preview/data-table/current.html",
+      "height": 440,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "overlay-d30ab67a4ddf.js",
+        "table-4818c62c0060.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "data-table",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table-toolbar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "toolbar-form",
+                  "tag": "form",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "table-search",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "toolbar-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "column-list",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "column-row",
+                              "tag": "div",
+                              "count": 5,
+                              "children": [
+                                {
+                                  "slot": "filter-option",
+                                  "tag": "label",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "checkbox",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "column-move",
+                                  "tag": "a",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-links",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-link",
+                              "tag": "a",
+                              "count": 3,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-alert",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "alert-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "button",
+                  "tag": "a",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "table-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table",
+                  "tag": "table",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "input",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "th-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "filter-range",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "filter-field",
+                                      "tag": "label",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "filter-range",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "filter-field",
+                                      "tag": "label",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-footer",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table-summary",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "footer-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-size",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "native-select",
+                          "tag": "select",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data-table/page-filters",
+      "component": "data-table",
+      "slug": "page-filters",
+      "title": "Filters of the page's own",
+      "kind": "single",
+      "code": "let query =\n    TableQuery::<Deal, DealFilter>::parse(\"/deals\", \"stage=won&stage=negotiation&hot=true\");\nlet page = TablePage::new(deals(), 5);\nDataTable::new(\"deals\", &query, &page)\n    .caption(\"Deals\")\n    .options(\n        \"company\",\n        vec![\n            FilterOption::new(\"sutlej\", \"Sutlej Supply\"),\n            FilterOption::new(\"haveli\", \"Haveli Home\"),\n        ],\n    )\n    .without_columns_picker()\n    .into()",
+      "src": "/ui-preview/data-table/page-filters.html",
+      "height": 440,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "overlay-d30ab67a4ddf.js",
+        "table-4818c62c0060.js",
+        "menus-a3553608f59a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "data-table",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table-toolbar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "toolbar-form",
+                  "tag": "form",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "table-search",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "toggle-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "toggle-group-item",
+                          "tag": "label",
+                          "count": 4,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "native-select",
+                      "tag": "select",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "choice",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "checkbox",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "native-select",
+                      "tag": "select",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "toolbar-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-links",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-link",
+                              "tag": "a",
+                              "count": 3,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-chips",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "table-alert",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "alert-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "button",
+                  "tag": "a",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "table-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table",
+                  "tag": "table",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 3,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "input",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 3,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "th-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 3,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "filter-range",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "filter-field",
+                                      "tag": "label",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 3,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-filter",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "filter-range",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "filter-field",
+                                      "tag": "label",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-footer",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table-summary",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "footer-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-size",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "native-select",
+                          "tag": "select",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "data-table/states",
       "component": "data-table",
       "slug": "states",
@@ -36628,6 +38513,66 @@
                   "tag": "svg",
                   "count": 1,
                   "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stat/inverse",
+      "component": "stat",
+      "slug": "inverse",
+      "title": "On the inverse surface",
+      "kind": "single",
+      "code": "Grid::cols(2).gap(4).children((\n    Stat::new(\"Invoices due, Mon 16 Nov\", \"₹9,12,400\")\n        .caption(\"from 14 customers\")\n        .variant(StatVariant::Inverse),\n    Stat::new(\"Won this month\", \"₹14,80,000\").trend(\"+8.2%\", true),\n))",
+      "src": "/ui-preview/stat/inverse.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stat",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "stat-label",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-value",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-trend",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stat-caption",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
                 }
               ]
             }
@@ -38213,7 +40158,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -38384,7 +40329,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -38606,7 +40551,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -38802,7 +40747,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -39004,7 +40949,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -39212,7 +41157,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -39446,7 +41391,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -39674,7 +41619,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -39776,7 +41721,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -39973,7 +41918,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -40189,7 +42134,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -40405,7 +42350,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -40602,7 +42547,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -40773,7 +42718,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -40975,7 +42920,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -41197,7 +43142,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -41419,7 +43364,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -41603,7 +43548,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -41813,7 +43758,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42029,7 +43974,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42231,7 +44176,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42384,7 +44329,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42562,7 +44507,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42766,7 +44711,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42970,7 +44915,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43174,7 +45119,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43352,7 +45297,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43523,7 +45468,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43720,7 +45665,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43904,7 +45849,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44108,7 +46053,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44324,7 +46269,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44516,7 +46461,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44682,7 +46627,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44873,7 +46818,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -45052,7 +46997,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -45231,7 +47176,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -45896,7 +47841,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46024,7 +47969,7 @@
       "width": 520,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46177,7 +48122,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46355,7 +48300,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46533,7 +48478,699 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stack",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-state",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-spacer",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waterfall/thumb",
+      "component": "waterfall",
+      "slug": "thumb",
+      "title": "A waterfall",
+      "kind": "single",
+      "code": "Waterfall::new(\"Settlement\")\n    .id(\"waterfall-thumb\")\n    .hide_title()\n    .table(TableMode::ScreenReader)\n    .locale(\"en-IN\")\n    .format(NumberFormat::currency(\"₹\").max_decimals(0))\n    .start(\"Orders\", 2_50_000)\n    .step(\"Fees\", -29_500)\n    .step(\"Returns\", -12_000)\n    .total(\"Paid\")",
+      "src": "/ui-preview/waterfall/thumb.html",
+      "height": 250,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-rows",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-row",
+                      "tag": "div",
+                      "count": 5,
+                      "children": [
+                        {
+                          "slot": "chart-row-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-track",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 5,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-bar",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-link",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-row-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waterfall/default",
+      "component": "waterfall",
+      "slug": "default",
+      "title": "A settlement in seven rows, in rupees",
+      "kind": "single",
+      "code": "Waterfall::new(\"This month's settlement\")\n    .id(\"waterfall-default\")\n    .description(\"From what the store's customers paid to what reached the bank\")\n    .locale(\"en-IN\")\n    .format(NumberFormat::currency(\"₹\").max_decimals(0))\n    .start(\"Orders\", 2_50_000)\n    .step(\"Store fee\", -25_000)\n    .step(\"Tax on the fee\", -4_500)\n    .step(\"Returns\", -12_000)\n    .step(\"Promotions refunded\", 3_000)\n    .step(\"Tax withheld\", -2_500)\n    .total(\"Paid to the bank\")",
+      "src": "/ui-preview/waterfall/default.html",
+      "height": 400,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-rows",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-row",
+                      "tag": "div",
+                      "count": 8,
+                      "children": [
+                        {
+                          "slot": "chart-row-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-track",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 5,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-bar",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-link",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-row-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waterfall/subtotals",
+      "component": "waterfall",
+      "slug": "subtotals",
+      "title": "A subtotal between the steps, in tones",
+      "kind": "single",
+      "code": "Waterfall::new(\"Studio profit, October\")\n    .id(\"waterfall-subtotals\")\n    .description(\"Classes and retail, less what they cost\")\n    .locale(\"en-IN\")\n    .format(NumberFormat::currency(\"₹\").max_decimals(0))\n    .step(\"Classes\", 4_20_000)\n    .step(\"Retail\", 85_000)\n    .total(\"Revenue\")\n    .step(\"Instructors\", -1_90_000)\n    .step(\"Premises\", -95_000)\n    .step(\"Stock\", -42_000)\n    .total(\"Profit\")\n    .colors(\n        Ink::tone(Tone::Success),\n        Ink::tone(Tone::Danger),\n        Ink::slot(7),\n    )",
+      "src": "/ui-preview/waterfall/subtotals.html",
+      "height": 400,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-rows",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-row",
+                      "tag": "div",
+                      "count": 8,
+                      "children": [
+                        {
+                          "slot": "chart-row-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-track",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 3,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-bar",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-link",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-row-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waterfall/states",
+      "component": "waterfall",
+      "slug": "states",
+      "title": "Loading, failed and empty",
+      "kind": "single",
+      "code": "let state = |caption: &'static str, chart: Waterfall| {\n    Stack::gap(2).children((Text::muted(caption), chart))\n};\nGrid::cols(3).gap(4).children((\n    state(\n        \"Loading\",\n        Waterfall::new(\"This month's settlement\")\n            .id(\"waterfall-loading\")\n            .loading(),\n    ),\n    state(\n        \"Failed\",\n        Waterfall::new(\"This month's settlement\")\n            .id(\"waterfall-failed\")\n            .failed(None)\n            .retry(\"/settlements\"),\n    ),\n    state(\n        \"Empty\",\n        Waterfall::new(\"This month's settlement\")\n            .id(\"waterfall-empty\")\n            .empty(\n                \"No settlement yet\",\n                Some(\"The month's settlement appears after its first order.\".to_owned()),\n            ),\n    ),\n))",
+      "src": "/ui-preview/waterfall/states.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46637,7 +49274,7 @@
       "scripts": [
         "overlay-d30ab67a4ddf.js",
         "dates-b35d213fc86d.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46802,7 +49439,7 @@
       "scripts": [
         "overlay-d30ab67a4ddf.js",
         "dates-b35d213fc86d.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -47160,7 +49797,7 @@
       "scripts": [
         "overlay-d30ab67a4ddf.js",
         "dates-b35d213fc86d.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -47491,7 +50128,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -47715,7 +50352,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [
         "1 day: hours",
@@ -48583,7 +51220,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -50222,7 +52859,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js",
+        "charts-55462f9f9efa.js",
         "count-up-e3e9aed1a65f.js"
       ],
       "captions": [],
@@ -50436,7 +53073,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -50627,7 +53264,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js",
+        "charts-55462f9f9efa.js",
         "count-up-e3e9aed1a65f.js"
       ],
       "captions": [],
@@ -50924,7 +53561,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -51214,7 +53851,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -51497,7 +54134,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -51617,7 +54254,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -51806,7 +54443,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -51989,7 +54626,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -52178,7 +54815,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -52312,7 +54949,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -52489,7 +55126,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -52591,7 +55228,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -52757,7 +55394,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -52948,7 +55585,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53139,7 +55776,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53273,7 +55910,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53444,7 +56081,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53603,7 +56240,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53717,7 +56354,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53837,7 +56474,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [
         "Body mass index, with words at the ends",
@@ -54037,6 +56674,761 @@
       ]
     },
     {
+      "id": "heatmap/thumb",
+      "component": "heatmap",
+      "slug": "thumb",
+      "title": "A heat map",
+      "kind": "single",
+      "code": "steps_by_hour(4).into_iter().fold(\n    Heatmap::new(\"Steps by hour\")\n        .id(\"heatmap-thumb\")\n        .hide_title()\n        .table(TableMode::ScreenReader)\n        .columns(hours())\n        .ink(Ink::slot(3)),\n    |chart, (day, values)| chart.row(day, values),\n)",
+      "src": "/ui-preview/heatmap/thumb.html",
+      "height": 200,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-legend-word",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 5,
+                  "children": []
+                },
+                {
+                  "slot": "heat-legend-word",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-grid",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heat-row",
+                      "tag": "div",
+                      "count": 8,
+                      "children": [
+                        {
+                          "slot": "heat-corner",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-colhead",
+                          "tag": "span",
+                          "count": 24,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heatmap/default",
+      "component": "heatmap",
+      "slug": "default",
+      "title": "A week of steps by hour, with each day's total",
+      "kind": "single",
+      "code": "steps_by_hour(9).into_iter().fold(\n    Heatmap::new(\"Steps by hour\")\n        .id(\"heatmap-default\")\n        .description(\"Last week, Harleen Kaur\")\n        .locale(\"en-IN\")\n        .row_name(\"Day\")\n        .columns(hours())\n        .range(0, 2_500)\n        .value_name(\"Steps\")\n        .ink(Ink::slot(3))\n        .row_summary(RowSummary::Total),\n    |chart, (day, values)| chart.row(day, values),\n)",
+      "src": "/ui-preview/heatmap/default.html",
+      "height": 400,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-legend-word",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 5,
+                  "children": []
+                },
+                {
+                  "slot": "heat-legend-word",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-grid",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heat-row",
+                      "tag": "div",
+                      "count": 8,
+                      "children": [
+                        {
+                          "slot": "heat-corner",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-colhead",
+                          "tag": "span",
+                          "count": 24,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-rowend",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heatmap/bands",
+      "component": "heatmap",
+      "slug": "bands",
+      "title": "A diverging scale in five bands, with the values",
+      "kind": "single",
+      "code": "Heatmap::new(\"Resting heart rate against usual\")\n    .id(\"heatmap-bands\")\n    .description(\"Each week's average, as a share of the person's own usual\")\n    .row_name(\"Person\")\n    .columns([\"Week 1\", \"Week 2\", \"Week 3\", \"Week 4\", \"Week 5\", \"Week 6\"])\n    .row(\"Harleen Kaur\", [0.97, 1.01, 1.04, 0.99, 0.95, 0.94])\n    .row(\n        \"Gurpreet Singh\",\n        [\n            Some(1.02),\n            Some(1.09),\n            None,\n            Some(1.13),\n            Some(1.06),\n            Some(1.01),\n        ],\n    )\n    .row(\"Simran Kaur\", [0.99, 0.98, 1.00, 1.03, 1.08, 1.12])\n    .row(\"Arjun Mehta\", [1.05, 1.00, 0.96, 0.93, 0.91, 0.95])\n    .colors(\n        ColorScale::new(Ink::slot(1))\n            .label(\"Well under\")\n            .from(0.94, Ink::slot(1).soft())\n            .label(\"Under\")\n            .from(0.98, Ink::muted().soft())\n            .label(\"As usual\")\n            .from(1.02, Ink::slot(2).soft())\n            .label(\"Over\")\n            .from(1.08, Ink::slot(2))\n            .label(\"Well over\"),\n    )\n    .format(NumberFormat::percent().max_decimals(0))\n    .value_name(\"Of usual\")\n    .show_values()",
+      "src": "/ui-preview/heatmap/bands.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 6,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-grid",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heat-row",
+                      "tag": "div",
+                      "count": 5,
+                      "children": [
+                        {
+                          "slot": "heat-corner",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-colhead",
+                          "tag": "span",
+                          "count": 6,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heatmap/categories",
+      "component": "heatmap",
+      "slug": "categories",
+      "title": "A category in each cell",
+      "kind": "single",
+      "code": "Heatmap::new(\"Workouts by day\")\n    .id(\"heatmap-categories\")\n    .description(\"Last week\")\n    .row_name(\"Person\")\n    .columns([\"Mon\", \"Tue\", \"Wed\", \"Thu\", \"Fri\", \"Sat\", \"Sun\"])\n    .category(\"Run\", Ink::slot(1))\n    .category(\"Strength\", Ink::slot(2))\n    .category(\"Yoga\", Ink::slot(7))\n    .category(\"Rest\", Ink::muted())\n    .category_row(\n        \"Harleen Kaur\",\n        [\"Run\", \"Strength\", \"Rest\", \"Run\", \"Yoga\", \"\", \"Run\"],\n    )\n    .category_row(\n        \"Gurpreet Singh\",\n        [\n            \"Strength\", \"Rest\", \"Strength\", \"Rest\", \"Strength\", \"Run\", \"Rest\",\n        ],\n    )\n    .category_row(\n        \"Simran Kaur\",\n        [\"Yoga\", \"Yoga\", \"Run\", \"Yoga\", \"Rest\", \"Yoga\", \"Run\"],\n    )",
+      "src": "/ui-preview/heatmap/categories.html",
+      "height": 240,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 5,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-grid",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heat-row",
+                      "tag": "div",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "heat-corner",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-colhead",
+                          "tag": "span",
+                          "count": 7,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heatmap/states",
+      "component": "heatmap",
+      "slug": "states",
+      "title": "Loading, failed and empty",
+      "kind": "single",
+      "code": "let state = |caption: &'static str, chart: Heatmap| {\n    Stack::gap(2).children((Text::muted(caption), chart))\n};\nGrid::cols(3).gap(4).children((\n    state(\n        \"Loading\",\n        Heatmap::new(\"Steps by hour\")\n            .id(\"heatmap-loading\")\n            .loading(),\n    ),\n    state(\n        \"Failed\",\n        Heatmap::new(\"Steps by hour\")\n            .id(\"heatmap-failed\")\n            .failed(None)\n            .retry(\"/activity\"),\n    ),\n    state(\n        \"Empty\",\n        Heatmap::new(\"Steps by hour\").id(\"heatmap-empty\").empty(\n            \"No steps yet\",\n            Some(\"Hours appear here once your watch syncs.\".to_owned()),\n        ),\n    ),\n))",
+      "src": "/ui-preview/heatmap/states.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stack",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-state",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-spacer",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "calendar-heatmap/thumb",
       "component": "calendar-heatmap",
       "slug": "thumb",
@@ -54053,7 +57445,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54211,7 +57603,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54394,7 +57786,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54577,7 +57969,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54754,7 +58146,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54856,7 +58248,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54990,7 +58382,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55149,7 +58541,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55308,7 +58700,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55410,7 +58802,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55556,7 +58948,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55727,7 +59119,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55899,7 +59291,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -56014,7 +59406,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -56160,7 +59552,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -56371,7 +59763,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -57847,6 +61239,26 @@
       "slots": []
     },
     {
+      "id": "thread-list/groups",
+      "component": "thread-list",
+      "slug": "groups",
+      "title": "Groups",
+      "kind": "single",
+      "code": "ThreadList::new(\"Your conversations\")\n    .group(\n        \"Today\",\n        [(\"Payments by method this week\", \"/assistant/7\", true)],\n    )\n    .group(\n        \"Earlier\",\n        [\n            (\"Pending refunds in Ludhiana\", \"/assistant/6\", false),\n            (\"GST summary for October\", \"/assistant/5\", false),\n        ],\n    )",
+      "src": "/ui-preview/thread-list/groups.html",
+      "height": 230,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": []
+    },
+    {
       "id": "foundations/radius",
       "component": "foundations",
       "slug": "radius",
@@ -58188,6 +61600,86 @@
                   "tag": "button",
                   "count": 1,
                   "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "forms/own-parts",
+      "component": "forms",
+      "slug": "own-parts",
+      "title": "A mono field, fields a size larger and the submit button's look",
+      "kind": "single",
+      "code": "FormView::<Checkout>::new()\n    .post(\"/checkout\")\n    .with_values(vec![(\"plan\".to_owned(), \"growth\".to_owned())])\n    .submit_button(Button::primary(\"Pay and start\").icon(icons::LOCK).block())",
+      "src": "/ui-preview/forms/own-parts.html",
+      "height": 460,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "form",
+          "tag": "form",
+          "count": 1,
+          "children": [
+            {
+              "slot": "form-grid",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "field",
+                  "tag": "div",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "label",
+                      "tag": "label",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "native-select",
+                      "tag": "select",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "field-description",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "form-actions",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
                 }
               ]
             }
@@ -60430,6 +63922,563 @@
                               "tag": "span",
                               "count": 1,
                               "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "themes/shape",
+      "component": "themes",
+      "slug": "shape",
+      "title": "A theme with a shape of its own",
+      "kind": "single",
+      "code": "let shell = crm().appearance(Appearance::new(shaped_theme(), Mode::Light));\ndeals(shell.page(\"Deals\", \"/deals\")).body(Card::titled(\"Pipeline\").body(\n    Stack::gap(3).children((\n        Row::gap(2).wrap().children((\n            Input::search(\"q\").placeholder(\"Search deals\"),\n            Button::new(\"Filter\").variant(ButtonVariant::Outline),\n            Badge::new(\"Won\").variant(BadgeVariant::Success),\n            Badge::new(\"Open\"),\n        )),\n        Alert::new(AlertTone::Warning).title(\"Three deals close this week.\"),\n    )),\n))",
+      "src": "/ui-preview/themes/shape.html",
+      "height": 620,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "fit": false,
+      "scripts": [
+        "sidebar-366c16d19fc8.js",
+        "overlay-d30ab67a4ddf.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sidebar-wrapper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sidebar",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sidebar-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-logo",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-brand-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-brand-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-brand-context",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-content",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-group-label",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-menu",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-item",
+                              "tag": "a",
+                              "count": 4,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-count",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "sidebar-sub",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "sidebar-sub-item",
+                                  "tag": "a",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "sidebar-label",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-user",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "avatar",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sidebar-user-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-user-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-user-email",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-link",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sidebar-overlay",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sidebar-inset",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "topbar",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "breadcrumb",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "topbar-spacer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "theme-menu-form",
+                          "tag": "form",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "theme-cards",
+                              "tag": "fieldset",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "theme-menu-legend",
+                                  "tag": "legend",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "theme-card",
+                                  "tag": "label",
+                                  "count": 7,
+                                  "children": [
+                                    {
+                                      "slot": "theme-card-input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "theme-swatches",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "theme-swatch",
+                                          "tag": "span",
+                                          "count": 3,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "theme-card-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "theme-card-name",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "theme-card-description",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "theme-modes",
+                              "tag": "fieldset",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "theme-menu-legend",
+                                  "tag": "legend",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "theme-mode-group",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "theme-mode",
+                                      "tag": "label",
+                                      "count": 3,
+                                      "children": [
+                                        {
+                                          "slot": "theme-mode-input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "page",
+                  "tag": "main",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "page-title",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "page-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "grid",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "stat",
+                          "tag": "div",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "stat-label",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "stat-value",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "stat-trend",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "card",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "card-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "card-title",
+                              "tag": "h2",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "card-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stack",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "row",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "badge",
+                                      "tag": "span",
+                                      "count": 2,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "alert",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "alert-title",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
                             }
                           ]
                         }
@@ -68503,6 +72552,159 @@
       ]
     },
     {
+      "id": "auth-layout/inset",
+      "component": "auth-layout",
+      "slug": "inset",
+      "title": "The panel after the form, inset and inverse, with a brand and a footer",
+      "kind": "single",
+      "code": "AuthLayout::new(\n    Stack::gap(6).children((\n        Stack::gap(2).children((\n            Heading::h1(\"Sign in to Kesar\"),\n            Text::muted(\"Sleep, heart and steps, scored every day.\"),\n        )),\n        Stack::gap(4).children((\n            Field::new(\"auth-inset-email\", \"Email\")\n                .control(Input::email(\"email\").autocomplete(\"email\")),\n            Button::primary(\"Continue\").block(),\n            Button::ghost(\"Email me a sign-in link\")\n                .href(\"/sign-in/link\")\n                .block(),\n        )),\n    )),\n)\n.brand(marketing::Brand::new(\"Kesar\", \"/\").icon(icons::SUN))\n.footer(Text::muted(\"Every sign-in is checked for a new device.\"))\n.aside(Stack::gap(4).children((\n    Heading::h2(\"Your health, clearly understood.\"),\n    Text::new(\"Sleep, heart, recovery and movement, scored every day from the phone and watch you already have.\"),\n    Text::muted(\"An example day, not real data.\"),\n)))\n.aside_label(\"About Kesar\")\n.aside_end()\n.aside_inset()\n.aside_inverse()\n.body_width(400)",
+      "src": "/ui-preview/auth-layout/inset.html",
+      "height": 640,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "fit": false,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "auth-layout",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "auth-main",
+              "tag": "main",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "auth-brand",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-brand-mark",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "site-brand-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "auth-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "stack",
+                          "tag": "div",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "field",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "label",
+                                  "tag": "label",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "input",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "auth-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "text",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "auth-aside",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stack",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heading",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "text",
+                      "tag": "p",
+                      "count": 2,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "tabs/view-switcher",
       "component": "tabs",
       "slug": "view-switcher",
@@ -68520,7 +72722,7 @@
       "fit": true,
       "scripts": [
         "menus-a3553608f59a.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -72378,7 +76580,7 @@
       "scripts": [
         "sidebar-366c16d19fc8.js",
         "overlay-d30ab67a4ddf.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -83512,7 +87714,7 @@
       "width": 1200,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [

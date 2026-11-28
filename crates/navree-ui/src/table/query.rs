@@ -742,8 +742,10 @@ impl State {
 }
 
 /// The page's own filters. A bad value drops that value, not the others: one wrong
-/// parameter shouldn't widen every filter there is.
-fn page_filter<F: Default + DeserializeOwned>(pairs: &[(String, String)]) -> F {
+/// parameter shouldn't widen every filter there is. A filter that takes several values
+/// ([`FilterBar::many`]) reads every value the URL names for it, each checked alone. Then
+/// each filter the URL left empty takes its default ([`FilterBar::fill_defaults`]).
+fn page_filter<F: FilterBar + Default + DeserializeOwned>(pairs: &[(String, String)]) -> F {
     let read = |pairs: &[&(String, String)]| -> Option<F> {
         let borrowed: Vec<(&str, &str)> = pairs
             .iter()
@@ -752,16 +754,56 @@ fn page_filter<F: Default + DeserializeOwned>(pairs: &[(String, String)]) -> F {
         let encoded = encode(&borrowed);
         F::deserialize(urlencoded::Deserializer::new(encoded.as_bytes())).ok()
     };
-    let all: Vec<&(String, String)> = pairs.iter().take(MAX_PAGE_FILTER_PARAMS).collect();
-    if let Some(filter) = read(&all) {
-        return filter;
+    let first: Vec<&(String, String)> = pairs.iter().take(MAX_PAGE_FILTER_PARAMS).collect();
+    let joined = join_many(F::many(), &first, |pair| read(&[pair]).is_some());
+    let all: Vec<&(String, String)> = joined.iter().collect();
+    let mut filter = read(&all).unwrap_or_else(|| {
+        let good: Vec<&(String, String)> = all
+            .iter()
+            .copied()
+            .filter(|pair| read(&[*pair]).is_some())
+            .collect();
+        read(&good).unwrap_or_default()
+    });
+    filter.fill_defaults();
+    filter
+}
+
+/// `pairs` with the values of each parameter in `many` joined into one, in the place of the
+/// first, as a form's list field is read: a value that is empty, holds the separator or
+/// doesn't read alone (`reads`) is left out, and so is any past [`MAX_VALUES`].
+fn join_many(
+    many: &[&str],
+    pairs: &[&(String, String)],
+    reads: impl Fn(&(String, String)) -> bool,
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::with_capacity(pairs.len());
+    let mut counts: Vec<(&str, usize)> = Vec::new();
+    for pair in pairs {
+        let (name, value) = (pair.0.as_str(), pair.1.as_str());
+        if !many.contains(&name) {
+            out.push((*pair).clone());
+            continue;
+        }
+        if value.is_empty() || value.contains(crate::form::SEPARATOR) || !reads(pair) {
+            continue;
+        }
+        match counts.iter_mut().find(|(seen, _)| *seen == name) {
+            Some((_, count)) if *count >= MAX_VALUES => {}
+            Some((_, count)) => {
+                *count += 1;
+                if let Some((_, joined)) = out.iter_mut().find(|(seen, _)| seen == name) {
+                    joined.push(crate::form::SEPARATOR);
+                    joined.push_str(value);
+                }
+            }
+            None => {
+                counts.push((name, 1));
+                out.push((*pair).clone());
+            }
+        }
     }
-    let good: Vec<&(String, String)> = all
-        .iter()
-        .copied()
-        .filter(|pair| read(&[*pair]).is_some())
-        .collect();
-    read(&good).unwrap_or_default()
+    out
 }
 
 impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> TableQuery<R, F> {

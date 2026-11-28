@@ -46,11 +46,11 @@ pub use carousel::{Carousel, CarouselHeight, CarouselLabels, CarouselSlide};
 pub use color_picker::ColorPicker;
 pub use context_menu::ContextMenu;
 pub use display::{
-    Alert, AlertTone, AspectRatio, Attachment, Avatar, AvatarGroup, Badge, BadgeVariant, Bars,
-    Breadcrumb, Bubble, BubbleSide, Card, CardVariant, Direction, Empty, Heading, Item,
-    ItemVariant, Kbd, Marker, MarkerVariant, Message, Pagination, Progress, Ratio, Separator,
-    Skeleton, SkeletonShape, Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text,
-    TextVariant,
+    Alert, AlertTone, AspectRatio, Attachment, Avatar, AvatarGroup, AvatarShape, Badge,
+    BadgeVariant, Bars, Breadcrumb, Bubble, BubbleSide, Card, CardVariant, Direction, Empty,
+    Heading, Item, ItemVariant, Kbd, Marker, MarkerVariant, Message, Pagination, Progress, Ratio,
+    Separator, Skeleton, SkeletonShape, Spinner, Stat, StatVariant, StatusDot, Table, TableCell,
+    TableHead, TableRowEl, Text, TextVariant,
 };
 pub(crate) use dropdown::menu_element;
 pub use dropdown::{DropdownMenu, MenuCheckbox, MenuGroup, MenuItem, MenuRadios, MenuSub};
@@ -79,7 +79,7 @@ pub use picture::Picture;
 pub use questionnaire::{Question, Questionnaire, QuestionnaireLabels, QuestionnaireMove};
 pub use split::{Pane, SplitHeight, SplitPane, SplitSave, SplitSizes, SplitWidth};
 pub use tabs::{Activation, Orientation, Tab, Tabs, TabsVariant};
-pub use timeline::{Timeline, TimelineEvent, TimelineState};
+pub use timeline::{Timeline, TimelineEvent, TimelineState, TimelineVariant};
 pub use toast::{Toast, ToastAction, ToastDuration, ToastPosition, Toaster};
 pub use toggle_group::{ToggleGroup, ToggleItem, ToggleVariant};
 pub use tone::{DisplayLabels, Meta, Tone};

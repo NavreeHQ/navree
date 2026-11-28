@@ -5,6 +5,334 @@ Every change to Navree is listed here, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Every crate and
 every `@navree/*` package carries the same version.
 
+## [Unreleased]
+
+### Added
+
+- A theme of your own can say more than its spec: a `Shape`, given with `Theme::with_shape` and
+  read back with `Theme::shape`. `ThemeSpec` is built field by field by apps and by the Rust
+  export, so it can't gain a field in a minor release; a shape is a value of its own that the
+  theme carries beside its spec, and every value a theme can say beyond its spec is part of it.
+  Its first part is `Corners`: a corner of its own for each kind of part, `Corner::Px(n)` from 0
+  to 32 or `Corner::Pill`, for buttons, badges, toggles (with segmented tabs and the switch),
+  avatars, fields, the rows of the sidebar and of menus, cards, panels and popups. Each is a
+  custom property (`--radius-button` to `--radius-overlay`) that the stylesheet reads with the
+  spec's corner behind it, so a part a shape doesn't set keeps `--radius` or `--radius-lg`, and
+  a checkbox always does. `with_shape` refuses a value out of range, naming it, and a built-in
+  theme, which ships as it is. The theme's stylesheet writes what the shape sets, its short form
+  gains a segment for it, the stored theme a `shape` object and the Rust export a
+  `.with_shape(..)` call; a part of the page drawn in another theme, such as a card of the theme
+  menu, is drawn without it. A theme with the default shape, and every built-in theme, is
+  written as before: the same stylesheet, short form, key, stored theme and Rust, held by a
+  test. `Theme::with_shape` and `Theme::shape` are new inherent methods: an app whose own
+  extension trait gives `Theme` a method of either name calls it through the trait
+  (`MyExt::shape(&theme)`).
+- A theme of your own can give colours of their own to things one token paints today:
+  `Roles`, given with `Theme::with_roles` and read back with `Theme::roles`, each in light and
+  in dark. `card` paints cards, stats, tables, dialogs, popovers and menus and `field` paints
+  inputs, selects and checkboxes, so they can be white while the sidebar and a table's header
+  keep `ink-1`; `ghost_text`, `shell_muted`, `segment_track`, `segment_on` and `selected_row`
+  paint a ghost button's text, the sidebar's quieter text, segmented tabs and a selected row.
+  Each is a custom property (`--card`, `--field`, `--ghost-fg`, `--shell-muted`,
+  `--segment-track`, `--segment-on`, `--row-selected`) that the stylesheet reads with its token
+  behind it. A part marked `data-inverse` is the inverse surface: the stylesheet flips its
+  colour scheme, so it is drawn on the theme's other palette and any component in it reads,
+  and `Roles::inverse` with `Inverse` sets its surface, raised panels, lines, text and muted
+  text to colours of its own. `with_roles` measures every text pair a role's token draws again
+  with the role in its place, beside each other role that can sit with it, and the inverse
+  surface as a palette of its own, in light and in dark, and refuses one that falls short of
+  WCAG AA, naming the role, the pair and its ratio. The short form, stored theme and Rust
+  export carry the roles; a theme without them, and every built-in theme, is written and drawn
+  as before. `Theme::with_roles` and `Theme::roles` are new inherent methods: an app whose own
+  extension trait gives `Theme` a method of either name calls it through the trait.
+- A page has a display face beside its text face: `AppFont::as_face(Face::Display)` makes a
+  font of the app's own the face of headings to `h3`, the page title and the brand, whose
+  rules now read `--font-display` and, with no display face given, draw in the text face as
+  before. `Face::Text` makes a font the page's text face (`--font-sans`, and Geist is no longer
+  preloaded) and `Face::Mono` its code and figures (`--font-mono`), so the app needs no
+  stylesheet of its own for either. The font's rule sets the face's custom property with a
+  system stack behind the family; a font that is no face keeps the rule and address it had.
+  `AppFont::role` returns the face a font is.
+- A shape's `TypeScale` sets how each kind of text is drawn: a `TextStyle` of a size (10 to
+  72 px), a line height (1 to 2), a weight (400 to 700), tracking (-0.06 to 0.1 em) and a
+  `Face`, for the page title, `h1` to `h4`, card titles, the brand, body text, labels, buttons,
+  badges, inputs, breadcrumbs, stat figures, table headings and the sidebar's user name. Each
+  value is a custom property (`--text-page-title-size` and so on) that the stylesheet reads
+  with the toolkit's value behind it, so a kind of text a scale doesn't set is drawn as before.
+  Sizes are pixels, so text keeps its size under every density.
+- A shape's `Sizes` sets, in pixels, the height of controls (`ControlSizes`, by `Size` step,
+  segmented tabs included) and of fields (`FieldSizes`, by step, with their side padding, so a
+  page that draws its fields at `Size::Lg` gets the theme's large step), a badge's height, the
+  sidebar's width, insets, gap between blocks and link height (`SidebarSizes`), the top bar's
+  height and side padding (`TopbarSizes`), the page's padding, gap and largest width
+  (`PageSizes`), and the padding of cards and stats (`CardSizes`). Each is a custom property
+  read with today's size behind it, so a size a shape doesn't set keeps following the theme's
+  density; `--sidebar-w` and `--topbar-h`, which every theme shared, are now set by a theme
+  whose shape says so.
+- `Shape::elevation(Elevation::Soft)` gives raised and floating parts two soft shadows:
+  `--shadow-raised` under the chosen segmented tab, the current sidebar link, a toggle that is
+  on and the current button, and `--shadow-floating` under popovers, menus, dialogs, sheets,
+  the select's list and a chart's tip. Their colour is the light palette's text colour at a low
+  alpha in light mode and black in dark mode, written with `light-dark()`; there is no glow and
+  no free value. `Elevation::Flat` is the default, and a part is drawn without a shadow, as
+  before.
+- `Avatar::initials(name)` draws a person's or an organisation's initials, the first letter of
+  the name's first word and of its last in capitals, in any script; a screen reader says the
+  whole name, and a name with no letter or digit draws the person icon. `Avatar::tone(tone)`
+  lays a tone's tint behind the initials or the icon, as a badge in a tone is drawn;
+  `Avatar::solid()` fills the avatar with the accent and draws it in the accent's ink, as a
+  primary button is drawn; `Avatar::shape(AvatarShape::Circle)` makes it round whatever the
+  theme's avatar corner, which `AvatarShape::Rounded`, the default, keeps. Each draws with
+  pairs every theme is already checked for, and comes with the parts stylesheet; an avatar with
+  none of them is drawn as before. `Avatar::initials`, `tone`, `solid` and `shape` are new
+  inherent methods: an app whose own extension trait gives `Avatar` a method of one of these
+  names calls it through the trait.
+- `WorkspaceSwitcher::variant(SwitcherVariant::Card)` draws the switcher's button as a card as
+  wide as its place, for the sidebar's header slot: the workspace's picture
+  (`WorkspaceSwitcher::media`), its name over a second line (`WorkspaceSwitcher::description`)
+  and a chevron at the end, in the theme's `card` colour and `field` corner, with its second
+  line and chevron in the shell's muted text. `WorkspaceSwitcher::workspace_with` puts a
+  picture before a workspace's name in the menu. The picture is hidden from assistive
+  technology, which hears the name. The card changes how the button is drawn, never what the
+  menu posts: the forms, the route, the token and the page to come back to are the same. Its
+  styles are in a sheet of their own, `shell-parts` (`Uses::SHELL_PARTS`), linked by a page that
+  draws it. `SwitcherVariant::Button`, the default, is drawn as before.
+- The sidebar's header slot stands one gap between the sidebar's blocks under the brand
+  (`--sidebar-gap`, 8 px as before when a theme's shape doesn't set it), and a switcher drawn as
+  a card lines up with the links' rows.
+- The brand row of the app shell takes more of the app's mark: `Shell::logo_dark(src)` is the
+  mark in dark mode (a page in light or in dark draws the one it needs, and a page that follows
+  the device draws a `<picture>` whose dark source the browser picks), and
+  `Shell::logo_style(LogoStyle::Bare)` draws the mark alone, 22 px with no tile, in a row 30 px
+  high. `Shell::badge(badge)` puts a badge at the end of the row in place of the context line,
+  and `AppShell::badge(badge)` one for a request; it hides with the name when the sidebar folds.
+  `BadgeVariant::Solid` fills a badge with the accent and draws its text in the accent's ink, as
+  a primary button is drawn, for a marker such as "Internal"; a table's badge column draws it as
+  `Neutral`. A shell with none of these is drawn as before, `LogoStyle::Tile` being the default.
+  `Shell::logo_dark`, `logo_style` and `badge` and `AppShell::badge` are new inherent methods: an
+  app whose own extension trait gives `Shell` or `AppShell` a method of one of these names calls
+  it through the trait.
+- The sidebar's foot takes more than the person: `Shell::footer_slot(node)` puts something above
+  them, such as a tile with the plan's seats, and `AppShell::footer_slot(node)` one for a
+  request; it stands 12 px above the person, hides with the names when the sidebar folds, and a
+  shell without one draws no box for it. `UserMenu::avatar(avatar)` draws an avatar of the app's
+  (the person's initials) in place of the person icon, and `UserMenu::chevron(false)` leaves out
+  the chevron; the row opens its menu as before. A shell and a menu with none of these are drawn
+  as before. `Shell::footer_slot`, `AppShell::footer_slot`, `UserMenu::avatar` and
+  `UserMenu::chevron` are new inherent methods: an app whose own extension trait gives one of
+  these types a method of one of these names calls it through the trait.
+- A page in the app shell takes more of its frame: `AppPage::topbar_actions(nodes)` puts buttons
+  at the end of the top bar, before its search and theme menu (on a phone too narrow for them
+  they scroll inside the bar); `AppPage::current_crumb(label)` names the breadcrumb's last part
+  otherwise than the title, and `AppPage::current_crumb_mono()` draws it in the mono face;
+  `AppPage::title_aside(nodes)` puts badges after the title, wrapping under it, and
+  `AppPage::subtitle(text)` a line of the shell's muted text 6 px under it;
+  `AppPage::title_face(face)` draws the title in another face than the theme's. A native
+  client's screen takes the subtitle as its own and the top bar's actions after the page's.
+  `Breadcrumb::current_mono(label)` adds a current page whose name is in the mono face. A theme's
+  `breadcrumb` text style now gives its weight to the current page, and the links keep the
+  text's. A page with none of these is drawn as before. These are new inherent methods: an app
+  whose own extension trait gives `AppPage` or `Breadcrumb` a method of one of these names calls
+  it through the trait.
+- `AuthLayout`, the page of a sign-in form, says where its panel stands and how it looks, and
+  what the form's column holds besides the form. `aside_end` puts the panel after the form, in
+  reading order and on the screen; `aside_inset` sets it 0.75rem off the window's edges in the
+  theme's `panel` corner, padded 3.5rem, with the form's column and the panel sharing the room
+  left; `aside_inverse` draws it on the theme's inverse surface, in the colours a theme's
+  `Inverse` gives it. `brand` puts the app's brand (a `marketing::Brand`) at the top of the
+  form's column at every width, its name in the type scale's `brand` style, so a phone keeps
+  it when the panel is hidden; `footer` puts a small line at the column's foot; `body_width`
+  makes the column 360, 400 or 480 px wide in place of 448. Their styles are a sheet of their
+  own, linked after the app blocks' sheet by a layout that uses one (`Uses::AUTH_LAYOUT`); a
+  layout that uses none is drawn and linked as before, and `AuthPages` draws its pages as
+  before, held by a test. A native client that is given an auth page as a screen leaves the
+  brand out, as it does the panel, and says the footer's line after the form. The six methods
+  are new inherent methods of `AuthLayout`: an app whose own extension trait gives it a method
+  of the same name calls it through the trait.
+- `AuthPages` says the app's own words and draws its pages the way a design asks, with typed
+  options only. `words(AuthWords)` gives each page's title (its tab's too) and the line under
+  it, for the sign-in, sign-up, second-factor, password, sign-in link and code, passkey and
+  two-factor set-up pages, and the labels of their fields (`email_label("Work email")` and
+  nine more); a word an app doesn't give is the page's own English, and every word is text,
+  escaped. `form_style(AuthForm::Plain)` draws the form with no card, the line under the title
+  as quiet text; `app_name_line(false)` leaves out the line with the app's name over the
+  title; `links_as(ButtonVariant)` draws the links under a form as buttons as wide as the form,
+  to the same places; `layout(fn(AuthLayout) -> AuthLayout)` sets the layout's own options on
+  every page; `setup_sign_out()` puts a Sign out button on the two-factor set-up page, which
+  posts to `POST /sign-out` with the session's token, a route a user who must set two-factor
+  authentication up already reaches. No route, check, answer or log changes, and an app that
+  uses none of the options gets the pages it got before, held byte for byte by a test.
+  `AuthForm` is `#[non_exhaustive]`. The six methods are new inherent methods of `AuthPages`:
+  an app whose own extension trait gives it a method of the same name calls it through the
+  trait.
+- `FormView::label(field, text)` gives a derived form's field a label chosen when the page is
+  drawn, in place of its doc comment: words an app's settings give. The field posts under its
+  name as before, and the label is text. Each different label is kept for the life of the
+  program, as a described form's are, so it is for words the app knows, never a reader's
+  text. A new inherent method: an app whose own extension trait gives `FormView` a `label`
+  method calls it through the trait.
+- `DataTable::current_row(fn)` marks the row a page shows, such as the one whose details are
+  open beside the table: its `<tr>` says `aria-current="true"` and is drawn in the theme's
+  colour for a chosen row (`Roles::selected_row`, `ink-3` without one). Only the first row the
+  function says yes to is marked, and it is a mark, not a selection: nothing posts it, and the
+  boxes and bulk actions are as they were. `DataTable::muted_header()` draws the column headings
+  in the muted text colour (`fg-2`), as a plain `Table` draws its own; their size, weight, line
+  height, tracking and face are the theme's `table_head` text style either way. A table that
+  uses neither is drawn as before. Both are new inherent methods: an app whose own extension
+  trait gives `DataTable` a method of either name calls it through the trait.
+- `#[derive(FilterBar)]` draws more than a select and a search box. `#[filter(multi)]` on an
+  `Option<Many<T>>` is chips, a toggle group of checkboxes whose values the URL names one by
+  one (`stage=won&stage=lead`), each read alone, so a bad one drops only itself;
+  `#[filter(boolean)]` on an `Option<bool>` is a checkbox with its label; `#[filter(options =
+  LIST)]` takes the choices of a `(value, label)` list, and `#[filter(options = page)]` the ones
+  the page gives with `DataTable::options(name, ..)`, such as rows of the database; and
+  `#[filter(default = "...")]` makes a select with no empty choice that holds the default when
+  the URL names none, writes nothing into a link while it holds it and isn't counted as a
+  filter. The derive refuses a field it can't draw, with the reason. `FilterBar` has three new
+  methods with defaults (`controls_with`, `many` and `fill_defaults`), so a filter struct that
+  implements it by hand works as before, and a derived one with none of the new options draws,
+  reads and writes what it did. `navree::ui::table` gains the functions the derive calls:
+  `choice_control`, `chips_control`, `check_control`, `filter_choices` and `read_default`.
+- A form's submit button takes another look with `FormView::submit_variant(ButtonVariant)`, or
+  is a `Button` of the app's own with `FormView::submit_button(button)`, which the form makes
+  submit (a link it had is dropped); `FormView::without_actions()` draws the form with no
+  buttons, for buttons elsewhere that name `form_id()`, and `ToggleGroup::form(form_id)` ties a
+  group outside a form to it. A form that uses none of these is drawn as before. These are new inherent methods: an app whose own extension trait gives
+  `FormView` or `ToggleGroup` a method of the same name calls it through the trait.
+- `#[form(mono)]` draws a field typed into in the page's mono face (`--font-mono`, a theme's
+  `Face::Mono` font), through `Input::mono()`, and `#[form(size = lg)]`, on a field or on the
+  struct for every field, gives its inputs, selects, an addon's group and its pickers the
+  theme's field height of that step, through `NativeSelect::size` and `InputGroup::size`, which
+  are new; a text area, radios, a checkbox or switch, the slider, the date and time pickers,
+  the phone input, an upload and a field a `control` draws keep their own height. `FormField`
+  gains `mono` and `size`, with setters of those names; it is non-exhaustive, so a form derived
+  before is built as it was. The derive refuses `mono` on a field nobody types into or that a
+  `control` draws, and a size that isn't `xs`, `sm`, `md` or `lg`. The rules for both are in the
+  parts stylesheet.
+- `ButtonGroup::segmented()` draws a group as a segmented control: a track in the theme's
+  segment colour, its buttons on it and the current one raised in the chosen segment's colour,
+  with the toggle corner and the raised shadow, the values segmented tabs read, so the two look
+  alike. Its items are often links to other places: each stays a real link, with a link's keys,
+  and the page needs no script. `Button::current(true)` marks the link to the page shown with
+  `aria-current="page"` (an app wrote it with `.attr(..)` before) and draws it raised;
+  `ButtonGroup::block()` fills the width and shares it among the buttons. These looks are drawn
+  by a new stylesheet, `looks`, which a page links only when it draws one of them (`Uses::LOOKS`);
+  a group and a button that use none of them are drawn as before and link nothing new, held by
+  a test of their markup. `Button::current`, `ButtonGroup::segmented` and `ButtonGroup::block`
+  are new inherent methods: an app whose own extension trait gives either type a method of the
+  same name calls it through the trait.
+- A card, a figure tile and a code panel can be drawn on the inverse surface, a dark one on a
+  light page and a light one on a dark page: `CardVariant::Inverse`, `Stat::variant` with the new
+  `StatVariant::Inverse`, and `CodeBlock::inverse()`. Each marks itself `data-inverse`, so its
+  text, a badge, a button and the code's colours in it read the theme's other palette, or the
+  colours a theme gives it with `Roles::inverse`, which are measured with every text pair, the
+  code's colours among them, in light and in dark. None links a stylesheet of its own. A card,
+  stat or code block that asks for none of them is drawn as before. `Stat::variant` and
+  `CodeBlock::inverse` are new inherent methods: an app whose own extension trait gives either
+  type a method of the same name calls it through the trait.
+- `ButtonVariant::DestructiveOutline` is a destructive action that waits beside others: the
+  danger colour on no fill, a line of it mixed 30% into transparent, and on hover the 10% tint
+  the destructive button rests on, so its text sits on pairs every theme is already checked
+  with. It is drawn by the looks sheet, which a page links only when it draws one, and a native
+  client reads it as a destructive action of medium prominence. A button inside the inverse
+  surface needs no variant: a primary button there takes the surface's text colour, with the
+  surface's colour as its text, and an outline button its lines and text. The other variants
+  are drawn as before.
+- `Stepper::variant` takes a `StepperVariant`: `Circles`, the stepper as it was and the
+  default; `Tiles`, each step a bordered tile with the theme's card corner, the done ones
+  tinted in the success tone with their tick and the current one outlined 1.5 px in the
+  accent, every tile keeping its name on a phone; and `Track`, the steps in a row inside a
+  muted box with the panel corner, 8 px dots joined by hairlines, the current step's dot in
+  the success tone and its name bold, later steps hollow and quieter. The states, their words
+  for assistive technology, `aria-current="step"` and the links are the same in each; the
+  looks sheet draws the two new ones. `Stepper::variant` is a new inherent method: an app whose
+  own extension trait gives `Stepper` a method of that name calls it through the trait.
+- Small options for what a design draws that a component couldn't: `StatusDot`, a dot in a
+  tone beside its word with no chip; `Timeline::variant(TimelineVariant::Plain)`, a time
+  column, a bold title and a quieter detail with no rail and no dot; `FactGrid::min_tile(px)`,
+  tiles narrower or wider than 14 rem, taken to the nearest of eleven widths; `Card::raised`,
+  the theme's soft shadow under a card, none in a flat theme; `Popover::trigger_label`, a name
+  for the button that opens a popover, and `Popover::icon_only`, a square icon button that
+  opens one; and `ThreadList::group`, conversations under headings such as "Today" and
+  "Earlier", each group a named list. The looks sheet draws the dot, the plain timeline, the
+  tiles' widths and the raised card, and is linked only where one is drawn; every component
+  that uses none of them is drawn as before. Each method is a new inherent method: an app whose
+  own extension trait gives the type a method of that name calls it through the trait.
+- `Heatmap` draws a heat map of rows by columns: a cell for each row at each column, such as
+  each day at each hour or each person in each week. `columns(..)` names the columns,
+  `row(name, values)` adds a row of readings and `category_row(name, names)` a row of categories
+  (`category(name, ink)` declares one and its colour). A reading is shaded in five equal steps of
+  `ink(..)` between the ends of `range(low, high)` (the lowest and the highest reading by
+  default), or takes the colour of its band with `colors(ColorScale)`; a band in a soft ink is
+  the light step of its colour, so five bands can run from one colour through a neutral middle to
+  another. A cell with no data is hollow, not the faintest step. The grid has one legend for
+  every row (the steps between the ends, or the scale's named bands, the categories and "No
+  data"), a tooltip for each cell, the arrow keys from cell to cell, a summary, and a table of the
+  same rows and columns. `row_summary(RowSummary::Average)` or `RowSummary::Total` writes a
+  figure at each row's end, `show_values()` writes the readings in the cells, `label_every(n)`
+  thins the columns' names, and `ends(low, high)`, `row_name(..)`, `value_name(..)`, `unit(..)`,
+  `format(..)`, `words(..)` and `motion(..)` work as on the other grid charts. It draws at most
+  `MAX_HEAT_ROWS` (50) rows and `MAX_HEAT_COLUMNS` (144) columns and says so when it cuts.
+  `GridLabels` gains the words it writes. The grid charts' sheet gains its rules, and the charts
+  module reads a heat map's tooltip from its table of rows and columns; every other chart's
+  tooltip is read as before.
+- `ColorStrip::hide_legend()` draws a strip with no legend under it, for strips stacked one above
+  another that share one legend: give it to every strip but one, and declare the same categories
+  in the same order on each, so the legend kept names every category. The cells, the tooltip and
+  the table are as before, and a strip that does not call it is drawn as before.
+  `ColorStrip::hide_legend` is a new inherent method: an app whose own extension trait gives
+  `ColorStrip` a method of that name calls it through the trait (`MyExt::hide_legend(strip)`).
+- `Ink::text()` paints a chart mark, a gradient stop or a legend's key in the text ink: near black
+  on a light page and near white on a dark one, in every theme, for a mark that is the sum of the
+  others and is set apart from the chart colours of its parts. It writes `data-color="text"`,
+  which the charts sheet and the chart paint sheet each gain a rule for, and a chart picture
+  draws it in the theme's text colour. Every other ink is drawn as before.
+- `Waterfall` draws an amount built up and taken down a row at a time, such as a settlement
+  from what customers paid to what reached the bank. `start(label, amount)` is a bar from zero
+  where the running total begins, `step(label, amount)` a bar that floats at the running total
+  (above zero it adds, below it takes away) and `total(label)` a bar from zero to the running
+  total so far, a subtotal or the net. Steps that add, steps that take away and totals each take
+  a colour,
+  `colors(added, deducted, total)` (chart colours 1 and 2 and `Ink::text()` by default); each row
+  writes its amount at its end, a step's with its sign, in the chart's `format` and `locale`
+  (`NumberFormat::currency("₹")` and `en-IN` write `-₹25,000`); a dashed line runs from each running
+  total to the step that starts there; and a legend names the colours. The rows are one tab stop
+  with a tooltip each, the table holds each row's amount and the running total after it, and the
+  summary says where it starts and ends and how much was added and taken away. `rtl()`,
+  `motion(..)` and `words(WaterfallLabels)` work as on the other charts. It draws at most
+  `MAX_WATERFALL_ROWS` (24) rows and says so when it cuts. The charts sheet gains the rule for the
+  dashed line.
+- `ErrorContext::impersonator` names the user acting as `ErrorContext::user` when the request that
+  ended in an error is an impersonation (the `Impersonator` the authenticator sets), so a page of
+  the error, or an `ErrorShell` that builds the shell around it, can say so and offer to stop it.
+  It is `None` for a request of the user's own, for a guest, and after a panic or a timeout, which
+  cannot say. `ErrorContext::new` leaves it `None`.
+- The error pages `UiModule` draws on their own (for a guest, for a 401, a 429 and a 503, and when
+  the shell can't be built) can take the app's look. `PagesOptions::shell_look()` draws them in the
+  registered `Shell`'s default appearance, offered themes, stylesheets, typefaces and title
+  template; `PagesOptions::appearance(..)`, `stylesheet(..)` and `font(..)` give a look of their
+  own. The reader's theme cookie and the address's `?theme=` and `?mode=` lie over the appearance.
+  `PagesOptions::offer_sign_in(true)` adds "Sign in" beside a guest's own actions, and
+  `ErrorPage::offer_sign_in()` does the same on a page you build.
+  `PagesOptions::stop_impersonating(path)` makes an error page seen during an impersonation say so and offer
+  "Stop impersonating", a form that posts to `path` with the session's token, in the shell and on
+  its own; `ErrorPage::impersonating(href)` and `ErrorPage::csrf(token)` do it on a page you
+  build. An address to stop at that is not a path on the site is dropped. `StateLabels` gains
+  `impersonating` and `stop_impersonating`. With none of these set, every page is drawn as before.
+  `ErrorPage::offer_sign_in`, `impersonating` and `csrf` are new inherent methods: an app whose own
+  extension trait gives `ErrorPage` a method of one of these names calls it through the trait
+  (`MyExt::csrf(page, ..)`).
+
+### Fixed
+
+- With `Shell::collapse(Collapse::Never)`, the top bar of a wide screen had no fold button but
+  kept the separator that stands after it. The separator now goes with the button; on a phone,
+  where the button opens the sidebar, both stay.
+- An error page drawn in the app's shell was given the request's path without its query, so a
+  theme or a mode asked for in the address (`?mode=light`) was dropped on it while every other page
+  of the shell honoured it. The shell is now applied to the path and the query, as the `AppShell`
+  extractor does.
+
 ## [1.7.0] - 2026-11-27
 
 ### Upgrading

@@ -9,7 +9,8 @@
 //!
 //! The only text that reaches a rule is a token's name from [`Token`], a
 //! colour written by [`Rgb::write_hex`], a length in px from [`Radius`], a font
-//! stack from [`Font`], or a built-in id: never anything given.
+//! stack from [`Font`], a value of a [`Shape`](super::Shape) written from its
+//! typed, checked form, or a built-in id: never anything given.
 
 use std::fmt::Write as _;
 use std::sync::LazyLock;
@@ -22,7 +23,7 @@ use http::header::{
 };
 use navree_http::response::{IntoResponse, Response};
 
-use super::{Density, Rgb, Side, Theme, ThemeSpec, Token};
+use super::{Density, Extras, Rgb, Side, Theme, ThemeSpec, Token};
 use crate::tokens::TOKENS;
 
 /// Where a theme of your own is served, under the toolkit's files.
@@ -81,7 +82,13 @@ pub fn token_layer() -> String {
         );
     }
     for theme in Theme::BUILT_IN.iter().skip(1) {
-        theme_rules(&mut out, theme.key(), theme.spec(), Some(base));
+        theme_rules(
+            &mut out,
+            theme.key(),
+            theme.spec(),
+            Some(base),
+            &Extras::NONE,
+        );
     }
     // The theme menu's swatches.
     for token in [Token::Ink1, Token::Accent, Token::Fg] {
@@ -203,20 +210,46 @@ fn helpers(out: &mut String) {
     }
 }
 
-/// The stylesheet of a theme of your own: every token, scoped to its key.
+/// The stylesheet of a theme of your own: every token, scoped to its key, and what it says
+/// beyond its spec. A part of its page drawn in another theme (a card of the theme menu)
+/// first loses what this theme says that the token layer doesn't reset, so it is drawn as
+/// that theme alone; a part drawn in this theme gets it back from the block after.
 pub(crate) fn sheet(theme: &Theme) -> String {
     let mut out = String::with_capacity(4096);
-    theme_rules(&mut out, theme.key(), theme.spec(), None);
+    let key = theme.key();
+    let extras = theme.extras();
+    let mut names = extras
+        .shape
+        .names()
+        .chain(extras.roles.names().map(str::to_owned))
+        .peekable();
+    if names.peek().is_some() {
+        let _ = write!(out, ":where([data-theme={key}] [data-theme]){{");
+        for (at, name) in names.enumerate() {
+            let _ = write!(out, "{}--{name}:initial", if at == 0 { "" } else { ";" });
+        }
+        out.push_str("}\n");
+    }
+    theme_rules(&mut out, key, theme.spec(), None, extras);
+    extras.roles.inverse_css(key, theme.spec(), &mut out);
     out
 }
 
 /// A theme's rules: its block, then the images of the light palette for light
 /// and for system mode. With `base`, only what differs from it.
-fn theme_rules(out: &mut String, key: &str, spec: &ThemeSpec, base: Option<&ThemeSpec>) {
+fn theme_rules(
+    out: &mut String,
+    key: &str,
+    spec: &ThemeSpec,
+    base: Option<&ThemeSpec>,
+    extras: &Extras,
+) {
     let _ = write!(out, ":where([data-theme={key}]){{");
     let start = out.len();
     colours(out, spec, base);
     corners_and_font(out, spec, base);
+    extras.shape.css(spec, out);
+    extras.roles.css(out);
     if base.is_none_or(|base| {
         base.light.hover_mix() != spec.light.hover_mix()
             || base.dark.hover_mix() != spec.dark.hover_mix()
@@ -358,8 +391,26 @@ pub(crate) fn sheet_build() -> &'static str {
         spec.density = Density::Compact;
         spec.font = super::Font::System;
         let sample = Theme::unchecked(super::ThemeId::custom(), String::new(), spec);
+        let shaped = Theme::unchecked_with(
+            super::ThemeId::custom(),
+            String::new(),
+            spec,
+            Extras {
+                shape: super::Shape::new()
+                    .corners(
+                        super::Corners::new()
+                            .button(super::Corner::Pill)
+                            .card(super::Corner::Px(16)),
+                    )
+                    .elevation(super::Elevation::Soft),
+                roles: super::Roles::new()
+                    .card(Rgb::WHITE, Rgb::BLACK)
+                    .inverse(super::Inverse::new().surface(Rgb::BLACK, Rgb::WHITE)),
+            },
+        );
         let mut text = String::from(crate::assets::BUILD);
         text.push_str(&sheet(&sample));
+        text.push_str(&sheet(&shaped));
         crate::assets::content_hash(text.as_bytes())
     });
     &BUILD
@@ -386,14 +437,14 @@ pub(crate) fn respond(file: &str, request: &HeaderMap) -> Response {
         .rsplit_once('-')
         .filter(|(_, build)| is_build(build))
         .and_then(|(form, build)| {
-            super::codec::from_form(form).map(|spec| (spec, build == sheet_build()))
+            super::codec::from_form_with(form).map(|values| (values, build == sheet_build()))
         });
-    let Some((spec, current)) =
-        built.or_else(|| super::codec::from_form(name).map(|spec| (spec, false)))
+    let Some(((spec, extras), current)) =
+        built.or_else(|| super::codec::from_form_with(name).map(|values| (values, false)))
     else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let theme = Theme::unchecked(super::ThemeId::custom(), String::new(), spec);
+    let theme = Theme::unchecked_with(super::ThemeId::custom(), String::new(), spec, extras);
     let css = sheet(&theme);
     let accept = request
         .get(ACCEPT_ENCODING)

@@ -216,6 +216,35 @@ fn cases() -> Vec<Case> {
             ]),
         },
         Case {
+            name: "mono_on_a_field_a_control_draws_does_not_compile",
+            code: r#"
+                use navree_ui::form::{ControlField, FieldControl, FieldRules, RuleTable};
+                use navree_ui::{Form, Node, el};
+
+                struct Pin;
+                impl FieldControl for Pin {
+                    fn name(&self) -> &'static str { "app.pin" }
+                    fn draw(&self, field: &ControlField<'_>) -> Node {
+                        el("input").attr("name", field.name.to_owned()).into()
+                    }
+                }
+                static PIN: Pin = Pin;
+
+                #[derive(Form)]
+                struct Visit {
+                    #[form(control = PIN, mono)]
+                    pin: String,
+                }
+                impl RuleTable for Visit { const FIELDS: &'static [FieldRules] = &[]; }
+
+                fn main() {}
+            "#,
+            files: &[],
+            expect: Expect::Fails(&[
+                "`mono` is for a field typed into: text, a number, an amount, a date or a time",
+            ]),
+        },
+        Case {
             name: "the_derive_with_control_needs_no_options_for_the_fields_type",
             code: r#"
                 use navree_ui::form::{ControlField, FieldControl, FieldRules, FieldValue, RuleTable};

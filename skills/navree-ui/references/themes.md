@@ -41,6 +41,68 @@ pub fn themed_shell() -> Shell {
 - A theme of your own: build it in the theme builder
   (https://navree.com/docs/ui/theme-builder/) and paste its Rust export, or
   call `Theme::custom`, which refuses text that fails WCAG AA.
+- What a theme says beyond its spec is its `Shape`, given with
+  `theme.with_shape(shape)`, which refuses a value out of range (and a
+  built-in theme: `renamed` makes it yours). `Corners` sets the corner of
+  each kind of part, `Corner::Px(0..=32)` or `Corner::Pill`: `button`,
+  `badge`, `toggle`, `avatar`, `field`, `nav`, `card`, `panel` and
+  `overlay`. A part it doesn't set keeps the spec's `Radius`. Never write a
+  stylesheet that restyles a component: a value the design needs goes in
+  the theme.
+- `TypeScale` in the shape sets each kind of text:
+  `.type_scale(TypeScale::new().page_title(TextStyle::px(28).line(1.15)
+  .weight(600).tracking(-0.025).face(Face::Display)))`, and the same for
+  `h1` to `h4`, `card_title`, `brand`, `body`, `label`, `button`, `badge`,
+  `input`, `breadcrumb`, `stat_value`, `table_head` and `sidebar_user`.
+  Sizes 10 to 72 px, line heights 1 to 2, weights 400 to 700, tracking
+  -0.06 to 0.1 em. A face of the app's own is an `AppFont` with
+  `.as_face(Face::Text | Face::Display | Face::Mono)`, linked with
+  `Shell::font`; headings to `h3`, the page title and the brand draw in the
+  display face when there is one.
+- `Sizes` in the shape sets heights and spacing in px:
+  `Sizes::new().controls(ControlSizes::new().sm(32).md(36).lg(48))
+  .fields(FieldSizes::new().md(40).lg(44).padding_x(14)).badge_height(22)
+  .sidebar(SidebarSizes::new().width(248).inset_y(16).inset_x(12).gap(18)
+  .item_height(36)).topbar(TopbarSizes::new().height(60).inset_x(32))
+  .page(PageSizes::new().padding_top(28).padding_x(32).padding_bottom(40)
+  .gap(24).max_width(1240)).cards(CardSizes::new().padding(18))`. A field
+  takes a step with `Input::size(Size::Lg)`, and a derived form's fields
+  with `#[form(size = lg)]` on its struct, so a sign-in page can draw 44 px
+  fields while the app draws 40. A field typed into takes the theme's mono
+  face with `#[form(mono)]` (`Input::mono()`).
+- `Shape::elevation(Elevation::Soft)` gives two soft shadows: under raised
+  parts (the chosen segmented tab, the current link, a toggle that is on)
+  and under floating ones (popovers, menus, dialogs). Flat is the default;
+  there is no glow.
+- Colours beyond the 31 tokens are `Roles`, given with
+  `theme.with_roles(roles)`, each in light then dark: `card` and `field`
+  (white cards and inputs beside an off-white sidebar, which keeps
+  `ink-1`), `ghost_text`, `shell_muted`, `segment_track`, `segment_on`,
+  `selected_row`, and `inverse(Inverse::new().surface(..).raised(..)
+  .line(..).text(..).muted(..))`, the colours of the inverse surface: a
+  part drawn on the theme's other palette, such as a dark card on a light
+  page (`CardVariant::Inverse`, `StatVariant::Inverse`,
+  `CodeBlock::inverse()`). With no `Inverse`, the surface is the other
+  palette, which every theme passes. A role whose text fails WCAG AA is
+  refused, in light or in dark.
+
+```rust
+use navree::ui::theme::{Corner, Corners, Shape, Theme, ThemeId};
+
+pub fn rounded_theme() -> Theme {
+    let shape = Shape::new().corners(
+        Corners::new()
+            .button(Corner::Pill)
+            .badge(Corner::Pill)
+            .field(Corner::Px(12))
+            .card(Corner::Px(16)),
+    );
+    Theme::OCEAN
+        .renamed(ThemeId::parse("rounded").expect("a theme id"), "Rounded")
+        .with_shape(shape)
+        .expect("every value of the shape in range")
+}
+```
 - Store a choice with `Appearance::to_value()` and read it back with
   `Appearance::parse`. Charts and status read the tokens `--chart-1` to
   `--chart-8`, `--success`, `--amber`, `--danger` and `--info`; see

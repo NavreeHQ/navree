@@ -86,14 +86,55 @@ The same page after the button is pressed: the sidebar sits over the page and th
 
 ## The sidebar
 
-- **Width:** 16 rem open, 3 rem collapsed to its icons. Give every top-level item an icon: the collapsed sidebar shows only that.
+- **Width:** 16 rem open, 3 rem collapsed to its icons. Give every top-level item an icon: the collapsed sidebar shows only that. A theme of your own sets the open width, the sidebar's insets and the gap between its blocks, its links' height, and the top bar's height and padding with the [sizes](/docs/ui/themes/#sizes) of its shape.
 - **Collapsing:** the top bar's button and `Ctrl+B` (`Cmd+B` on a Mac) toggle it. The choice is kept in a cookie, so the next page renders the same way with no flash.
 - **Phones:** below 768 px it becomes a sheet that slides over the page.
 - **Items:** `.count(text)` puts a count at the end, `.sub(item)` nests an item under another, and `.current(true)` marks a link as the current page when several differ only in their query.
 - **The user menu:** `.link` adds a page to read; `.action` adds a button that posts, for signing out or switching workspace. It works with JavaScript off and carries the session's CSRF token when there is one.
-- **For one request:** `AppShell::user_menu(menu)` puts the person signed in at the foot, `AppShell::context(text)` sets the line below the app's name, `AppShell::header_slot(node)` puts something under the app's name (a workspace switcher; `Shell::header_slot` for every page), and `AppShell::csrf(token)` gives the shell's own forms the session's token. The app's one `Shell` stays as it is.
+- **For one request:** `AppShell::user_menu(menu)` puts the person signed in at the foot, `AppShell::context(text)` sets the line below the app's name, `AppShell::header_slot(node)` puts something under the app's name, one gap between the sidebar's blocks below it (a workspace switcher, which `SwitcherVariant::Card` draws as a card lined up with the links' rows; `Shell::header_slot` for every page), and `AppShell::csrf(token)` gives the shell's own forms the session's token. The app's one `Shell` stays as it is.
 - **Counts that come later:** `NavGroup::lazy(id, src)` makes a group a region fetched once the page is up, so a page never waits for its counts; `Shell::live_group(id, path)` draws the answer, the group with its counts. The source is an address on your site: one that is not a `LocalHref` (or is `#`) leaves the group with no source, and it is never fetched.
-- **Your mark:** `Shell::logo(src)` draws a picture of yours in place of Navree's.
+- **Your mark:** `Shell::logo(src)` draws a picture of yours in place of Navree's; see [the brand row](#the-brand-row).
+
+## The brand row
+
+The sidebar opens with the app's mark and name, linking home (`Shell::home`), and a line under the name (`Shell::context`: a workspace, a plan). The name is drawn in the `brand` style of the theme's [type scale](/docs/ui/themes/#type).
+
+- **Your mark:** `Shell::logo(src)` draws a picture of yours in place of Navree's: a path on the app, an `https://` URL, or an [`AppImage`](/docs/ui/app-styles/#pictures) the toolkit serves. It is decorative, beside the app's name.
+- **A dark mark:** `Shell::logo_dark(src)` is the mark on a dark sidebar, for a mark drawn for a light one. A page in light or in dark draws the one it needs; a page that follows the device draws a `<picture>`, and the browser picks the dark source with `prefers-color-scheme`.
+- **A bare mark:** the mark stands in a 32 px tile of the theme's raised colour. `Shell::logo_style(LogoStyle::Bare)` draws it alone, 22 px, with no tile: the row is 30 px high, with 8 px at its sides and 10 px between the mark and the name.
+- **A badge:** `Shell::badge(badge)` puts a [badge](/docs/components/badge/) at the end of the row, in place of the context line: a marker such as "Internal" or "Staging". `AppShell::badge(badge)` sets one for a request, in place of the shell's: the pages of a staff area. It hides with the name when the sidebar folds.
+
+```rust
+Shell::new("Kesar")
+    .logo("/brand/kesar.svg")
+    .logo_dark("/brand/kesar-dark.svg")
+    .logo_style(LogoStyle::Bare)
+    .badge(Badge::new("Internal").variant(BadgeVariant::Solid))
+```
+
+A bare or dark mark and a badge are drawn by the shell parts stylesheet, which a page links only when it draws one of them.
+
+## The sidebar's foot
+
+The person signed in stands at the foot of the sidebar: `Shell::user(menu)`, or `AppShell::user_menu(menu)` for a request. Their name is drawn in the `sidebar_user` style of the theme's [type scale](/docs/ui/themes/#type) and the line under it in the shell's muted text (the `shell_muted` [colour role](/docs/ui/themes/#colour-roles)).
+
+- **Their picture:** `UserMenu::avatar(avatar)` draws an [avatar](/docs/components/avatar/) of yours in place of the person icon: their initials, round, or their photo.
+- **The chevron:** `UserMenu::chevron(false)` leaves out the chevron at the end of the row. The row opens the menu either way, and tells assistive technology that it does.
+- **Above the person:** `Shell::footer_slot(node)` puts something 12 px above the person, such as a tile with the plan's seats and a button to add some; `AppShell::footer_slot(node)` sets one for a request, in place of the shell's. It hides with the names when the sidebar folds, and a shell without one draws no box for it.
+
+```rust
+async fn home(shell: AppShell, person: Person) -> AppPage {
+    shell
+        .footer_slot(Card::titled("Seats").body(Stat::new("Left", "8 of 20")))
+        .user_menu(
+            UserMenu::new(person.name.clone(), person.email.clone())
+                .avatar(Avatar::initials(person.name.clone()).shape(AvatarShape::Circle))
+                .chevron(false)
+                .action("Sign out", "/sign-out"),
+        )
+        .page("Home")
+}
+```
 
 ## Only what a reader may use
 
@@ -193,6 +234,35 @@ async fn today(shell: AppShell, day: Day) -> AppPage {
 }
 ```
 
+## The top bar and the page header
+
+The top bar starts with the sidebar's button and a separator, then the breadcrumb, and ends with the shell's search and theme menu. The page header holds the title and the page's actions.
+
+- **Actions in the top bar:** `AppPage::topbar_actions(nodes)` puts a detail page's buttons at the end of the top bar, before the search and the theme menu. On a phone too narrow for them they scroll sideways inside the bar, and the page never does.
+- **The last crumb:** the breadcrumb ends with the page's title. `AppPage::current_crumb(label)` names it otherwise ("LDH-1" over a page titled "LDH-1, Ludhiana"), and `AppPage::current_crumb_mono()` draws it in the mono face, for a name that is a code. The heading and the browser's tab keep the title. The breadcrumb's size and its last part's weight are the `breadcrumb` style of the theme's [type scale](/docs/ui/themes/#type).
+- **Beside and under the title:** `AppPage::title_aside(nodes)` puts badges after the title, on its line and wrapping under it when there is no room; `AppPage::subtitle(text)` puts a line of the shell's muted text 6 px under it.
+- **In a native app:** the screen a native client draws takes the page's subtitle as its own, and the top bar's actions after the page's own actions, in its one row of actions.
+- **The title's face:** `AppPage::title_face(Face::Mono)` draws the title in another face than the theme's page title takes: an invoice's number, a code.
+- **No fold button:** with `Collapse::Never` the button is gone on wide screens, and the separator after it goes with it.
+
+```rust
+async fn invoice(shell: AppShell, invoice: Invoice) -> AppPage {
+    shell
+        .page(invoice.number.clone())
+        .title_face(Face::Mono)
+        .crumb("Invoices", "/invoices")
+        .current_crumb_mono()
+        .title_aside((
+            Badge::new("Paid").variant(BadgeVariant::Success),
+            Badge::new("Annual"),
+        ))
+        .subtitle("Wholesale · Ludhiana")
+        .topbar_actions((Button::ghost("Download invoice"), Button::outline("Pause")))
+}
+```
+
+What these draw is in the shell parts stylesheet, and the mono crumb in the parts stylesheet; a page links them only when it draws one.
+
 ## The title in the tab
 
 The page's heading is also its title in the browser's tab, unless you say otherwise. `Shell::title_template("{} · Kesar")` writes every title through a template, `{}` standing for the page's own, and `AppPage::document_title("Today")` titles a page whose heading is a greeting ("Good evening, Simran") by what it is. Both keep the heading as it is.
@@ -222,6 +292,10 @@ Nothing is fetched ahead of a click unless you ask, link by link. `NavItem::pref
 ### Shell
 
 <UiProps type="Shell" />
+
+### LogoStyle
+
+<UiProps type="LogoStyle" />
 
 ### NavGroup
 

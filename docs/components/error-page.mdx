@@ -64,6 +64,8 @@ ErrorPage::forbidden().in_shell(&shell)
 - How long to wait, set with `.retry_after(seconds)`.
 - Actions: Go to home goes to `.home(href)`; Sign in goes to `.sign_in(href)`; Try again and Reload go to `.retry_to(href)`, which is the page that failed. Replace them all with `.actions(...)`.
 - `.without_retry()` takes Try again and Reload away, and leaves Home as the main action: for the page that answers a request a link cannot repeat, such as a form posted without script, where a link would be a `GET` of an address that only takes a `POST`. `UiModule` does this for every request that is not a `GET` or a `HEAD`.
+- `.offer_sign_in()` adds Sign in after the kind's own actions, for a page a guest sees: on a missing page, beside Go to home.
+- `.impersonating(href)` says the reader is acting as another user, and adds Stop impersonating: a form that posts to `href`, with the session's token from `.csrf(token)`. The form posts with no script, so a page on its own still loads none.
 
 ## Keyboard and accessibility
 

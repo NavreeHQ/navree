@@ -7,7 +7,7 @@ use super::clock::{Wall, offset_label};
 use super::tone::{DisplayLabels, Meta, Tone, Zone, hidden_notice, meta_list};
 use super::{Empty, Skeleton, SkeletonShape, icon};
 use crate::icons::Icon;
-use crate::node::{Element, IntoNodes, Node, el, into_node};
+use crate::node::{Element, IntoNodes, Node, Uses, el, into_node};
 
 /// Where an event stands on the rail.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -34,6 +34,19 @@ impl TimelineState {
             Self::Muted => Some("muted"),
         }
     }
+}
+
+/// How a [`Timeline`] is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TimelineVariant {
+    /// A rail down the side with a dot for each event: the default.
+    #[default]
+    Rail,
+    /// No rail and no dot: a column of times, each event's title in bold and its detail
+    /// quieter under it, as a log of what happened at a place. An event's tone, icon and state
+    /// still read in words where they are written. It links the looks stylesheet.
+    Plain,
 }
 
 /// One thing that happened.
@@ -312,6 +325,23 @@ impl Timeline {
     /// Replaces the words.
     pub fn labels(mut self, labels: DisplayLabels) -> Self {
         self.labels = labels;
+        self
+    }
+
+    /// Sets how the events are drawn: on a rail with dots (the default), or plain.
+    ///
+    /// ```
+    /// use navree_ui::{Timeline, TimelineEvent, TimelineVariant, render};
+    ///
+    /// let events = Timeline::new("deal", "Deal events")
+    ///     .variant(TimelineVariant::Plain)
+    ///     .event(TimelineEvent::new("Deal 4 signed").time_text("09:41").detail("Eight seats added"));
+    /// assert!(render(&events.into()).starts_with(r#"<div data-slot="timeline" id="deal" data-variant="plain""#));
+    /// ```
+    pub fn variant(mut self, variant: TimelineVariant) -> Self {
+        if variant == TimelineVariant::Plain {
+            self.el = self.el.attr("data-variant", "plain").uses(Uses::LOOKS);
+        }
         self
     }
 

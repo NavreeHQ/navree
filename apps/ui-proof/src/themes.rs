@@ -1,5 +1,6 @@
 //! Themes, layouts and the theme builder: `/themes`, `/themes/layouts/{layout}`,
-//! `/themes/builder` and `/themes/scopes`.
+//! `/themes/builder`, `/themes/scopes` and `/themes/shaped`, a page in a theme with a shape
+//! and colour roles.
 //!
 //! These pages use a shell with the theme menu in its top bar and a "Look" group
 //! in its sidebar; the reader's choice is kept in the toolkit's cookie. The
@@ -13,7 +14,11 @@ use navree::http::extract::{Path, RawQuery, urlencoded};
 use navree::http::response::{IntoResponse, Response};
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use navree::ui::theme::{Appearance, BuilderDraft, Mode, Theme, ThemeBuilder, ThemeSetting};
+use navree::ui::theme::{
+    Appearance, BuilderDraft, ControlSizes, Corner, Corners, Elevation, Face, FieldSizes, Inverse,
+    Mode, Rgb, Roles, Shape, SidebarSizes, Sizes, TextStyle, Theme, ThemeBuilder, ThemeId,
+    ThemeSetting, Token, TopbarSizes, TypeScale,
+};
 use navree::ui::*;
 
 use crate::agra_theme::agra_theme;
@@ -426,6 +431,115 @@ fn store_scope(body: &str, workspace: bool) -> Response {
         .into_response()
 }
 
+/// The proof app's display face: the toolkit's Geist file under another family name, made the
+/// face of headings, the page title and the brand on the shaped page.
+pub static DISPLAY: AppFont = AppFont::new(
+    "proof-display",
+    "Proof Display",
+    include_bytes!("../../../crates/navree-ui/assets/fonts/geist.woff2"),
+    64 * 1024,
+)
+.weights(100, 900)
+.as_face(Face::Display);
+
+/// A theme with a shape and colour roles: pill buttons and badges, 12 px fields and 16 px
+/// cards, a 32 px page title in the display face, 44 px controls and fields, a sidebar 248 px
+/// wide with 16 and 12 px insets, a top bar 60 px high, soft shadows, white cards on a tinted
+/// sidebar and a near-black inverse surface on a light page.
+pub fn shaped_theme() -> Theme {
+    let rgb = Rgb::hex;
+    let mut spec = *Theme::NEUTRAL.spec();
+    spec.light.set(Token::Ink1, rgb(0xfafaf9));
+    let shape = Shape::new()
+        .corners(
+            Corners::new()
+                .button(Corner::Pill)
+                .badge(Corner::Pill)
+                .toggle(Corner::Pill)
+                .field(Corner::Px(12))
+                .nav(Corner::Px(10))
+                .card(Corner::Px(16))
+                .panel(Corner::Px(12))
+                .overlay(Corner::Px(12)),
+        )
+        .type_scale(
+            TypeScale::new()
+                .page_title(
+                    TextStyle::px(32)
+                        .line(1.1)
+                        .weight(600)
+                        .tracking(-0.03)
+                        .face(Face::Display),
+                )
+                .h2(TextStyle::px(22).face(Face::Display))
+                .brand(TextStyle::px(18).weight(600).face(Face::Display)),
+        )
+        .sizes(
+            Sizes::new()
+                .controls(ControlSizes::new().md(44))
+                .fields(FieldSizes::new().md(44).padding_x(14))
+                .sidebar(SidebarSizes::new().width(248).inset_y(16).inset_x(12))
+                .topbar(TopbarSizes::new().height(60)),
+        )
+        .elevation(Elevation::Soft);
+    let roles = Roles::new()
+        .card(rgb(0xffffff), rgb(0x121212))
+        .field(rgb(0xffffff), rgb(0x121212))
+        .inverse(
+            Inverse::new()
+                .surface(rgb(0x0a0a0a), rgb(0xffffff))
+                .text(rgb(0xffffff), rgb(0x0a0a0a))
+                .muted(rgb(0xb5b5b0), rgb(0x3d3d3a)),
+        );
+    Theme::custom(
+        ThemeId::parse("proof-shaped").expect("a theme id"),
+        "Shaped",
+        spec,
+    )
+    .and_then(|theme| theme.with_shape(shape))
+    .and_then(|theme| theme.with_roles(roles))
+    .expect("the shaped theme reads and its values are in range")
+}
+
+/// The shaped page: the parts a shape and roles reach, and a part on the inverse surface.
+fn shaped(headers: &HeaderMap, query: Option<&str>) -> AppPage {
+    let shell = crate::shell()
+        .font(&DISPLAY)
+        .appearance(Appearance::new(shaped_theme(), Mode::Light))
+        .group(
+            NavGroup::new("Look")
+                .item(NavItem::new("Shaped", "/themes/shaped").icon(icons::PALETTE)),
+        )
+        .for_request(at("/themes/shaped", query), headers);
+    shell
+        .page("A shaped theme")
+        .actions(Button::primary("New deal").href("/deals/new"))
+        .body(
+            Stack::gap(6).children((
+                Row::gap(2).wrap().children((
+                    Button::new("Cancel"),
+                    Badge::new("Won").variant(BadgeVariant::Success),
+                    Input::text("q").placeholder("Search deals"),
+                )),
+                Heading::h2("Pipeline"),
+                Grid::cols(2).gap(4).children((
+                    Card::titled("This quarter").body(Text::new("Body text on a white card.")),
+                    Stat::new("Open deals", "312"),
+                )),
+                // A part drawn on the inverse surface, as an inverse card marks itself.
+                el("section")
+                    .attr("data-inverse", "")
+                    .attr("data-proof-inverse", "")
+                    .attr("aria-label", "On the inverse surface")
+                    .child(Card::titled("Seats").body(Stack::gap(3).children((
+                        Text::new("Text on the inverse surface."),
+                        Text::muted("A quieter line."),
+                        Button::primary("Add seats"),
+                    )))),
+            )),
+        )
+}
+
 pub struct ThemePages;
 
 impl Injectable for ThemePages {
@@ -479,6 +593,10 @@ impl Controller for ThemePages {
             .public(),
             RouteDef::on(Method::POST, "!/themes/scopes/user", |body: String| async move {
                 store_scope(&body, false)
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/themes/shaped", |headers: HeaderMap, RawQuery(query): RawQuery| async move {
+                shaped(&headers, query.as_deref())
             })
             .public(),
             // For the browser suite: back to nothing set.

@@ -80,6 +80,7 @@ const CASES = {
   "meter-hostile": ["meter-hostile"],
   "mini-columns": ["mini-columns"],
   "color-strip": ["color-strip"],
+  waterfall: ["waterfall"],
   "range-scale": ["range-scale"],
   locale: ["locale-de", "locale-in"],
   shown: ["shown"],
@@ -647,6 +648,31 @@ for (const name of NAMES) {
         await expectAt(page, "color-strip", 119, "End");
         await page.keyboard.press("Home");
         await expectAt(page, "color-strip", 0, "Home");
+        await page.done();
+      });
+
+      test("the waterfall's bars each start where the last ended, and the keys walk its rows", async () => {
+        const page = await open("/charts?case=waterfall");
+        // The bars grow in: they are measured where they end.
+        await settle(page);
+        const bars = await page.evaluate(() =>
+          [...document.querySelectorAll("#waterfall [data-slot=chart-bar]")].map((b) => {
+            const r = b.getBoundingClientRect();
+            return { left: r.left, right: r.right, fill: getComputedStyle(b).fill };
+          }),
+        );
+        assert.equal(bars.length, 7);
+        // Orders run from zero; the fee runs back from their end; each step after starts where the last ended.
+        assert.ok(Math.abs(bars[1].right - bars[0].right) < 1, "the fee ends where the orders end");
+        for (const k of [2, 3]) assert.ok(Math.abs(bars[k].right - bars[k - 1].left) < 1, `step ${k} starts where step ${k - 1} ended`);
+        assert.ok(Math.abs(bars[4].left - bars[3].left) < 1, "a step that adds runs on from the running total");
+        assert.ok(Math.abs(bars[6].left - bars[0].left) < 1, "the total runs from zero");
+        assert.ok(Math.abs(bars[6].right - bars[5].left) < 1, "to the running total");
+        assert.equal(new Set([bars[0].fill, bars[1].fill, bars[4].fill]).size, 3, "a total, a deduction and an addition each have a colour");
+        await tabTo(page, "#waterfall [data-slot=chart-body]");
+        await expectAt(page, "waterfall", 0, "focus");
+        await page.keyboard.press("End");
+        await expectAt(page, "waterfall", 6, "End");
         await page.done();
       });
 

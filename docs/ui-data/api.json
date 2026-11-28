@@ -514,6 +514,12 @@
         "doc": "Leaves the file out of the page's head as a preload: a font only some pages use is fetched when the text that needs it is drawn."
       },
       {
+        "name": "as_face",
+        "generics": "",
+        "args": "face: crate::theme::Face",
+        "doc": "Makes it one of the page's faces: its rule also sets the face's custom property, with a system stack behind the family. `Face::Text` is the page's text (`--font-sans`, in place of the theme's font, and the toolkit's Geist is no longer preloaded); `Face::Display` draws headings, the page title and the brand (`--font-display`); `Face::Mono` draws code and figures (`--font-mono`). A page with no display face draws those in its text face, as before."
+      },
+      {
         "name": "name",
         "generics": "",
         "args": "",
@@ -538,6 +544,12 @@
         "doc": "Whether a page preloads it."
       },
       {
+        "name": "role",
+        "generics": "",
+        "args": "",
+        "doc": "The page's face it is, if `as_face` made it one."
+      },
+      {
         "name": "url",
         "generics": "",
         "args": "",
@@ -553,7 +565,7 @@
         "name": "face",
         "generics": "",
         "args": "",
-        "doc": "The `@font-face` rule: the family, the file's address, the weights, the style and the display."
+        "doc": "The `@font-face` rule: the family, the file's address, the weights, the style and the display; for a face of the page, then the face's custom property on the root."
       }
     ],
     "variants": [],
@@ -571,6 +583,42 @@
         "generics": "",
         "args": "node: impl Into<Node>",
         "doc": "Puts `node` in the middle of the top bar for this page: what belongs to the page and the request, such as a pager between days that depends on the day shown. It stands centred in the bar, between the navigation and the bar's own controls, and stays on phones."
+      },
+      {
+        "name": "topbar_actions",
+        "generics": "",
+        "args": "actions: impl IntoNodes",
+        "doc": "Puts `actions` at the end of the top bar, before its search and theme menu: a detail page's buttons (\"Export CSV\", \"Close account\"). On a phone too narrow for them they scroll sideways inside the bar, and the page never does."
+      },
+      {
+        "name": "current_crumb",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "Names the breadcrumb's last part, in place of the page's title: \"LDH-1\" over a page titled \"LDH-1, Ludhiana\". The heading and the browser's tab keep the title."
+      },
+      {
+        "name": "current_crumb_mono",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the breadcrumb's last part in the mono face: a name that is a code (\"INV-2041\"). See `Breadcrumb::current_mono`."
+      },
+      {
+        "name": "title_aside",
+        "generics": "",
+        "args": "nodes: impl IntoNodes",
+        "doc": "Puts `nodes` after the page's title, on its line and wrapping under it when there is no room: badges for the state of what the page shows (\"Paid\", \"Annual\")."
+      },
+      {
+        "name": "subtitle",
+        "generics": "",
+        "args": "text: impl Into<Cow<'static, str>>",
+        "doc": "Puts a line of quieter text under the title: what the page is about, in a few words."
+      },
+      {
+        "name": "title_face",
+        "generics": "",
+        "args": "face: Face",
+        "doc": "Draws the title in `face`, in place of the face the theme's page title takes: a mono title for a name that is a code."
       },
       {
         "name": "document_title",
@@ -756,6 +804,18 @@
         "generics": "",
         "args": "slot: impl Into<Node>",
         "doc": "Puts `slot` in the sidebar's header for this request, in place of the shell's `header_slot`: the switcher of the workspace this request is in."
+      },
+      {
+        "name": "footer_slot",
+        "generics": "",
+        "args": "slot: impl Into<Node>",
+        "doc": "Puts `slot` in the sidebar's foot for this request, above the person, in place of the shell's `footer_slot`: the seats of the plan signed in to."
+      },
+      {
+        "name": "badge",
+        "generics": "",
+        "args": "badge: Badge",
+        "doc": "Puts `badge` at the end of the brand row for this request, in place of the shell's `badge` and of its context line: \"Internal\" on the pages of a staff area."
       },
       {
         "name": "csrf",
@@ -1032,6 +1092,42 @@
         "generics": "",
         "args": "corner: impl Into<Node>",
         "doc": "What stands in the top corner, over the form: a theme menu."
+      },
+      {
+        "name": "aside_end",
+        "generics": "",
+        "args": "",
+        "doc": "Puts the panel after the form, in reading order and on the screen: the form's column on the start side, the panel on the end side. Without it the panel comes first."
+      },
+      {
+        "name": "aside_inset",
+        "generics": "",
+        "args": "",
+        "doc": "Insets the panel from the window's edges by 0.75rem and rounds it in the theme's `panel` corner (`Corners::panel`), padded 3.5rem with 2.5rem between its parts and no line beside it. The form's column grows from 35rem and the panel from 30rem, by equal parts of the room that is left."
+      },
+      {
+        "name": "aside_inverse",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the panel on the theme's inverse surface (`data-inverse`): the other palette, a dark panel on a light page and a light one on a dark page, in the colours a theme's `Inverse` gives it, checked for contrast. Every part inside reads it."
+      },
+      {
+        "name": "brand",
+        "generics": "",
+        "args": "brand: impl Into<Node>",
+        "doc": "The app's brand at the top of the form's column, at every width, so it stays when the panel is hidden: a `Brand`, its name and mark linking home. Its name is drawn in the theme's `brand` text style (`TypeScale::brand`)."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl Into<Node>",
+        "doc": "A line at the foot of the form's column, in small quiet text: how sign-ins are kept safe, a link to the terms."
+      },
+      {
+        "name": "body_width",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The width of the form's column at most, in pixels: 360, 400, 448 (the default) or 480. Another number takes the nearest. On a narrower screen it takes the room there is."
       }
     ],
     "variants": [],
@@ -1041,7 +1137,7 @@
     "name": "Avatar",
     "kind": "struct",
     "file": "crates/navree-ui/src/components/display.rs",
-    "summary": "A picture of a person: an image, or a neutral icon when there is none. There is no way to put initials in it.",
+    "summary": "A picture of a person or an organisation: an image, their initials, or a neutral icon when there is neither.",
     "constructors": [
       {
         "name": "image",
@@ -1054,6 +1150,12 @@
         "generics": "",
         "args": "label: impl Into<String>",
         "doc": "No image: the person icon, labelled `label`."
+      },
+      {
+        "name": "initials",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "The initials of `name`, a person's or an organisation's: the first letter of its first word and of its last, in capitals (`DO` for \"Dalbir Oberoi\", `N` for \"Narmada\", `ਗਸ` for \"ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ\"). A screen reader says the whole name. A name with no letter or digit in it draws the person icon, as `placeholder` does. Its styles come with the parts stylesheet."
       }
     ],
     "methods": [
@@ -1062,6 +1164,24 @@
         "generics": "",
         "args": "size: Size",
         "doc": "Sets the size."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours it in `tone`: a thin tint of the tone behind the initials or the icon, drawn in the tone, as a `Badge` in a tone is. `Tone::Neutral` leaves it as it is."
+      },
+      {
+        "name": "solid",
+        "generics": "",
+        "args": "",
+        "doc": "Fills it with the accent and draws its initials or icon in the accent's ink, as a primary button is drawn: an organisation's tile beside its name. A filled avatar takes no tone."
+      },
+      {
+        "name": "shape",
+        "generics": "",
+        "args": "shape: AvatarShape",
+        "doc": "Sets its shape: the theme's corner (the default) or a circle."
       },
       {
         "name": "fallback",
@@ -1113,6 +1233,27 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "AvatarShape": {
+    "name": "AvatarShape",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "The shape of an `Avatar`.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Rounded",
+        "doc": "The theme's corner for avatars (`Corners::avatar`), 4 px unless the theme says otherwise: the default.",
+        "default": true
+      },
+      {
+        "name": "Circle",
+        "doc": "A circle, whatever the theme's corner.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Backdrop": {
@@ -1232,6 +1373,11 @@
       {
         "name": "Danger",
         "doc": "Bad news.",
+        "default": false
+      },
+      {
+        "name": "Solid",
+        "doc": "Filled with the accent, its text in the accent's ink, as a primary button is drawn: a marker that stands out, such as \"Internal\" in the brand row. Its styles come with the parts stylesheet. A table's badge column (`#[col(badge = ..)]`) draws it as `Neutral`: a cell is no place for a marker.",
         "default": false
       }
     ],
@@ -1424,6 +1570,12 @@
         "generics": "",
         "args": "label: impl Into<Node>",
         "doc": "Adds the current page."
+      },
+      {
+        "name": "current_mono",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "Adds the current page, its name in the mono face: a name that is a code (\"INV-2041\"). Its style comes with the parts stylesheet."
       },
       {
         "name": "prefetch",
@@ -1793,6 +1945,12 @@
         "doc": "Makes this a link."
       },
       {
+        "name": "current",
+        "generics": "",
+        "args": "current: bool",
+        "doc": "Says this link is the page being shown: `aria-current=\"page\"`, which a screen reader reads out. The button is drawn raised, as the chosen item of a segmented group is. `false` writes nothing."
+      },
+      {
         "name": "prefetch",
         "generics": "",
         "args": "",
@@ -1925,6 +2083,18 @@
         "doc": "Stacks the buttons."
       },
       {
+        "name": "segmented",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the group as a segmented control: a track in the theme's segment colour, its buttons on it, and the current one raised in the chosen segment's colour, as segmented tabs are drawn. Its items are often links, one to each place: each stays a link, with a link's keys, and the page needs no script. It links the looks stylesheet."
+      },
+      {
+        "name": "block",
+        "generics": "",
+        "args": "",
+        "doc": "Fills the width, sharing it equally among the buttons. It links the looks stylesheet."
+      },
+      {
         "name": "children",
         "generics": "",
         "args": "children: impl IntoNodes",
@@ -1996,6 +2166,11 @@
       {
         "name": "Link",
         "doc": "Looks like a link.",
+        "default": false
+      },
+      {
+        "name": "DestructiveOutline",
+        "doc": "Something that destroys, quieter than `Destructive`: the danger colour on no fill, with a faint line of it around, and a thin tint of it on hover. It links the looks stylesheet.",
         "default": false
       }
     ],
@@ -2474,13 +2649,19 @@
         "name": "variant",
         "generics": "",
         "args": "variant: CardVariant",
-        "doc": "Sets how the card is drawn. The default needs nothing more; the others link the parts stylesheet."
+        "doc": "Sets how the card is drawn. The default and the inverse surface need nothing more; the others link the parts stylesheet."
       },
       {
         "name": "description",
         "generics": "",
         "args": "description: impl Into<Node>",
         "doc": "Sets the description."
+      },
+      {
+        "name": "raised",
+        "generics": "",
+        "args": "",
+        "doc": "Raises the card on the theme's soft shadow (`Elevation::Soft`); a flat theme draws none. It links the looks stylesheet."
       },
       {
         "name": "action",
@@ -2499,6 +2680,42 @@
         "generics": "",
         "args": "footer: impl IntoNodes",
         "doc": "Adds to the footer."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "CardSizes": {
+    "name": "CardSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The padding of cards and stats in px. Without them: 16 px.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "padding",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "A card's padding, around its header, its content and its footer, from 0 to 64 px."
+      },
+      {
+        "name": "stat_padding_y",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "A stat's padding above and below, from 0 to 64 px."
+      },
+      {
+        "name": "stat_padding_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "A stat's padding at its sides, from 0 to 64 px."
       }
     ],
     "variants": [],
@@ -3778,6 +3995,12 @@
         "doc": "Adds a button that copies the code (short blocks only). It needs the core runtime."
       },
       {
+        "name": "inverse",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the block on the inverse surface: a dark code panel on a light page, a light one on a dark page, its text, its colours and its copy button reading the theme's other palette, or the inverse colours of its `Roles`."
+      },
+      {
         "name": "labels",
         "generics": "",
         "args": "labels: MarkdownLabels",
@@ -4003,6 +4226,12 @@
         "generics": "",
         "args": "",
         "doc": "Writes each category's share of the cells in the legend."
+      },
+      {
+        "name": "hide_legend",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the strip with no legend under it: for strips stacked one above another, of which one keeps the legend for all. Declare the same categories in the same order on each, so the legend kept names every one. The table still names each cell's category."
       },
       {
         "name": "cell_name",
@@ -4633,6 +4862,48 @@
     "variants": [],
     "shared": []
   },
+  "ControlSizes": {
+    "name": "ControlSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "Control heights in px, by `Size` step: buttons, toggles and the items of a toggle group, the width of an icon-only one, and segmented tabs, whose track is the step's height. A step you don't set keeps the toolkit's: 24, 28, 32 and 36 px, scaled by the theme's density.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every step the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "xs",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Xs`, from 16 to 64 px."
+      },
+      {
+        "name": "sm",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Sm`, from 16 to 64 px."
+      },
+      {
+        "name": "md",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The default size, from 16 to 64 px."
+      },
+      {
+        "name": "lg",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Lg`, from 16 to 64 px."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Conversation": {
     "name": "Conversation",
     "kind": "struct",
@@ -4712,6 +4983,105 @@
         "generics": "",
         "args": "copy: impl Into<Cow<'static, str>>, copied: impl Into<Cow<'static, str>>",
         "doc": "The button's words, in the page's language: \"Copy\" and \"Copied\" by default."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Corner": {
+    "name": "Corner",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "A corner: a length, or round ends.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Px",
+        "doc": "`n` px, from 0 to 32.",
+        "default": false
+      },
+      {
+        "name": "Pill",
+        "doc": "Round ends whatever the part's height: a pill, or a circle when the part is square. Written as `999px`.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Corners": {
+    "name": "Corners",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The corners of each kind of part. A part you don't set keeps the theme's `Radius`: its control corner for controls and rows, its surface corner for surfaces. A checkbox keeps the control corner always: a round box reads as a radio.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "No corner of its own for any part."
+      }
+    ],
+    "methods": [
+      {
+        "name": "button",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Buttons, and the outer corners of a button group."
+      },
+      {
+        "name": "badge",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Badges, and the count on a tab."
+      },
+      {
+        "name": "toggle",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Toggles, the items of a toggle group, segmented tabs and their track, and the switch, whose thumb follows it."
+      },
+      {
+        "name": "avatar",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Avatars."
+      },
+      {
+        "name": "field",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Inputs, text areas, native selects, input groups, the select and combobox controls and the phone input."
+      },
+      {
+        "name": "nav",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "The sidebar's items, its brand and user rows, the top bar's links, and the rows of menus and popovers."
+      },
+      {
+        "name": "card",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Cards, stats, fact cards, items and tables."
+      },
+      {
+        "name": "panel",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Alerts, a tab's alert and code blocks."
+      },
+      {
+        "name": "overlay",
+        "generics": "",
+        "args": "corner: Corner",
+        "doc": "Popovers, hover cards, menus, the select's list, dialogs and drawers."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether no part has a corner of its own."
       }
     ],
     "variants": [],
@@ -5008,6 +5378,18 @@
         "doc": "Which rows stay in view while the table scrolls."
       },
       {
+        "name": "current_row",
+        "generics": "",
+        "args": "current: impl Fn(&R) -> bool + 'a",
+        "doc": "Marks the row the page shows, such as the one whose details are open beside the table: its `<tr>` says `aria-current=\"true\"` and is drawn in the theme's colour for a chosen row (`Roles::selected_row`, `--row-selected`; `ink-3` when the theme gives none). Only the first row `current` says yes to is marked. It is a mark, not a selection: nothing posts it, and the boxes and bulk actions are as they were."
+      },
+      {
+        "name": "muted_header",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the column headings in the muted text colour (`fg-2`), as a plain `Table` draws its own. Their size, weight, line height, tracking and face are the theme's `table_head` text style either way."
+      },
+      {
         "name": "detail",
         "generics": "",
         "args": "detail: impl Fn(&R) -> Node + 'a",
@@ -5023,7 +5405,7 @@
         "name": "options",
         "generics": "",
         "args": "column: &'static str, options: Vec<FilterOption>",
-        "doc": "Sets the choices of a filter whose choices come from the page."
+        "doc": "Sets the choices of a filter whose choices come from the page: a column's, by the column's name, or one of the page's own filters (`#[derive(FilterBar)]`), by its parameter's name, in the place of its type's."
       },
       {
         "name": "foot",
@@ -6758,6 +7140,27 @@
     "variants": [],
     "shared": []
   },
+  "Elevation": {
+    "name": "Elevation",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "How raised and floating parts stand off the page. A part's shadow is derived from the palette's text colour in light mode and is a deeper black in dark mode; there is no glow.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Flat",
+        "doc": "Flat with a border, as the toolkit draws: no shadow.",
+        "default": true
+      },
+      {
+        "name": "Soft",
+        "doc": "Two soft shadows: a small one under a raised part (the chosen segmented tab, the current sidebar link, a toggle that is on, the current button) and a wider one under a floating one (popovers, menus, dialogs, sheets, the select's list and a chart's tip).",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Empty": {
     "name": "Empty",
     "kind": "struct",
@@ -7027,6 +7430,24 @@
         "doc": "Adds what a debug build knows. Never call this with anything in production."
       },
       {
+        "name": "offer_sign_in",
+        "generics": "",
+        "args": "",
+        "doc": "Offers \"Sign in\" after the actions the kind offers, for a page a guest sees: on a missing page, beside \"Go to home\". The sign-in page needs nothing more, and actions of your own (`actions`) replace it."
+      },
+      {
+        "name": "impersonating",
+        "generics": "",
+        "args": "stop: impl Into<Href>",
+        "doc": "Says the page is seen during an impersonation, and offers \"Stop impersonating\": a form that posts to `stop`, with the session's token when `csrf` gives it. A form posts with no script, so the page still loads none."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "The session's CSRF token, which the page's own form (stopping an impersonation) carries."
+      },
+      {
         "name": "status_code",
         "generics": "",
         "args": "",
@@ -7081,6 +7502,32 @@
     ],
     "methods": [],
     "variants": [],
+    "shared": []
+  },
+  "Face": {
+    "name": "Face",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "A face: one of a page's three families. The text face is the theme's `Font` or the app's own; the display face draws headings, the page title and the brand when the app gives one (`AppFont::as_face`), and the text face when it doesn't; the mono face draws code and figures.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Text",
+        "doc": "The text face: `--font-sans`.",
+        "default": false
+      },
+      {
+        "name": "Display",
+        "doc": "The display face: `--font-display`, or the text face when the app has none.",
+        "default": false
+      },
+      {
+        "name": "Mono",
+        "doc": "The mono face: `--font-mono`.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "FactCard": {
@@ -7150,6 +7597,12 @@
         "generics": "",
         "args": "columns: u8",
         "doc": "Fixes the number of columns (2 to 6) from 768 px wide; narrower, it is one. Without this the grid fits as many as the width allows."
+      },
+      {
+        "name": "min_tile",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "Sets the narrowest a tile may be, in pixels, so the grid fits as many tiles of at least that width as the row holds: 128 for eight small tiles in a row. The width is taken to the nearest of 96, 112, 128, 144, 160, 176, 192, 208, 224, 256 and 320; 224, the 14 rem a tile is by default, writes nothing. Fixed `cols` win from 768 px wide. Another width links the looks stylesheet."
       }
     ],
     "variants": [],
@@ -7457,6 +7910,54 @@
         "generics": "",
         "args": "children: impl IntoNodes",
         "doc": "Adds fields."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "FieldSizes": {
+    "name": "FieldSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "Field heights in px by `Size` step, and their inner padding: inputs, input groups, native selects, the select and combobox controls and the phone input. A field takes a step with `Input::size`, so one page can draw 44 px fields and the rest 36 px. Without them: the control heights, and 10 px of padding.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every step the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "xs",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Xs`, from 16 to 64 px."
+      },
+      {
+        "name": "sm",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Sm`, from 16 to 64 px."
+      },
+      {
+        "name": "md",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The default size, from 16 to 64 px."
+      },
+      {
+        "name": "lg",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "`Size::Lg`, from 16 to 64 px."
+      },
+      {
+        "name": "padding_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space between a field's edge and its text, from 0 to 32 px."
       }
     ],
     "variants": [],
@@ -7867,6 +8368,24 @@
         "doc": "Adds a link back."
       },
       {
+        "name": "submit_variant",
+        "generics": "",
+        "args": "variant: ButtonVariant",
+        "doc": "Gives the submit button another look, such as `ButtonVariant::Outline`: it is primary unless this says otherwise."
+      },
+      {
+        "name": "submit_button",
+        "generics": "",
+        "args": "button: Button",
+        "doc": "Makes `button` the form's submit button, in the place of the one `submit` labels: its look, size, icon and width are yours. The form makes it submit, and a link it had is dropped."
+      },
+      {
+        "name": "without_actions",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the form with no buttons: no submit button and no cancel link. A button elsewhere, such as in a dialog's footer, submits it by naming `form_id` in its `form` attribute."
+      },
+      {
         "name": "of",
         "generics": "",
         "args": "value: &T",
@@ -7913,6 +8432,12 @@
         "generics": "",
         "args": "",
         "doc": "Puts every field on its own line."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "field: &str, label: impl Into<String>",
+        "doc": "Gives the field `field` the label `label` in place of the one its type gives (its doc comment, or `#[form(label = \"...\")]`): words chosen when the page is drawn, such as an app's own settings give. The label is text, escaped when it is drawn. The field still posts under its own name, and the messages of the form's own checks still name it by its type's label. A field a `FieldControl` draws is given it as its `ControlField::label`. A name the form has no field of changes nothing."
       },
       {
         "name": "hidden",
@@ -8713,6 +9238,228 @@
     ],
     "shared": []
   },
+  "Heatmap": {
+    "name": "Heatmap",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/grids/heatmap.rs",
+    "summary": "A heat map of rows by columns: a cell for each row at each column, such as each day at each hour, each person in each week, or each store on each day. A cell holds a reading or a category.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A heat map called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "columns",
+        "generics": "<S: Into<String>>",
+        "args": "names: impl IntoIterator<Item = S>",
+        "doc": "Adds the columns' names, in order: the hours, the days, the weeks."
+      },
+      {
+        "name": "row",
+        "generics": "<V: IntoValue>",
+        "args": "name: impl Into<String>, values: impl IntoIterator<Item = V>",
+        "doc": "Adds a row called `name` of readings, one for each column in order. A value that is not a finite number, or `None`, is a cell with no data; a row shorter than the columns has no data in the rest, and values past the last column are left out."
+      },
+      {
+        "name": "category_row",
+        "generics": "<S: AsRef<str>>",
+        "args": "name: impl Into<String>, categories: impl IntoIterator<Item = S>",
+        "doc": "Adds a row called `name` of categories, one for each column in order: the kind of workout each day, the state of a store each hour. An empty name is a cell with no data. A category that was not declared is added in the next of the categorical colours."
+      },
+      {
+        "name": "category",
+        "generics": "",
+        "args": "name: impl Into<String>, ink: impl Into<Ink>",
+        "doc": "Declares a category in `ink`, which puts it in the legend in this order. Declare the categories before the rows that use them."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "The colour the five steps of a reading are made of (the accent by default)."
+      },
+      {
+        "name": "range",
+        "generics": "",
+        "args": "low: impl IntoValue, high: impl IntoValue",
+        "doc": "The readings at the two ends of the steps: `range(0, 1)` for a share. A reading past an end takes the step at that end. By default the lowest and the highest reading."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: ColorScale",
+        "doc": "Colours each reading by the band of `scale` it falls in, instead of in steps: name each band with `label`, and the legend names it. A band of a soft ink is a light step of its colour, so a scale can run from one colour through a neutral middle to another."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How readings are written in the tooltip, the table, the legend and the summary."
+      },
+      {
+        "name": "value_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "What a reading is called in the tooltip (the title by default)."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What a reading counts, written after it: `steps`, `min`, `orders`."
+      },
+      {
+        "name": "row_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "The name of the table's first column, which names the rows (`Day`); the chart's word for a category otherwise."
+      },
+      {
+        "name": "row_summary",
+        "generics": "",
+        "args": "summary: RowSummary",
+        "doc": "Writes the average or the total of each row's readings at its end, and in the table."
+      },
+      {
+        "name": "ends",
+        "generics": "",
+        "args": "low: impl Into<String>, high: impl Into<String>",
+        "doc": "The words at the two ends of the legend's steps (`Still`, `Active`); the ends of the range, written as readings, by default."
+      },
+      {
+        "name": "label_every",
+        "generics": "",
+        "args": "n: usize",
+        "doc": "Names every `n`th column above the grid, from the first. By default as many as fit about sixteen names across. The tooltip and the table name every column."
+      },
+      {
+        "name": "show_values",
+        "generics": "",
+        "args": "",
+        "doc": "Writes each reading in its cell. Meant for a grid of a few columns: past twelve or so, the cells are too small for it."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: GridLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the rows come in: they fade in one after another. Off by default."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Hero": {
     "name": "Hero",
     "kind": "struct",
@@ -8959,6 +9706,12 @@
         "doc": "Sets the height and type size: the same four sizes as a button. The default needs nothing more; the others link the parts stylesheet."
       },
       {
+        "name": "mono",
+        "generics": "",
+        "args": "",
+        "doc": "Draws its text in the page's mono face (`--font-mono`, a theme's `Face::Mono` font): a tax number, an account number, a key. It links the parts stylesheet."
+      },
+      {
         "name": "clearable",
         "generics": "",
         "args": "label: impl Into<String>",
@@ -9053,6 +9806,12 @@
         "generics": "",
         "args": "addon: impl Into<Node>",
         "doc": "Adds something after the input."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the height, a step of the theme's field sizes, as an input's: the input and what is before or after it fill the group. The default needs nothing more; the others link the parts stylesheet."
       }
     ],
     "variants": [],
@@ -9226,6 +9985,60 @@
         "generics": "",
         "args": "columns: u8",
         "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Inverse": {
+    "name": "Inverse",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/roles.rs",
+    "summary": "The colours of the inverse surface: a part of a page drawn on the theme's other palette, such as a dark card on a light page. Each part you don't set stays the other palette's. Each colour is given for a page in light mode, then in dark mode: `surface(#0a0a0a, #eaeae7)` is a near-black card on a light page and a near-white one on a dark page.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every part the other palette's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "surface",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The surface: its page and cards, its fields, and the text on its accent."
+      },
+      {
+        "name": "raised",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "A panel raised on it, hover and a selected item: an inner panel, a chip."
+      },
+      {
+        "name": "line",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Its dividers and borders."
+      },
+      {
+        "name": "text",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Its text and headings, and its accent: a primary button on it takes this colour, with the surface's as its text."
+      },
+      {
+        "name": "muted",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Its secondary text and hints."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether every part is the other palette's."
       }
     ],
     "variants": [],
@@ -9903,6 +10716,27 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "LogoStyle": {
+    "name": "LogoStyle",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "How the app's mark is drawn at the start of the brand row.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Tile",
+        "doc": "The mark in a tile of the theme's raised colour, 32 px square: the default.",
+        "default": true
+      },
+      {
+        "name": "Bare",
+        "doc": "The mark alone, 22 px, with no tile behind it, and the row 30 px high with room at its sides: for a mark drawn to stand on the sidebar's own colour.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Markdown": {
@@ -11570,6 +12404,12 @@
         "doc": "Adds an empty first choice that says what to do."
       },
       {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the height, a step of the theme's field sizes, as an input's: the default needs nothing more; the others link the parts stylesheet."
+      },
+      {
         "name": "disabled",
         "generics": "",
         "args": "disabled: bool",
@@ -12402,6 +13242,54 @@
     ],
     "shared": []
   },
+  "PageSizes": {
+    "name": "PageSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The page's sizes in px, in the app shell. Without them: 24 px of padding, 16 px between its parts, and as wide as the window allows.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "padding_top",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space above its content, from 0 to 96 px."
+      },
+      {
+        "name": "padding_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space at its sides, from 0 to 96 px."
+      },
+      {
+        "name": "padding_bottom",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space below its content, from 0 to 96 px."
+      },
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space between its parts (its heading and each block), from 0 to 64 px."
+      },
+      {
+        "name": "max_width",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The most it is wide, its padding included, from 480 to 2400 px: on a wider window it stands in the middle."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "PagesOptions": {
     "name": "PagesOptions",
     "kind": "struct",
@@ -12438,6 +13326,42 @@
         "generics": "",
         "args": "labels: StateLabels",
         "doc": "Sets the words."
+      },
+      {
+        "name": "appearance",
+        "generics": "",
+        "args": "appearance: crate::theme::Appearance",
+        "doc": "Draws a page on its own (for a guest, a 401, a 429 and a 503) in `appearance`: the app's theme and mode. The reader's theme cookie and the address's `?theme=` and `?mode=` lie over it."
+      },
+      {
+        "name": "shell_look",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a page on its own in the look of the app's registered `Shell`: its default appearance, the themes it offers, its stylesheets and typefaces, and its title template. An app that builds its shell for each request (an `ErrorShell`) gives the look with `appearance`, `stylesheet` and `font` instead."
+      },
+      {
+        "name": "stylesheet",
+        "generics": "",
+        "args": "sheet: &crate::AppSheet",
+        "doc": "Links a stylesheet of the app's own on a page drawn on its own. See `View::stylesheet`."
+      },
+      {
+        "name": "font",
+        "generics": "",
+        "args": "font: &crate::AppFont",
+        "doc": "Links a typeface of the app's own on a page drawn on its own. See `View::font`."
+      },
+      {
+        "name": "offer_sign_in",
+        "generics": "",
+        "args": "offer: bool",
+        "doc": "Offers \"Sign in\" beside a guest's page's own actions: on a missing page, say, beside \"Go to home\"."
+      },
+      {
+        "name": "stop_impersonating",
+        "generics": "",
+        "args": "href: impl Into<String>",
+        "doc": "Says on an error page shown during an impersonation that the reader is acting as another user, and offers \"Stop impersonating\", a form that posts to `href` with the session's token. navree-auth's `AuthPages` serves `/impersonate/stop`."
       },
       {
         "name": "configured",
@@ -13053,9 +13977,21 @@
         "generics": "",
         "args": "id: impl Into<String>, trigger: impl Into<Node>",
         "doc": "A popover with the id `id`, opened by a button showing `trigger`."
+      },
+      {
+        "name": "icon_only",
+        "generics": "",
+        "args": "id: impl Into<String>, glyph: icons::Icon, label: impl Into<String>",
+        "doc": "A popover with the id `id`, opened by a square button showing `glyph` alone and named `label` for assistive technology, such as a bell that opens the notifications. The button is a ghost button unless `variant` says otherwise."
       }
     ],
     "methods": [
+      {
+        "name": "trigger_label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the button that opens it for assistive technology, when what it shows doesn't say, such as an icon or a count. `label` names the popup."
+      },
       {
         "name": "variant",
         "generics": "",
@@ -15243,6 +16179,78 @@
     "variants": [],
     "shared": []
   },
+  "Roles": {
+    "name": "Roles",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/roles.rs",
+    "summary": "Colours for things one token paints today, each in both palettes and each falling back to that token: white cards beside an off-white sidebar, a ghost button in the text's own colour, and the inverse surface. A theme takes them with `Theme::with_roles`, which refuses any whose text falls short of WCAG AA, in light or in dark. Each colour is given for a page in light mode, then in dark mode.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "No role set: every thing in its token's colour."
+      }
+    ],
+    "methods": [
+      {
+        "name": "card",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Cards, stats, fact cards, tables, dialogs, sheets, popovers and menus: the surfaces above the page. Without it, `ink-1`, which the sidebar and a table's header keep."
+      },
+      {
+        "name": "field",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "Inputs, text areas, selects, input groups, checkboxes and radios, the select and combobox controls and the phone input. Without it, `ink-1`."
+      },
+      {
+        "name": "ghost_text",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The text of a ghost button, such as the icon buttons of a top bar. Without it, `fg-2`."
+      },
+      {
+        "name": "shell_muted",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The sidebar's quieter text: the brand's context line, the user's email, the groups' labels and the counts. Without it, `fg-3`."
+      },
+      {
+        "name": "segment_track",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The track of segmented tabs and of a segmented button group. Without it, `ink-2`."
+      },
+      {
+        "name": "segment_on",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "The chosen tab, or the current link, on a segmented track. Without it, `ink-3`."
+      },
+      {
+        "name": "selected_row",
+        "generics": "",
+        "args": "light: Rgb, dark: Rgb",
+        "doc": "A selected row of a table. Without it, `ink-3`."
+      },
+      {
+        "name": "inverse",
+        "generics": "",
+        "args": "inverse: Inverse",
+        "doc": "The inverse surface's colours, in place of any set before."
+      },
+      {
+        "name": "is_default",
+        "generics": "",
+        "args": "",
+        "doc": "Whether no role is set."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Row": {
     "name": "Row",
     "kind": "struct",
@@ -15331,6 +16339,32 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "RowSummary": {
+    "name": "RowSummary",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/grids/heatmap.rs",
+    "summary": "What the end of each row of a `Heatmap` says about the row's readings.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "None",
+        "doc": "Nothing: the default.",
+        "default": true
+      },
+      {
+        "name": "Average",
+        "doc": "The average of the row's readings, the cells with no data left out.",
+        "default": false
+      },
+      {
+        "name": "Total",
+        "doc": "The sum of the row's readings.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Scatter": {
@@ -16258,6 +17292,54 @@
     "variants": [],
     "shared": []
   },
+  "Shape": {
+    "name": "Shape",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "Everything a theme says beyond its `ThemeSpec` but colours: the corners of each kind of part and the type scale. A theme takes it with `Theme::with_shape`, which checks every value; a built-in theme has the default shape, which sets nothing.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Sets nothing: every part as the spec draws it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "corners",
+        "generics": "",
+        "args": "corners: Corners",
+        "doc": "The corners of each kind of part, in place of any set before."
+      },
+      {
+        "name": "type_scale",
+        "generics": "",
+        "args": "type_scale: TypeScale",
+        "doc": "The type scale, in place of any set before."
+      },
+      {
+        "name": "sizes",
+        "generics": "",
+        "args": "sizes: Sizes",
+        "doc": "The sizes of controls, fields, the shell, the page and cards, in place of any set before."
+      },
+      {
+        "name": "elevation",
+        "generics": "",
+        "args": "elevation: Elevation",
+        "doc": "How raised and floating parts stand off the page."
+      },
+      {
+        "name": "is_default",
+        "generics": "",
+        "args": "",
+        "doc": "Whether it sets nothing."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Sheet": {
     "name": "Sheet",
     "kind": "struct",
@@ -16513,10 +17595,34 @@
         "doc": "Draws the picture at `src` as the app's mark, in place of Navree's: a path on the app, an `https://` URL, or an `AppImage` the toolkit serves (`.logo(&MARK)`). It is decorative, beside the app's name."
       },
       {
+        "name": "logo_dark",
+        "generics": "",
+        "args": "src: impl Into<Href>",
+        "doc": "Draws the picture at `src` as the app's mark in dark mode, in place of the `logo`: a mark drawn for a light sidebar that would vanish on a dark one. A page in light or in dark draws the one it needs; a page that follows the device draws a `<picture>` whose dark source the browser picks with `prefers-color-scheme`, as `Picture::dark` does. Without a `logo` it draws nothing."
+      },
+      {
+        "name": "logo_style",
+        "generics": "",
+        "args": "style: LogoStyle",
+        "doc": "Sets how the mark is drawn: in a tile (`LogoStyle::Tile`, the default) or alone (`LogoStyle::Bare`)."
+      },
+      {
+        "name": "badge",
+        "generics": "",
+        "args": "badge: Badge",
+        "doc": "Puts `badge` at the end of the brand row, in place of the context line: a marker such as \"Internal\" or \"Staging\" (`Badge::new(\"Internal\").variant(BadgeVariant::Solid)`). It hides with the app's name when the sidebar folds to its icons. `AppShell::badge` sets one for a request, in place of this one."
+      },
+      {
         "name": "header_slot",
         "generics": "",
         "args": "slot: impl Into<Node>",
         "doc": "Puts `slot` in the sidebar's header, under the app's name: a workspace switcher. `AppShell::header_slot` sets one for a request, in place of this one. It hides with the names when the sidebar folds to its icons."
+      },
+      {
+        "name": "footer_slot",
+        "generics": "",
+        "args": "slot: impl Into<Node>",
+        "doc": "Puts `slot` in the sidebar's foot, above the person: a tile with the plan's seats and a button to add some. `AppShell::footer_slot` sets one for a request, in place of this one. It hides with the names when the sidebar folds to its icons."
       },
       {
         "name": "home",
@@ -16647,6 +17753,54 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "SidebarSizes": {
+    "name": "SidebarSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The sidebar's sizes in px. Without them: 256 px wide, 8 px insets, 8 px between its blocks and 32 px items.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "width",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "Its width open, from 160 to 400 px (`--sidebar-w`)."
+      },
+      {
+        "name": "inset_y",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space above its first block and below its last, from 0 to 64 px."
+      },
+      {
+        "name": "inset_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space at its sides, from 0 to 64 px."
+      },
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space between its blocks (the brand, a slot under it, each group of links, the footer), from 0 to 64 px."
+      },
+      {
+        "name": "item_height",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The height of each of its links, from 20 to 64 px."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "SignInRequired": {
@@ -16954,6 +18108,90 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "Sizes": {
+    "name": "Sizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The sizes of controls, fields, badges, the shell, the page and cards, in px. A size you don't set keeps the toolkit's, which follows the theme's density; one you set is the pixels you give, whatever the density.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      },
+      {
+        "name": "new",
+        "generics": "",
+        "args": "base: u32",
+        "doc": ""
+      }
+    ],
+    "methods": [
+      {
+        "name": "controls",
+        "generics": "",
+        "args": "controls: ControlSizes",
+        "doc": "The controls' heights, in place of any set before."
+      },
+      {
+        "name": "fields",
+        "generics": "",
+        "args": "fields: FieldSizes",
+        "doc": "The fields' heights and padding, in place of any set before."
+      },
+      {
+        "name": "badge_height",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "A badge's height, from 14 to 40 px. Without it: 20 px."
+      },
+      {
+        "name": "sidebar",
+        "generics": "",
+        "args": "sidebar: SidebarSizes",
+        "doc": "The sidebar's sizes, in place of any set before."
+      },
+      {
+        "name": "topbar",
+        "generics": "",
+        "args": "topbar: TopbarSizes",
+        "doc": "The top bar's sizes, in place of any set before."
+      },
+      {
+        "name": "page",
+        "generics": "",
+        "args": "page: PageSizes",
+        "doc": "The page's sizes, in place of any set before."
+      },
+      {
+        "name": "cards",
+        "generics": "",
+        "args": "cards: CardSizes",
+        "doc": "The padding of cards and stats, in place of any set before."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether no size is set."
+      },
+      {
+        "name": "set",
+        "generics": "",
+        "args": "screen: Screen, px: u32",
+        "doc": "Takes `px` from `screen` up, replacing what that screen had."
+      },
+      {
+        "name": "sizers",
+        "generics": "",
+        "args": "height: impl Fn(u32) -> u32",
+        "doc": "The pictures that give the drawing its size: one per width, each shown from its screen up to the next one's, so the page needs no style attribute. `height` is a drawing's height for its width."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "Skeleton": {
@@ -18288,6 +19526,12 @@
         "generics": "",
         "args": "href: impl Into<Href>",
         "doc": "Makes the whole tile a link to `href`; the label is the link's name."
+      },
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: StatVariant",
+        "doc": "Sets how the tile is drawn. Neither look links a stylesheet of its own."
       }
     ],
     "variants": [],
@@ -18321,6 +19565,27 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "StatVariant": {
+    "name": "StatVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "How a `Stat` is drawn.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Default",
+        "doc": "A line around a surface, as a card: the default.",
+        "default": true
+      },
+      {
+        "name": "Inverse",
+        "doc": "The inverse surface: the tile drawn on the theme's other palette, a dark tile on a light page, for the one figure a page leads with. Its label, figure and caption read the flipped colours.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "State": {
@@ -18613,6 +19878,30 @@
     ],
     "shared": []
   },
+  "StatusDot": {
+    "name": "StatusDot",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A status as a dot and a word, with no chip around them: \"Awaiting signature\" beside a green dot. The word carries the meaning, so the dot is never the only sign; the dot takes the `Tone`'s colour, grey with none.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "word: impl Into<Node>",
+        "doc": "A dot beside `word`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the dot. A `Tone::Named` colour comes from the stylesheet."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Step": {
     "name": "Step",
     "kind": "struct",
@@ -18749,6 +20038,12 @@
         "doc": "Stacks the steps, with their descriptions beside the indicators."
       },
       {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: StepperVariant",
+        "doc": "Sets how the steps are drawn: circles joined by lines (the default), tiles or a track. The states, their words and the links are the same in each. Tiles and a track link the looks stylesheet."
+      },
+      {
         "name": "no_count",
         "generics": "",
         "args": "",
@@ -18778,6 +20073,32 @@
     "constructors": [],
     "methods": [],
     "variants": [],
+    "shared": []
+  },
+  "StepperVariant": {
+    "name": "StepperVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/flow/stepper.rs",
+    "summary": "How a `Stepper` looks.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Circles",
+        "doc": "Numbered circles joined by lines: the default.",
+        "default": true
+      },
+      {
+        "name": "Tiles",
+        "doc": "Each step a bordered tile, the done ones tinted in the success tone with a tick and the current one outlined in the accent. On a narrow screen every tile keeps its name and the tiles wrap onto more rows.",
+        "default": false
+      },
+      {
+        "name": "Track",
+        "doc": "The steps in a row in a muted box: small dots joined by hairlines, the current step's dot in the success tone and its name bold, the steps after it hollow and quieter. It shows each step's name only, and is always a row.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Suggestions": {
@@ -19385,6 +20706,54 @@
     "variants": [],
     "shared": []
   },
+  "TextStyle": {
+    "name": "TextStyle",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "How one kind of text is set: its size in px, its line height, its weight, its tracking in em and its `Face`. A value you don't set keeps the toolkit's.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Nothing set: the toolkit's own."
+      },
+      {
+        "name": "px",
+        "generics": "",
+        "args": "size: u16",
+        "doc": "Text `size` px tall, from 10 to 72."
+      }
+    ],
+    "methods": [
+      {
+        "name": "line",
+        "generics": "",
+        "args": "line: f64",
+        "doc": "Its line height, as a multiple of its size: from 1 to 2, to two places."
+      },
+      {
+        "name": "weight",
+        "generics": "",
+        "args": "weight: u16",
+        "doc": "Its weight: 400, 500, 600 or 700."
+      },
+      {
+        "name": "tracking",
+        "generics": "",
+        "args": "em: f64",
+        "doc": "Its tracking (letter spacing) in em: from -0.06 to 0.1, to three places."
+      },
+      {
+        "name": "face",
+        "generics": "",
+        "args": "face: Face",
+        "doc": "The face it is drawn in."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "TextVariant": {
     "name": "TextVariant",
     "kind": "enum",
@@ -19468,7 +20837,7 @@
     "name": "Theme",
     "kind": "struct",
     "file": "crates/navree-ui/src/theme/mod.rs",
-    "summary": "A theme: an id, a name and a `ThemeSpec`. The built-in ones are associated constants; `Theme::custom` makes your own.",
+    "summary": "A theme: an id, a name and a `ThemeSpec`. The built-in ones are associated constants; `Theme::custom` makes your own, `with_shape` gives it a `Shape` and `with_roles` its `Roles`.",
     "constructors": [
       {
         "name": "custom",
@@ -19490,6 +20859,30 @@
       }
     ],
     "methods": [
+      {
+        "name": "with_shape",
+        "generics": "",
+        "args": "shape: Shape",
+        "doc": "This theme with `shape`: the corners of each kind of part. Refused for a built-in theme, which ships as it is (make it yours first with `renamed`), and for a value out of range, each named with why, as `ImportError::Fields`."
+      },
+      {
+        "name": "with_roles",
+        "generics": "",
+        "args": "roles: Roles",
+        "doc": "This theme with `roles`: colours for what one token paints today (cards apart from the sidebar, fields, a ghost button's text, the sidebar's quieter text, segmented tabs, a selected row) and the inverse surface. Refused for a built-in theme, which ships as it is (make it yours first with `renamed`), and when any text pair a role draws falls short of WCAG AA in either palette: each such pair is named under its role, with its ratio, as `ImportError::Fields`."
+      },
+      {
+        "name": "shape",
+        "generics": "",
+        "args": "",
+        "doc": "Its `Shape`: the default, which sets nothing, unless `with_shape` gave it one."
+      },
+      {
+        "name": "roles",
+        "generics": "",
+        "args": "",
+        "doc": "Its `Roles`: none set, unless `with_roles` gave it some."
+      },
       {
         "name": "id",
         "generics": "",
@@ -19548,7 +20941,7 @@
         "name": "renamed",
         "generics": "",
         "args": "id: ThemeId, name: impl Into<String>",
-        "doc": "The same look under another id and name."
+        "doc": "The same look under another id and name: its spec, and what it says beyond."
       },
       {
         "name": "neutral",
@@ -19884,6 +21277,12 @@
         "generics": "",
         "args": "title: impl Into<String>, href: impl Into<LocalHref>, current: bool",
         "doc": "Adds a conversation called `title`, whose page is `href`; `current` when it is the one open."
+      },
+      {
+        "name": "group",
+        "generics": "<T, H>",
+        "args": "label: impl Into<String>, threads: impl IntoIterator<Item =(T, H, bool)>",
+        "doc": "Adds conversations under a heading of their own, such as \"Today\" and \"Earlier\": each thread a `(title, href, current)` as `thread` takes it. The group is a list named by its label, after the threads given without one."
       }
     ],
     "variants": [],
@@ -20299,6 +21698,12 @@
         "doc": "Replaces the words."
       },
       {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: TimelineVariant",
+        "doc": "Sets how the events are drawn: on a rail with dots (the default), or plain."
+      },
+      {
         "name": "loading",
         "generics": "",
         "args": "",
@@ -20448,6 +21853,27 @@
       {
         "name": "Muted",
         "doc": "It happened but is set aside, such as work a machine did: a dashed ring and quieter text.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "TimelineVariant": {
+    "name": "TimelineVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/timeline.rs",
+    "summary": "How a `Timeline` is drawn.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Rail",
+        "doc": "A rail down the side with a dot for each event: the default.",
+        "default": true
+      },
+      {
+        "name": "Plain",
+        "doc": "No rail and no dot: a column of times, each event's title in bold and its detail quieter under it, as a log of what happened at a place. An event's tone, icon and state still read in words where they are written. It links the looks stylesheet.",
         "default": false
       }
     ],
@@ -20772,6 +22198,12 @@
         "generics": "",
         "args": "",
         "doc": "Lets a click on the chosen item of a single group turn it off. It needs the script: with none, a radio stays on once chosen."
+      },
+      {
+        "name": "form",
+        "generics": "",
+        "args": "form: impl Into<String>",
+        "doc": "Ties the group's inputs to the form with the id `form`, for a group drawn outside it: they post with that form, as a button with a `form` attribute does."
       },
       {
         "name": "on_change",
@@ -21362,6 +22794,36 @@
     "variants": [],
     "shared": []
   },
+  "TopbarSizes": {
+    "name": "TopbarSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The top bar's sizes in px. Without them: 48 px high, 12 px at its sides.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every size the toolkit's."
+      }
+    ],
+    "methods": [
+      {
+        "name": "height",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "Its height, from 32 to 96 px (`--topbar-h`)."
+      },
+      {
+        "name": "inset_x",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The space at its sides, from 0 to 64 px."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Trace": {
     "name": "Trace",
     "kind": "struct",
@@ -21873,6 +23335,126 @@
     ],
     "shared": []
   },
+  "TypeScale": {
+    "name": "TypeScale",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/shape.rs",
+    "summary": "The type scale: a `TextStyle` for each kind of text the toolkit draws that a design sets apart. A kind you don't set keeps the toolkit's. Sizes are pixels, so text keeps its size under every density, as the toolkit's own text does.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every kind of text as the toolkit sets it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "page_title",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A page's title in the app shell. Without it: 20 px, 600, line 1.25, -0.01 em, in the display face."
+      },
+      {
+        "name": "h1",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A first-level `Heading`. Without it: 24 px, 600, line 1.25, -0.01 em, in the display face."
+      },
+      {
+        "name": "h2",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A second-level heading. Without it: 20 px, as `h1` otherwise."
+      },
+      {
+        "name": "h3",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A third-level heading. Without it: 16 px, as `h1` otherwise."
+      },
+      {
+        "name": "h4",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A fourth-level heading. Without it: 14 px, as `h1` otherwise, in the text face."
+      },
+      {
+        "name": "card_title",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A card's title. Without it: 14 px, 600."
+      },
+      {
+        "name": "brand",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "The app's name: the brand in the sidebar and a site's brand. Without it: the sidebar's 14 px, 500, and a site's 17 px, 650, -0.015 em; both in the display face."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "The page's body text. Without it: 14 px, 400, line 1.5."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A field's label. Without it: 13 px, 500, line 1.25."
+      },
+      {
+        "name": "button",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A button of the default size. Without it: 14 px, 500, line 1."
+      },
+      {
+        "name": "badge",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A badge. Without it: 12 px, 500."
+      },
+      {
+        "name": "input",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "The text in an input, a text area, a native select and the select's control. Without it: 14 px."
+      },
+      {
+        "name": "breadcrumb",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A breadcrumb trail: its size, line, tracking and face, and the current page's weight (the links keep the text's). Without it: 13 px."
+      },
+      {
+        "name": "stat_value",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A stat's figure. Without it: 24 px, 600, line 1.2, with figures of one width in any face."
+      },
+      {
+        "name": "table_head",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "A table's column headings. Without it: 13 px, 500 in a table, 14 px in a data table."
+      },
+      {
+        "name": "sidebar_user",
+        "generics": "",
+        "args": "style: TextStyle",
+        "doc": "The signed-in person's name in the sidebar. Without it: 14 px, 500."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether no kind of text has a style of its own."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Upload": {
     "name": "Upload",
     "kind": "struct",
@@ -22264,6 +23846,18 @@
     ],
     "methods": [
       {
+        "name": "avatar",
+        "generics": "",
+        "args": "avatar: Avatar",
+        "doc": "Draws `avatar` at the start of the row, in place of the person icon: the person's initials (`Avatar::initials(name).shape(AvatarShape::Circle)`) or their picture. The row's name says who it is, so give the avatar the same name."
+      },
+      {
+        "name": "chevron",
+        "generics": "",
+        "args": "shown: bool",
+        "doc": "Draws the chevron at the end of the row (`true`, the default) or not. The row opens the menu either way, and tells assistive technology that it does."
+      },
+      {
         "name": "link",
         "generics": "",
         "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
@@ -22276,6 +23870,191 @@
         "doc": "Adds a button that posts to `href`: signing out, switching workspace. It works with JavaScript off, carrying the session's token as a field when there is one."
       }
     ],
+    "variants": [],
+    "shared": []
+  },
+  "Waterfall": {
+    "name": "Waterfall",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/waterfall.rs",
+    "summary": "A waterfall: an amount built up and taken down in steps, a row each, from what a customer paid to what a store is paid, from revenue to profit. Each step's bar starts where the last one ended, so it floats at the running total: one that adds runs on in one colour, one that takes away runs back in another. A total is a bar from zero, in a third colour. The amount is written at the end of each row, with its sign for a step.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A waterfall called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "start",
+        "generics": "",
+        "args": "label: impl Into<String>, amount: impl IntoValue",
+        "doc": "Starts at `amount`: a bar from zero in the totals' colour, and the running total from there. Give it first; a later one starts the running total again at its amount."
+      },
+      {
+        "name": "step",
+        "generics": "",
+        "args": "label: impl Into<String>, amount: impl IntoValue",
+        "doc": "Adds a step of `amount`: above zero it adds to the running total, below it takes away. A step with no amount (`None`, or not a finite number) is a row with no bar, and leaves the running total as it was."
+      },
+      {
+        "name": "total",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Adds a total: a bar from zero to the running total so far, a subtotal between steps or the net at the end."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "added: impl Into<Ink>, deducted: impl Into<Ink>, total: impl Into<Ink>",
+        "doc": "The colours of a step that adds, a step that takes away and a total: chart colours 1 and 2 and the text ink by default. Use tones when adding means good and taking away bad."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How amounts are written: `NumberFormat::currency(\"₹\")` for money."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: WaterfallLabels",
+        "doc": "The words the chart writes besides the common ones."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the bars come in: each grows from where it starts, one after another. Off by default; always off for a reader who asks for less motion."
+      },
+      {
+        "name": "rtl",
+        "generics": "",
+        "args": "",
+        "doc": "Bars run from the right, for a right-to-left page."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "WaterfallLabels": {
+    "name": "WaterfallLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/waterfall.rs",
+    "summary": "The words a waterfall writes besides the ones every chart shares, in English by default. Templates name their blanks in braces.",
+    "constructors": [
+      {
+        "name": "english",
+        "generics": "",
+        "args": "",
+        "doc": "The English words."
+      }
+    ],
+    "methods": [],
     "variants": [],
     "shared": []
   },

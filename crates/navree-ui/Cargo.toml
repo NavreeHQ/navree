@@ -10,12 +10,13 @@ homepage.workspace = true
 keywords = ["navree", "ui", "components", "html", "server-side"]
 categories = ["web-programming", "gui"]
 readme = "README.md"
-# The two style sources are read by the unit tests of the blocks that link them.
+# The style sources below are read by the unit tests of the blocks that link them.
 include = [
     "src/**",
     "assets/**",
     "dist/**",
     "styles/extra/app-blocks.css",
+    "styles/extra/auth-layout.css",
     "styles/extra/marketing.css",
     "THIRD_PARTY.md",
     "README.md",

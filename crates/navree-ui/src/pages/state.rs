@@ -65,6 +65,7 @@ pub struct State {
     description: Option<Cow<'static, str>>,
     detail: Option<String>,
     wait: Option<String>,
+    note: Option<Cow<'static, str>>,
     actions: Vec<Node>,
     reference: Option<String>,
     copy: Option<Cow<'static, str>>,
@@ -91,6 +92,7 @@ impl State {
             description: Some(words.description.clone()),
             detail: None,
             wait: None,
+            note: None,
             actions: Vec::new(),
             reference: None,
             copy: None,
@@ -174,6 +176,12 @@ impl State {
         self
     }
 
+    /// Adds a line about the reader, above the actions: that they act as another user.
+    pub(crate) fn note(mut self, text: impl Into<Cow<'static, str>>) -> Self {
+        self.note = Some(text.into());
+        self
+    }
+
     /// Adds actions. The first is the main one.
     pub fn actions(mut self, actions: impl IntoNodes) -> Self {
         actions.push_into(&mut self.actions);
@@ -250,6 +258,9 @@ impl State {
             .detail
             .map(|text| el("p").slot("state-detail").child(text));
         let wait = self.wait.map(|text| el("p").slot("state-wait").child(text));
+        let note = self
+            .note
+            .map(|text| el("p").slot("state-detail").child(text));
         let actions =
             (!self.actions.is_empty()).then(|| el("div").slot("state-actions").child(self.actions));
         let reference = self.reference.map(|reference| {
@@ -278,6 +289,7 @@ impl State {
             description,
             detail,
             wait,
+            note,
             actions,
             reference,
             debug,
@@ -347,6 +359,9 @@ pub struct ErrorPage {
     actions: Option<Vec<Node>>,
     debug: Option<Node>,
     mark_build: bool,
+    offer_sign_in: bool,
+    stop: Option<Href>,
+    csrf: Option<String>,
 }
 
 impl ErrorPage {
@@ -368,6 +383,9 @@ impl ErrorPage {
             actions: None,
             debug: None,
             mark_build: true,
+            offer_sign_in: false,
+            stop: None,
+            csrf: None,
         }
     }
 
@@ -477,6 +495,49 @@ impl ErrorPage {
         self
     }
 
+    /// Offers "Sign in" after the actions the kind offers, for a page a guest sees: on a
+    /// missing page, beside "Go to home". The sign-in page needs nothing more, and actions of
+    /// your own ([`actions`](Self::actions)) replace it.
+    ///
+    /// ```
+    /// use navree_ui::pages::ErrorPage;
+    ///
+    /// let html = ErrorPage::not_found().offer_sign_in().into_view().to_html();
+    /// assert!(html.contains(r#"href="/sign-in""#));
+    /// ```
+    pub fn offer_sign_in(mut self) -> Self {
+        self.offer_sign_in = true;
+        self
+    }
+
+    /// Says the page is seen during an impersonation, and offers "Stop impersonating": a form
+    /// that posts to `stop`, with the session's token when [`csrf`](Self::csrf) gives it. A
+    /// form posts with no script, so the page still loads none.
+    ///
+    /// ```
+    /// use navree_ui::pages::ErrorPage;
+    ///
+    /// let html = ErrorPage::not_found()
+    ///     .impersonating("/impersonate/stop")
+    ///     .csrf("token")
+    ///     .into_view()
+    ///     .to_html();
+    /// assert!(html.contains("You&#39;re acting as another user."));
+    /// assert!(html.contains(r#"<form method="post" action="/impersonate/stop">"#));
+    /// assert!(!html.contains("<script"));
+    /// ```
+    pub fn impersonating(mut self, stop: impl Into<Href>) -> Self {
+        self.stop = Some(stop.into());
+        self
+    }
+
+    /// The session's CSRF token, which the page's own form (stopping an impersonation)
+    /// carries.
+    pub fn csrf(mut self, token: impl Into<String>) -> Self {
+        self.csrf = Some(token.into());
+        self
+    }
+
     /// The status the page answers with.
     pub fn status_code(&self) -> StatusCode {
         self.status
@@ -520,7 +581,7 @@ impl ErrorPage {
                 (None, _) => vec![home(ButtonVariant::Primary).into()],
             }
         };
-        match self.kind {
+        let mut actions = match self.kind {
             StateKind::SignIn => vec![
                 Button::primary(labels.sign_in.to_string())
                     .icon(icons::LOG_IN)
@@ -533,7 +594,33 @@ impl ErrorPage {
             }
             StateKind::Failed => retry_then_home(&labels.try_again, true),
             _ => vec![home(ButtonVariant::Primary).into()],
+        };
+        if self.offer_sign_in && self.kind != StateKind::SignIn {
+            actions.push(
+                Button::outline(labels.sign_in.to_string())
+                    .icon(icons::LOG_IN)
+                    .href(self.sign_in.clone())
+                    .into(),
+            );
         }
+        actions
+    }
+
+    /// The form that stops an impersonation, when the page is seen during one.
+    fn stop_form(&self) -> Option<Node> {
+        let stop = self.stop.as_ref()?;
+        Some(
+            el("form")
+                .attr("method", "post")
+                .attr("action", stop.clone())
+                .children((
+                    self.csrf.clone().map(crate::form::csrf_field),
+                    Button::outline(self.labels.stop_impersonating.to_string())
+                        .icon(icons::LOG_OUT)
+                        .submit(),
+                ))
+                .into(),
+        )
     }
 
     /// The state this page shows. `heading` is the level of its headline, if it is one.
@@ -574,6 +661,9 @@ impl ErrorPage {
             None => self.default_actions(),
         };
         state = state.actions(actions);
+        if let Some(form) = self.stop_form() {
+            state = state.note(self.labels.impersonating.clone()).actions(form);
+        }
         if let Some(debug) = &self.debug {
             state = state.debug(debug.clone());
         }
@@ -584,6 +674,12 @@ impl ErrorPage {
     /// and no script. For a guest, and for a page whose shell can't be built.
     pub fn into_view(self) -> View {
         let title = self.short_title();
+        self.into_view_titled(title)
+    }
+
+    /// The page on its own, its document titled `title` (the app's title template applied
+    /// to the short title); the headline is as [`into_view`](Self::into_view) writes it.
+    pub(crate) fn into_view_titled(self, title: String) -> View {
         let status = self.status;
         let state = self.state(Some(1), false).id("error");
         let view = View::new(title)
@@ -614,6 +710,8 @@ impl ErrorPage {
     pub fn into_fragment(mut self) -> View {
         let title = self.short_title();
         let status = self.status;
+        // The page around a region says who the reader is; the region doesn't again.
+        self.stop = None;
         if self.actions.is_none() {
             let labels = &self.labels;
             let again = || {

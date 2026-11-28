@@ -16,6 +16,7 @@
 [data-color="8"]{--c:var(--chart-8);--c-vivid:var(--chart-8-vivid)}
 [data-color=other]{--c:var(--fg-3)}
 [data-color=accent]{--c:var(--accent)}
+[data-color=text]{--c:var(--fg)}
 [data-tone]{--c:var(--tone,var(--fg-3))}
 
 /* A gradient's stops: the ink, its vivid end, or the ink mixed toward the surface (soft). */

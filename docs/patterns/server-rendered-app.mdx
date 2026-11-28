@@ -100,7 +100,7 @@ Pages and API routes are two ways in to the same modules, so the rules are writt
 
 - **Access.** `.authenticated()`, `.roles(..)`, `.permissions(..)` and `.can(..)` on a page route mean what `#[authenticated]`, `#[roles]`, `#[permissions]` and `#[can]` mean on a JSON route, and both read the same [abilities](/docs/security/authorization/).
 - **Services.** A page calls the same service a route calls, in the request's unit of work, so a change and its events, jobs and audit entries commit together.
-- **Workspaces.** With `WorkspaceModule` in the app, a page resolves the workspace from the session and a `WorkspaceSwitcher` changes it. See [workspaces in Navree UI pages](/docs/workspaces/introduction/#workspaces-in-navree-ui-pages).
+- **Workspaces.** With `WorkspaceModule` in the app, a page resolves the workspace from the session and a `WorkspaceSwitcher` changes it: an outline button in the page's actions, or a card with the workspace's picture and a second line in the sidebar's header slot (`.variant(SwitcherVariant::Card)`). See [workspaces in Navree UI pages](/docs/workspaces/introduction/#workspaces-in-navree-ui-pages).
 
 ## Testing
 

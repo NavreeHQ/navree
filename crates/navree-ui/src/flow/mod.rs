@@ -31,7 +31,7 @@ pub use draft::{
 };
 pub use number::{Decimal, DecimalError};
 pub use slider::{Slider, SliderError, SliderLabels, SliderSpec};
-pub use stepper::{Step, StepState, Stepper, StepperLabels};
+pub use stepper::{Step, StepState, Stepper, StepperLabels, StepperVariant};
 pub use toolbar::{Toolbar, ToolbarGroup, ToolbarItem, ToolbarLabels};
 pub use tree::{
     Tree, TreeChildren, TreeLabels, TreeNode, TreeSelect, TreeSelection, TreeSelectionError,

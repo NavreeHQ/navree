@@ -26,6 +26,45 @@ AuthLayout::new(card)
 
 The panel shows from 960 px up. On a phone the form stands alone and first, so nothing pushes it below the fold.
 
+## The panel's side and look, a brand and a footer
+
+<UiPreview example="auth-layout/inset" />
+
+The panel comes first by default, flush with the window's edges. These options change that, and give the form's column a brand and a footer:
+
+| Option | What it does |
+|---|---|
+| `aside_end()` | Puts the panel after the form, in reading order and on the screen: the form's column on the start side. |
+| `aside_inset()` | Insets the panel 0.75rem from the window's edges and rounds it in your theme's `panel` corner (`Corners::panel`), padded 3.5rem with 2.5rem between its parts. The form's column grows from 35rem and the panel from 30rem, by equal parts of the room left. |
+| `aside_inverse()` | Draws the panel on your theme's inverse surface: the other palette, a dark panel on a light page. A theme's `Inverse` sets its colours, and the theme refuses colours whose text fails the contrast check. |
+| `brand(node)` | Puts your brand at the top of the form's column, at every width, so it stays on a phone where the panel is hidden. Give it a `Brand` (`navree::ui::marketing`): its name is drawn in the theme's `brand` text style. |
+| `footer(node)` | Puts a line at the foot of the form's column, in small quiet text. |
+| `body_width(px)` | Sets the form column's width at most: 360, 400, 448 (the default) or 480 px. Another number takes the nearest. |
+
+```rust
+use navree::ui::*;
+use navree::ui::marketing::Brand;
+
+let form = Stack::gap(4).children((
+    Heading::h1("Sign in to Kesar"),
+    Text::new("The sign-in form goes here."),
+));
+AuthLayout::new(form)
+    .brand(Brand::new("Kesar", "/"))
+    .footer(Text::muted("Every sign-in is checked for a new device."))
+    .aside(Stack::gap(4).children((
+        Heading::h2("Your health, clearly understood."),
+        Text::new("Sleep, heart and steps, scored every day."),
+    )))
+    .aside_label("About Kesar")
+    .aside_end()
+    .aside_inset()
+    .aside_inverse()
+    .body_width(400)
+```
+
+navree-auth's sign-in pages take them through `AuthPages::layout`, a function that gets each page's layout ([how](/docs/basics/sessions-and-csrf/#in-the-apps-words-and-the-designs-layout)). These options are styled in a small stylesheet of their own, which a page links only when its layout uses one. A layout with none of them is drawn exactly as before. The panel's colours and corner come from your theme, so a theme sets them for every page at once: its `Roles::inverse` for the surface, text and lines, and its `Corners::panel` for the corner.
+
 ## Keyboard and accessibility
 
 <UiA11y>
@@ -33,6 +72,7 @@ The panel shows from 960 px up. On a phone the form stands alone and first, so n
 - The form's part is the page's `main` landmark, with the id `main` a skip link points at.
 - The panel is a `complementary` landmark named by `aside_label` ("About" by default).
 - The corner comes before the form in the page, so Tab reaches the theme menu first; a form whose first field has `autofocus`, as the sign-in form does, starts there.
+- A brand comes before the corner, so Tab reaches the link home first. With `aside_end`, the panel comes after the form in the page as well as on the screen, so a screen reader meets the form first.
 
 </UiA11y>
 

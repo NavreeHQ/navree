@@ -47,8 +47,9 @@ pub mod prelude {
     pub use crate::dates::{Calendar, DatePicker, DateRangePicker, DateTimePicker, TimePicker};
     pub use crate::flow::{
         Draft, DraftStore, MemoryDrafts, Slider, SliderError, SliderLabels, SliderSpec, Step,
-        StepState, Stepper, StepperLabels, Toolbar, ToolbarItem, Tree, TreeChildren, TreeNode,
-        TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
+        StepState, Stepper, StepperLabels, StepperVariant, Toolbar, ToolbarItem, Tree,
+        TreeChildren, TreeNode, TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome,
+        WizardPage, WizardStep,
     };
     pub use crate::form::{
         Form as FormFields, FormView, Many, Money, Options as OptionList, Rejected, Submit,
@@ -145,8 +146,8 @@ pub use extension::{ExtensionFile, UiExtension};
 pub use flags as country_flags;
 pub use flow::{
     Draft, DraftStore, MemoryDrafts, Slider, SliderError, SliderLabels, SliderSpec, Step,
-    StepState, Stepper, StepperLabels, Toolbar, ToolbarItem, Tree, TreeChildren, TreeNode,
-    TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
+    StepState, Stepper, StepperLabels, StepperVariant, Toolbar, ToolbarItem, Tree, TreeChildren,
+    TreeNode, TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
 };
 pub use form::{Control, ControlCx, ControlField, FieldControl, FormView, Money, Submit};
 pub use hint::{Presented, Role, Standard};
@@ -177,7 +178,7 @@ pub use select::{
     Select, SelectLabels,
 };
 pub use shell::{
-    AppPage, AppShell, Collapse, ModuleBuilderShellExt, NativeClient, NativeFamily,
+    AppPage, AppShell, Collapse, LogoStyle, ModuleBuilderShellExt, NativeClient, NativeFamily,
     NativeShellPart, NativeShellParts, NativeSignIn, NavGroup, NavItem, Shell, ShellLayout,
     ShellNavItem, UserMenu,
 };

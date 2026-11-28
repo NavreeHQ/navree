@@ -44,6 +44,22 @@ pub fn all() -> Vec<Example> {
         single!("data-table", "compact", "Compact rows", data_table_compact)
             .start()
             .height(360),
+        single!(
+            "data-table",
+            "current",
+            "The row a page shows, and a muted header",
+            data_table_current
+        )
+        .start()
+        .height(440),
+        single!(
+            "data-table",
+            "page-filters",
+            "Filters of the page's own",
+            data_table_page_filters
+        )
+        .start()
+        .height(440),
         gallery!(
             "data-table",
             "states",
@@ -57,6 +73,9 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(820),
         single!("stat", "bars", "Bars", stat_bars).start(),
+        single!("stat", "inverse", "On the inverse surface", stat_inverse)
+            .start()
+            .width(520),
     ]
 }
 
@@ -267,6 +286,61 @@ fn data_table_compact() -> Node {
         .into()
 }
 
+fn data_table_current() -> Node {
+    let query = TableQuery::<Deal>::parse("/deals", "");
+    let page = TablePage::new(deals(), 5);
+    DataTable::new("deals", &query, &page)
+        .caption("Deals")
+        .row_href(|deal| format!("/deals/{}", deal.id))
+        .current_row(|deal| deal.id == 2)
+        .muted_header()
+        .into()
+}
+
+#[derive(Clone, Copy, Debug, serde::Deserialize, Options, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Stage {
+    Lead,
+    Proposal,
+    Negotiation,
+    Won,
+}
+
+const ORDERS: &[(&str, &str)] = &[("closing", "Closing first"), ("largest", "Largest first")];
+
+#[derive(Default, serde::Deserialize, FilterBar)]
+pub struct DealFilter {
+    /// Stage
+    #[filter(multi)]
+    pub stage: Option<navree::ui::form::Many<Stage>>,
+    /// Company
+    #[filter(options = page)]
+    pub company: Option<String>,
+    /// Hot deals only
+    #[filter(boolean)]
+    pub hot: Option<bool>,
+    /// Order
+    #[filter(options = ORDERS, default = "closing")]
+    pub order: Option<String>,
+}
+
+fn data_table_page_filters() -> Node {
+    let query =
+        TableQuery::<Deal, DealFilter>::parse("/deals", "stage=won&stage=negotiation&hot=true");
+    let page = TablePage::new(deals(), 5);
+    DataTable::new("deals", &query, &page)
+        .caption("Deals")
+        .options(
+            "company",
+            vec![
+                FilterOption::new("sutlej", "Sutlej Supply"),
+                FilterOption::new("haveli", "Haveli Home"),
+            ],
+        )
+        .without_columns_picker()
+        .into()
+}
+
 fn data_table_states() -> Vec<(&'static str, Node)> {
     let query = TableQuery::<Deal>::parse("/deals", "");
     let none: Vec<Deal> = Vec::new();
@@ -304,6 +378,15 @@ fn stat_default() -> Grid {
         Stat::new("Open deals", "312").trend("+12 this week", true),
         Stat::new("Pipeline value", "₹4.2 crore").trend("+3.1%", true),
         Stat::new("Won this month", "₹64 lakh").trend("-2.4%", false),
+    ))
+}
+
+fn stat_inverse() -> Grid {
+    Grid::cols(2).gap(4).children((
+        Stat::new("Invoices due, Mon 16 Nov", "₹9,12,400")
+            .caption("from 14 customers")
+            .variant(StatVariant::Inverse),
+        Stat::new("Won this month", "₹14,80,000").trend("+8.2%", true),
     ))
 }
 

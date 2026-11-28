@@ -155,6 +155,10 @@ pub fn all() -> Vec<Example> {
         .start()
         .width(420)
         .height(190),
+        single!("thread-list", "groups", "Groups", threads_groups)
+            .start()
+            .width(420)
+            .height(230),
     ]
 }
 
@@ -325,6 +329,21 @@ fn sources_citations() -> Stack {
             .source("Payments by method, October", "/reports/payments")
             .source("Income Tax Department", "https://www.incometax.gov.in/"),
     ))
+}
+
+fn threads_groups() -> ThreadList {
+    ThreadList::new("Your conversations")
+        .group(
+            "Today",
+            [("Payments by method this week", "/assistant/7", true)],
+        )
+        .group(
+            "Earlier",
+            [
+                ("Pending refunds in Ludhiana", "/assistant/6", false),
+                ("GST summary for October", "/assistant/5", false),
+            ],
+        )
 }
 
 fn threads_default() -> ThreadList {

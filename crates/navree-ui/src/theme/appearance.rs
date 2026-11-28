@@ -202,7 +202,7 @@ impl ThemeSetting {
 
     /// Reads `mode.theme`, `mode` alone, or `.theme` alone.
     pub fn parse(value: &str) -> Option<Self> {
-        if value.len() > super::codec::FORM_LEN + 16 {
+        if value.len() > super::codec::FORM_MOST + 16 {
             return None;
         }
         let (mode, theme) = value.split_once('.').unwrap_or((value, ""));

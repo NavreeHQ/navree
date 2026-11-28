@@ -468,6 +468,23 @@ fn cases() -> Vec<(&'static str, Node)> {
                 .into(),
         ),
         (
+            "waterfall",
+            Waterfall::new("This month's settlement")
+                .id("waterfall")
+                .description("From what the store's customers paid to what reached the bank")
+                .locale("en-IN")
+                .format(NumberFormat::currency("₹").max_decimals(0))
+                .start("Orders", 250_000)
+                .step("Store fee", -25_000)
+                .step("Tax on the fee", -4_500)
+                .step("Returns", -12_000)
+                .step("Promotions refunded", 3_000)
+                .step("Tax withheld", -2_500)
+                .total("Paid to the bank")
+                .motion(Motion::new())
+                .into(),
+        ),
+        (
             "range-scale",
             RangeScale::new("Resting heart rate", 58)
                 .id("range-scale")

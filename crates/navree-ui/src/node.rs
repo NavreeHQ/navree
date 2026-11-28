@@ -342,6 +342,20 @@ impl Uses {
     pub const EXTENSIONS: Self = Self(1 << 43);
     /// No script: the head links the stylesheets the page's elements name.
     pub const EXTENSION_SHEETS: Self = Self(1 << 44);
+    /// The shell parts stylesheet: no script, only the styles of what a shell draws when an
+    /// app asks for it: a workspace switcher drawn as a card, a bare or dark mark and a badge
+    /// in the brand row, a slot at the sidebar's foot, actions in the top bar and a page
+    /// heading with badges or a subtitle, linked on a page that draws one.
+    pub const SHELL_PARTS: Self = Self(1 << 45);
+    /// The auth layout's own stylesheet: no script, only the styles of an
+    /// [`AuthLayout`](crate::AuthLayout)'s options: the panel after the form or inset from
+    /// the window's edges, a brand and a footer in the form's column, and the column's
+    /// width. A layout that uses none of them links the app blocks' sheet alone.
+    pub const AUTH_LAYOUT: Self = Self(1 << 46);
+    /// The looks stylesheet: no script, only the styles of the looks a component takes when
+    /// a page asks for one, such as a segmented button group, linked on a page that draws
+    /// one. A component drawn as it always was never links it.
+    pub const LOOKS: Self = Self(1 << 47);
 
     /// Both sets together.
     #[must_use]

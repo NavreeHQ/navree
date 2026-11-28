@@ -53,6 +53,13 @@ pub fn all() -> Vec<Example> {
             .show()
             .height(280),
         gallery!("popover", "sides", "Sides", popover_sides).height(160),
+        single!(
+            "popover",
+            "icon",
+            "A button with a name of its own",
+            popover_icon
+        )
+        .height(160),
         single!("tooltip", "thumb", "A tooltip", tooltip_thumb)
             .show()
             .height(140),
@@ -217,6 +224,15 @@ fn popover_default() -> Popover {
                 Button::primary("Assign").size(Size::Sm),
             )),
         )
+}
+
+fn popover_icon() -> Row {
+    Row::gap(2).children((
+        Popover::icon_only("alerts", icons::BELL, "Notifications").body("Nothing new."),
+        Popover::new("inbox", "3")
+            .trigger_label("3 new messages")
+            .body("Three messages."),
+    ))
 }
 
 fn popover_sides() -> impl IntoIterator<Item = (&'static str, Popover)> {

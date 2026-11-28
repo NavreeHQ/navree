@@ -427,11 +427,16 @@ impl View {
         if let Some(seo) = &self.seo {
             seo.write_head(out, &self.title);
         }
-        // Geist is preloaded only for a theme that sets its text in Geist.
+        // Geist is preloaded only for a theme that sets its text in Geist, and not when a
+        // font of the app's own is the text face.
         if self
             .appearance
             .as_ref()
             .is_none_or(|appearance| appearance.theme().spec().font == Font::Geist)
+            && !self
+                .app_fonts
+                .iter()
+                .any(|font| font.role() == Some(crate::theme::Face::Text))
         {
             out.push_str(
                 "<link rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"",

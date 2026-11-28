@@ -1,6 +1,10 @@
 //! Themes, modes, the theme menu, the shell's layouts and the theme builder.
 
-use navree::ui::theme::{Appearance, BuilderDraft, Mode, Theme, ThemeBuilder, ThemeMenu};
+use navree::ui::theme::{
+    Appearance, BuilderDraft, ControlSizes, Corner, Corners, Elevation, Face, FieldSizes, Mode,
+    Rgb, Roles, Shape, SidebarSizes, Sizes, TextStyle, Theme, ThemeBuilder, ThemeId, ThemeMenu,
+    TypeScale,
+};
 use navree::ui::*;
 
 use crate::catalog::{Example, gallery, page, single};
@@ -44,6 +48,15 @@ pub fn all() -> Vec<Example> {
             .fill()
             .width(1100)
             .height(620),
+        page!(
+            "themes",
+            "shape",
+            "A theme with a shape of its own",
+            shell_shaped
+        )
+        .fill()
+        .width(1100)
+        .height(620),
         // Drawn at the column's own width, as the app draws it on a screen that wide, and
         // whole: a page scaled down to fit would be too small to read.
         page!(
@@ -164,6 +177,62 @@ fn shell_floating() -> AppPage {
 fn shell_header() -> AppPage {
     let shell = crm().layout(ShellLayout::Header);
     deals(shell.page("Deals", "/deals"))
+}
+
+/// Ocean with a shape of its own: pill buttons, badges, toggles and avatars, 12 px fields,
+/// panels and popups, 10 px rows and 16 px cards; a 28 px page title, 15 px card titles and
+/// figures in the mono face; 36 px controls and fields and a 248 px sidebar; soft shadows; and
+/// white cards and fields beside its tinted sidebar.
+fn shaped_theme() -> Theme {
+    let shape = Shape::new()
+        .corners(
+            Corners::new()
+                .button(Corner::Pill)
+                .badge(Corner::Pill)
+                .toggle(Corner::Pill)
+                .avatar(Corner::Pill)
+                .field(Corner::Px(12))
+                .nav(Corner::Px(10))
+                .card(Corner::Px(16))
+                .panel(Corner::Px(12))
+                .overlay(Corner::Px(12)),
+        )
+        .type_scale(
+            TypeScale::new()
+                .page_title(TextStyle::px(28).line(1.15).weight(600).tracking(-0.025))
+                .card_title(TextStyle::px(15).line(1.4).tracking(-0.01))
+                .stat_value(TextStyle::px(22).weight(500).face(Face::Mono)),
+        )
+        .sizes(
+            Sizes::new()
+                .controls(ControlSizes::new().md(36))
+                .fields(FieldSizes::new().md(36).padding_x(12))
+                .sidebar(SidebarSizes::new().width(248).inset_x(12).item_height(36)),
+        )
+        .elevation(Elevation::Soft);
+    let roles = Roles::new()
+        .card(Rgb::hex(0xffffff), Rgb::hex(0x0a0d12))
+        .field(Rgb::hex(0xffffff), Rgb::hex(0x0a0d12));
+    Theme::OCEAN
+        .renamed(ThemeId::parse("rounded").unwrap(), "Rounded")
+        .with_shape(shape)
+        .and_then(|theme| theme.with_roles(roles))
+        .unwrap()
+}
+
+fn shell_shaped() -> AppPage {
+    let shell = crm().appearance(Appearance::new(shaped_theme(), Mode::Light));
+    deals(shell.page("Deals", "/deals")).body(Card::titled("Pipeline").body(
+        Stack::gap(3).children((
+            Row::gap(2).wrap().children((
+                Input::search("q").placeholder("Search deals"),
+                Button::new("Filter").variant(ButtonVariant::Outline),
+                Badge::new("Won").variant(BadgeVariant::Success),
+                Badge::new("Open"),
+            )),
+            Alert::new(AlertTone::Warning).title("Three deals close this week."),
+        )),
+    ))
 }
 
 fn builder_default() -> AppPage {

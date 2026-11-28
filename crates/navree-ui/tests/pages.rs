@@ -401,6 +401,25 @@ async fn a_signed_in_user_gets_the_error_inside_the_shell() {
     }
 }
 
+/// The shell around an error page reads the address as any page of it does: a mode or a theme
+/// asked for in the query holds, and the rest of the query is the theme menu's way back.
+#[tokio::test]
+async fn a_mode_asked_for_in_the_address_holds_on_an_error_page_in_the_shell() {
+    let app = app().await;
+    let response = get_as_user(&app, "/nowhere?mode=light").await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let text = response.text();
+    assert!(text.contains(r#"data-slot="sidebar""#), "{text}");
+    assert!(text.contains(r#"data-mode="light""#), "{text}");
+    let themed = get_as_user(&app, "/secret?theme=ocean&mode=light")
+        .await
+        .text();
+    assert!(themed.contains(r#"data-theme="ocean""#), "{themed}");
+    // With nothing asked, the shell's own look, as before.
+    let plain = get_as_user(&app, "/nowhere").await.text();
+    assert!(!plain.contains("data-mode="), "{plain}");
+}
+
 #[tokio::test]
 async fn without_a_shell_the_page_stands_alone() {
     let app = app_with(false, false).await;
@@ -1222,4 +1241,135 @@ async fn an_error_raised_before_its_route_ran_follows_the_route() {
             .unwrap_or("")
             .starts_with("text/html")
     );
+}
+
+/// The app of the tests above with a shell in a look of its own (Ocean, light, a title template)
+/// and the error pages given `options`.
+async fn looked(options: navree_ui::pages::PagesOptions) -> TestApp {
+    struct Looks;
+    impl Module for Looks {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.controller::<Pages>();
+            m.factory(Factory::<Shell>::new(|_| async {
+                Ok(Arc::new(
+                    Shell::new("Agra")
+                        .appearance(navree_ui::theme::Appearance::new(
+                            navree_ui::theme::Theme::OCEAN,
+                            navree_ui::theme::Mode::Light,
+                        ))
+                        .title_template("{} · Agra")
+                        .group(
+                            NavGroup::plain()
+                                .item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)),
+                        ),
+                ))
+            }))
+            .exports::<Shell>();
+        }
+    }
+    TestApp::builder()
+        .fake_auth()
+        .config("ui.debug", false)
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule::with_pages(options))
+        .module(Looks)
+        .build()
+        .await
+}
+
+/// A page on its own is drawn in Navree's look unless the app asks: its shell's look is not
+/// taken without `shell_look`, and nothing on the page changes.
+#[tokio::test]
+async fn a_page_on_its_own_keeps_navrees_look_unless_asked() {
+    let app = looked(navree_ui::pages::PagesOptions::default()).await;
+    let text = get(&app, "/missing/page", BROWSER).await.text();
+    assert!(
+        text.contains(r#"<main data-slot="state-page" id="main">"#),
+        "{text}"
+    );
+    assert!(!text.contains("data-theme="), "{text}");
+    assert!(text.contains("<title>Page not found</title>"), "{text}");
+}
+
+/// With `shell_look`, a guest's 404, and a 429 and a 503 for anyone, take the shell's theme,
+/// mode and title, and what the reader asks for in the address or the cookie lies over them.
+#[tokio::test]
+async fn a_page_on_its_own_takes_the_shells_look_when_asked() {
+    let app = looked(navree_ui::pages::PagesOptions::default().shell_look()).await;
+    let response = get(&app, "/missing/page", BROWSER).await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let text = response.text();
+    assert!(
+        text.contains(r#"data-theme="ocean" data-mode="light""#),
+        "{text}"
+    );
+    assert!(
+        text.contains("<title>Page not found · Agra</title>"),
+        "{text}"
+    );
+    assert!(
+        text.contains(r#"<h1 data-slot="state-title" id="error-title">"#),
+        "the headline is the page's own: {text}"
+    );
+    assert!(!text.contains(r#"data-slot="sidebar""#), "still on its own");
+    assert!(!text.contains("<script"), "and runs nothing");
+    // The address asks for dark.
+    let dark = get(&app, "/missing/page?mode=dark", BROWSER).await.text();
+    assert!(
+        dark.contains(r#"data-theme="ocean" data-mode="dark""#),
+        "{dark}"
+    );
+    // The reader's choice in the cookie.
+    let chosen = app
+        .client()
+        .get("/missing/page")
+        .header("accept", BROWSER)
+        .header("cookie", "navree_ui_theme=dark.rose")
+        .send()
+        .await
+        .text();
+    assert!(
+        chosen.contains(r#"data-theme="rose" data-mode="dark""#),
+        "{chosen}"
+    );
+    // A 429 and a 503 for a signed-in user are on their own, in the same look.
+    for path in ["/limited", "/unavailable"] {
+        let text = get_as_user(&app, path).await.text();
+        assert!(!text.contains(r#"data-slot="sidebar""#), "{path}: {text}");
+        assert!(text.contains(r#"data-theme="ocean""#), "{path}: {text}");
+    }
+    // A signed-in user's 404 is in the shell, as before.
+    let shell = get_as_user(&app, "/missing/page").await.text();
+    assert!(shell.contains(r#"data-slot="sidebar""#), "{shell}");
+}
+
+/// An app with no shell to take a look from gives the appearance itself.
+#[tokio::test]
+async fn a_page_on_its_own_takes_an_appearance_given() {
+    let app = app_with_pages(navree_ui::pages::PagesOptions::default().appearance(
+        navree_ui::theme::Appearance::new(
+            navree_ui::theme::Theme::OCEAN,
+            navree_ui::theme::Mode::Dark,
+        ),
+    ))
+    .await;
+    let text = get(&app, "/missing/page", BROWSER).await.text();
+    assert!(
+        text.contains(r#"data-theme="ocean" data-mode="dark""#),
+        "{text}"
+    );
+    assert!(text.contains("<title>Page not found</title>"), "{text}");
+    let light = get(&app, "/missing/page?mode=light", BROWSER).await.text();
+    assert!(light.contains(r#"data-mode="light""#), "{light}");
+}
+
+async fn app_with_pages(options: navree_ui::pages::PagesOptions) -> TestApp {
+    TestApp::builder()
+        .fake_auth()
+        .config("ui.debug", false)
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule::with_pages(options))
+        .module(App::default())
+        .build()
+        .await
 }
