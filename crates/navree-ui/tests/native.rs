@@ -3162,3 +3162,44 @@ fn an_action_that_asks_first_carries_its_question_and_a_hook_no_reader_knows_is_
         .into();
     assert_eq!(lower(&node).why(), ["hook:data-ui-wizard"]);
 }
+
+#[test]
+fn a_page_gives_a_native_screen_its_subtitle_and_its_top_bar_actions() {
+    let page = |more: bool| {
+        move || {
+            let page = shell()
+                .for_request("/orders/1", &http::HeaderMap::new())
+                .page("Order CS-20481")
+                .crumb("Orders", "/orders")
+                .actions(Button::primary("Print").href("/orders/1/print"))
+                .body(Text::new("Two items, paid"));
+            let page = if more {
+                page.subtitle("Placed on 12 Nov by Tanvi Sharma")
+                    .topbar_actions(Button::outline("Download invoice").href("/orders/1/invoice"))
+            } else {
+                page
+            };
+            page.to_view()
+        }
+    };
+    let native = TestNative::build(with_caps(Platform::Ios, &[]), page(true));
+    assert!(native.is_native(), "{:?}", native.why());
+    assert_eq!(
+        native.screen().subtitle.as_deref(),
+        Some("Placed on 12 Nov by Tanvi Sharma")
+    );
+    // The top bar's actions come after the page's own, in one row.
+    assert_eq!(native.screen().actions.len(), 2);
+    assert_eq!(
+        native.tap("Print"),
+        Some(Action::navigate("/orders/1/print"))
+    );
+    assert_eq!(
+        native.tap("Download invoice"),
+        Some(Action::navigate("/orders/1/invoice"))
+    );
+    // A page that says neither gets the screen it got.
+    let plain = TestNative::build(with_caps(Platform::Ios, &[]), page(false));
+    assert!(plain.screen().subtitle.is_none());
+    assert_eq!(plain.screen().actions.len(), 1);
+}

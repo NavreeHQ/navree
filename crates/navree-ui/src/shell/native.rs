@@ -55,9 +55,20 @@ impl PageNote {
             .map(|(label, href)| (label.as_ref(), href.as_str()))
     }
 
-    /// What stands beside the page's heading.
-    pub(crate) fn actions(&self) -> &[Node] {
-        &self.page.actions
+    /// The line under the page's title ([`AppPage::subtitle`]), when it has one.
+    pub(crate) fn subtitle(&self) -> Option<&str> {
+        self.page.subtitle.as_deref()
+    }
+
+    /// What stands beside the page's heading, then what stands in its top bar
+    /// ([`AppPage::topbar_actions`]): a screen has one row of actions.
+    pub(crate) fn actions(&self) -> Vec<Node> {
+        self.page
+            .actions
+            .iter()
+            .chain(&self.page.topbar_actions)
+            .cloned()
+            .collect()
     }
 
     /// The page's content.

@@ -127,7 +127,8 @@ every `@navree/*` package carries the same version.
   otherwise than the title, and `AppPage::current_crumb_mono()` draws it in the mono face;
   `AppPage::title_aside(nodes)` puts badges after the title, wrapping under it, and
   `AppPage::subtitle(text)` a line of the shell's muted text 6 px under it;
-  `AppPage::title_face(face)` draws the title in another face than the theme's.
+  `AppPage::title_face(face)` draws the title in another face than the theme's. A native
+  client's screen takes the subtitle as its own and the top bar's actions after the page's.
   `Breadcrumb::current_mono(label)` adds a current page whose name is in the mono face. A theme's
   `breadcrumb` text style now gives its weight to the current page, and the links keep the
   text's. A page with none of these is drawn as before. These are new inherent methods: an app

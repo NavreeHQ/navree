@@ -104,7 +104,8 @@ pub(crate) fn read_note(
     if steps.len() > 1 {
         screen.trail = steps;
     }
-    screen.actions = cx.sequence(note.actions());
+    screen.subtitle = note.subtitle().map(str::to_owned);
+    screen.actions = cx.sequence(&note.actions());
     let content = cx.sequence(note.body());
     screen.id = match content.as_slice() {
         [only] => only.id().map(str::to_owned),

@@ -241,6 +241,7 @@ The top bar starts with the sidebar's button and a separator, then the breadcrum
 - **Actions in the top bar:** `AppPage::topbar_actions(nodes)` puts a detail page's buttons at the end of the top bar, before the search and the theme menu. On a phone too narrow for them they scroll sideways inside the bar, and the page never does.
 - **The last crumb:** the breadcrumb ends with the page's title. `AppPage::current_crumb(label)` names it otherwise ("LDH-1" over a page titled "LDH-1, Ludhiana"), and `AppPage::current_crumb_mono()` draws it in the mono face, for a name that is a code. The heading and the browser's tab keep the title. The breadcrumb's size and its last part's weight are the `breadcrumb` style of the theme's [type scale](/docs/ui/themes/#type).
 - **Beside and under the title:** `AppPage::title_aside(nodes)` puts badges after the title, on its line and wrapping under it when there is no room; `AppPage::subtitle(text)` puts a line of the shell's muted text 6 px under it.
+- **In a native app:** the screen a native client draws takes the page's subtitle as its own, and the top bar's actions after the page's own actions, in its one row of actions.
 - **The title's face:** `AppPage::title_face(Face::Mono)` draws the title in another face than the theme's page title takes: an invoice's number, a code.
 - **No fold button:** with `Collapse::Never` the button is gone on wide screens, and the separator after it goes with it.
 
