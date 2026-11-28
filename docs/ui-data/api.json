@@ -4228,6 +4228,12 @@
         "doc": "Writes each category's share of the cells in the legend."
       },
       {
+        "name": "hide_legend",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the strip with no legend under it: for strips stacked one above another, of which one keeps the legend for all. Declare the same categories in the same order on each, so the legend kept names every one. The table still names each cell's category."
+      },
+      {
         "name": "cell_name",
         "generics": "",
         "args": "name: impl Into<String>",
@@ -7424,6 +7430,24 @@
         "doc": "Adds what a debug build knows. Never call this with anything in production."
       },
       {
+        "name": "offer_sign_in",
+        "generics": "",
+        "args": "",
+        "doc": "Offers \"Sign in\" after the actions the kind offers, for a page a guest sees: on a missing page, beside \"Go to home\". The sign-in page needs nothing more, and actions of your own (`actions`) replace it."
+      },
+      {
+        "name": "impersonating",
+        "generics": "",
+        "args": "stop: impl Into<Href>",
+        "doc": "Says the page is seen during an impersonation, and offers \"Stop impersonating\": a form that posts to `stop`, with the session's token when `csrf` gives it. A form posts with no script, so the page still loads none."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "The session's CSRF token, which the page's own form (stopping an impersonation) carries."
+      },
+      {
         "name": "status_code",
         "generics": "",
         "args": "",
@@ -9212,6 +9236,228 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "Heatmap": {
+    "name": "Heatmap",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/grids/heatmap.rs",
+    "summary": "A heat map of rows by columns: a cell for each row at each column, such as each day at each hour, each person in each week, or each store on each day. A cell holds a reading or a category.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A heat map called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "columns",
+        "generics": "<S: Into<String>>",
+        "args": "names: impl IntoIterator<Item = S>",
+        "doc": "Adds the columns' names, in order: the hours, the days, the weeks."
+      },
+      {
+        "name": "row",
+        "generics": "<V: IntoValue>",
+        "args": "name: impl Into<String>, values: impl IntoIterator<Item = V>",
+        "doc": "Adds a row called `name` of readings, one for each column in order. A value that is not a finite number, or `None`, is a cell with no data; a row shorter than the columns has no data in the rest, and values past the last column are left out."
+      },
+      {
+        "name": "category_row",
+        "generics": "<S: AsRef<str>>",
+        "args": "name: impl Into<String>, categories: impl IntoIterator<Item = S>",
+        "doc": "Adds a row called `name` of categories, one for each column in order: the kind of workout each day, the state of a store each hour. An empty name is a cell with no data. A category that was not declared is added in the next of the categorical colours."
+      },
+      {
+        "name": "category",
+        "generics": "",
+        "args": "name: impl Into<String>, ink: impl Into<Ink>",
+        "doc": "Declares a category in `ink`, which puts it in the legend in this order. Declare the categories before the rows that use them."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "The colour the five steps of a reading are made of (the accent by default)."
+      },
+      {
+        "name": "range",
+        "generics": "",
+        "args": "low: impl IntoValue, high: impl IntoValue",
+        "doc": "The readings at the two ends of the steps: `range(0, 1)` for a share. A reading past an end takes the step at that end. By default the lowest and the highest reading."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: ColorScale",
+        "doc": "Colours each reading by the band of `scale` it falls in, instead of in steps: name each band with `label`, and the legend names it. A band of a soft ink is a light step of its colour, so a scale can run from one colour through a neutral middle to another."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How readings are written in the tooltip, the table, the legend and the summary."
+      },
+      {
+        "name": "value_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "What a reading is called in the tooltip (the title by default)."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What a reading counts, written after it: `steps`, `min`, `orders`."
+      },
+      {
+        "name": "row_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "The name of the table's first column, which names the rows (`Day`); the chart's word for a category otherwise."
+      },
+      {
+        "name": "row_summary",
+        "generics": "",
+        "args": "summary: RowSummary",
+        "doc": "Writes the average or the total of each row's readings at its end, and in the table."
+      },
+      {
+        "name": "ends",
+        "generics": "",
+        "args": "low: impl Into<String>, high: impl Into<String>",
+        "doc": "The words at the two ends of the legend's steps (`Still`, `Active`); the ends of the range, written as readings, by default."
+      },
+      {
+        "name": "label_every",
+        "generics": "",
+        "args": "n: usize",
+        "doc": "Names every `n`th column above the grid, from the first. By default as many as fit about sixteen names across. The tooltip and the table name every column."
+      },
+      {
+        "name": "show_values",
+        "generics": "",
+        "args": "",
+        "doc": "Writes each reading in its cell. Meant for a grid of a few columns: past twelve or so, the cells are too small for it."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: GridLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the rows come in: they fade in one after another. Off by default."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "Hero": {
@@ -13082,6 +13328,42 @@
         "doc": "Sets the words."
       },
       {
+        "name": "appearance",
+        "generics": "",
+        "args": "appearance: crate::theme::Appearance",
+        "doc": "Draws a page on its own (for a guest, a 401, a 429 and a 503) in `appearance`: the app's theme and mode. The reader's theme cookie and the address's `?theme=` and `?mode=` lie over it."
+      },
+      {
+        "name": "shell_look",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a page on its own in the look of the app's registered `Shell`: its default appearance, the themes it offers, its stylesheets and typefaces, and its title template. An app that builds its shell for each request (an `ErrorShell`) gives the look with `appearance`, `stylesheet` and `font` instead."
+      },
+      {
+        "name": "stylesheet",
+        "generics": "",
+        "args": "sheet: &crate::AppSheet",
+        "doc": "Links a stylesheet of the app's own on a page drawn on its own. See `View::stylesheet`."
+      },
+      {
+        "name": "font",
+        "generics": "",
+        "args": "font: &crate::AppFont",
+        "doc": "Links a typeface of the app's own on a page drawn on its own. See `View::font`."
+      },
+      {
+        "name": "offer_sign_in",
+        "generics": "",
+        "args": "offer: bool",
+        "doc": "Offers \"Sign in\" beside a guest's page's own actions: on a missing page, say, beside \"Go to home\"."
+      },
+      {
+        "name": "stop_impersonating",
+        "generics": "",
+        "args": "href: impl Into<String>",
+        "doc": "Says on an error page shown during an impersonation that the reader is acting as another user, and offers \"Stop impersonating\", a form that posts to `href` with the session's token. navree-auth's `AuthPages` serves `/impersonate/stop`."
+      },
+      {
         "name": "configured",
         "generics": "",
         "args": "config: &Config",
@@ -16057,6 +16339,32 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "RowSummary": {
+    "name": "RowSummary",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/grids/heatmap.rs",
+    "summary": "What the end of each row of a `Heatmap` says about the row's readings.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "None",
+        "doc": "Nothing: the default.",
+        "default": true
+      },
+      {
+        "name": "Average",
+        "doc": "The average of the row's readings, the cells with no data left out.",
+        "default": false
+      },
+      {
+        "name": "Total",
+        "doc": "The sum of the row's readings.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Scatter": {
@@ -23562,6 +23870,191 @@
         "doc": "Adds a button that posts to `href`: signing out, switching workspace. It works with JavaScript off, carrying the session's token as a field when there is one."
       }
     ],
+    "variants": [],
+    "shared": []
+  },
+  "Waterfall": {
+    "name": "Waterfall",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/waterfall.rs",
+    "summary": "A waterfall: an amount built up and taken down in steps, a row each, from what a customer paid to what a store is paid, from revenue to profit. Each step's bar starts where the last one ended, so it floats at the running total: one that adds runs on in one colour, one that takes away runs back in another. A total is a bar from zero, in a third colour. The amount is written at the end of each row, with its sign for a step.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A waterfall called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "start",
+        "generics": "",
+        "args": "label: impl Into<String>, amount: impl IntoValue",
+        "doc": "Starts at `amount`: a bar from zero in the totals' colour, and the running total from there. Give it first; a later one starts the running total again at its amount."
+      },
+      {
+        "name": "step",
+        "generics": "",
+        "args": "label: impl Into<String>, amount: impl IntoValue",
+        "doc": "Adds a step of `amount`: above zero it adds to the running total, below it takes away. A step with no amount (`None`, or not a finite number) is a row with no bar, and leaves the running total as it was."
+      },
+      {
+        "name": "total",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Adds a total: a bar from zero to the running total so far, a subtotal between steps or the net at the end."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "added: impl Into<Ink>, deducted: impl Into<Ink>, total: impl Into<Ink>",
+        "doc": "The colours of a step that adds, a step that takes away and a total: chart colours 1 and 2 and the text ink by default. Use tones when adding means good and taking away bad."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How amounts are written: `NumberFormat::currency(\"₹\")` for money."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: WaterfallLabels",
+        "doc": "The words the chart writes besides the common ones."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the bars come in: each grows from where it starts, one after another. Off by default; always off for a reader who asks for less motion."
+      },
+      {
+        "name": "rtl",
+        "generics": "",
+        "args": "",
+        "doc": "Bars run from the right, for a right-to-left page."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "WaterfallLabels": {
+    "name": "WaterfallLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/waterfall.rs",
+    "summary": "The words a waterfall writes besides the ones every chart shares, in English by default. Templates name their blanks in braces.",
+    "constructors": [
+      {
+        "name": "english",
+        "generics": "",
+        "args": "",
+        "doc": "The English words."
+      }
+    ],
+    "methods": [],
     "variants": [],
     "shared": []
   },

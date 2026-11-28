@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "3a2893f6c013";
+pub const BUILD: &str = "5a02e055c90a";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-8984b59d1fec.js";
@@ -72,7 +72,7 @@ pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-804cc6ccb7fa.js";
 pub const MENUBAR_URL: &str = "/_navree/ui/menubar-d4b0cf48a645.js";
 
 /// The URL of `charts.js`.
-pub const CHARTS_URL: &str = "/_navree/ui/charts-4e49471269af.js";
+pub const CHARTS_URL: &str = "/_navree/ui/charts-55462f9f9efa.js";
 
 /// The URL of `count-up.js`.
 pub const COUNT_UP_URL: &str = "/_navree/ui/count-up-e3e9aed1a65f.js";
@@ -122,10 +122,10 @@ pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-46da85c6d8a4.
 pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-7b8f9c0c97ba.css";
 
 /// The URL of `charts-styles.css`.
-pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-52976e599526.css";
+pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-f65709ef2005.css";
 
 /// The URL of `chart-paint.css`.
-pub const CHART_PAINT_URL: &str = "/_navree/ui/chart-paint-6133a5ac46b9.css";
+pub const CHART_PAINT_URL: &str = "/_navree/ui/chart-paint-32f20f6503d9.css";
 
 /// The URL of `chart-radial.css`.
 pub const CHART_RADIAL_URL: &str = "/_navree/ui/chart-radial-6b891fcc6ba9.css";
@@ -134,7 +134,7 @@ pub const CHART_RADIAL_URL: &str = "/_navree/ui/chart-radial-6b891fcc6ba9.css";
 pub const CHART_LINEAR_URL: &str = "/_navree/ui/chart-linear-7e06b5727a51.css";
 
 /// The URL of `chart-grids.css`.
-pub const CHART_GRIDS_URL: &str = "/_navree/ui/chart-grids-70741be83598.css";
+pub const CHART_GRIDS_URL: &str = "/_navree/ui/chart-grids-cf5d5b008a85.css";
 
 /// The URL of `app-blocks.css`.
 pub const APP_BLOCKS_URL: &str = "/_navree/ui/app-blocks-019da61ba75f.css";
@@ -403,7 +403,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "charts",
         ext: "js",
-        hash: "4e49471269af",
+        hash: "55462f9f9efa",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/charts.js"),
         gzip: Some(include_bytes!("../dist/charts.js.gz")),
@@ -549,7 +549,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "charts-styles",
         ext: "css",
-        hash: "52976e599526",
+        hash: "f65709ef2005",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/charts-styles.css"),
         gzip: Some(include_bytes!("../dist/charts-styles.css.gz")),
@@ -558,7 +558,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "chart-paint",
         ext: "css",
-        hash: "6133a5ac46b9",
+        hash: "32f20f6503d9",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/chart-paint.css"),
         gzip: Some(include_bytes!("../dist/chart-paint.css.gz")),
@@ -585,7 +585,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "chart-grids",
         ext: "css",
-        hash: "70741be83598",
+        hash: "cf5d5b008a85",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/chart-grids.css"),
         gzip: Some(include_bytes!("../dist/chart-grids.css.gz")),

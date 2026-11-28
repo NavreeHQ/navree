@@ -171,6 +171,7 @@
         "donut-chart",
         "sparkline",
         "funnel",
+        "waterfall",
         "ring",
         "rings",
         "gauge",
@@ -180,6 +181,7 @@
         "color-strip",
         "range-scale",
         "trend",
+        "heatmap",
         "calendar-heatmap",
         "matrix-heatmap",
         "relation-list",
@@ -2122,6 +2124,25 @@
       ]
     },
     {
+      "id": "waterfall",
+      "name": "Waterfall",
+      "url": "/docs/components/waterfall/",
+      "summary": "An amount built up and taken down a step at a time, each bar floating at the running total, with totals from zero.",
+      "group": "charts",
+      "types": [
+        "Waterfall",
+        "WaterfallLabels"
+      ],
+      "thumb": "waterfall/thumb",
+      "anatomy": "waterfall/default",
+      "examples": [
+        "waterfall/thumb",
+        "waterfall/default",
+        "waterfall/subtotals",
+        "waterfall/states"
+      ]
+    },
+    {
       "id": "sparkline",
       "name": "Sparkline",
       "url": "/docs/components/sparkline/",
@@ -2337,6 +2358,27 @@
         "trend/thumb",
         "trend/default",
         "trend/words"
+      ]
+    },
+    {
+      "id": "heatmap",
+      "name": "Heat map",
+      "url": "/docs/components/heatmap/",
+      "summary": "Rows by columns, a cell for each: a reading in five steps of one colour or in the bands of a scale, or a category, with one legend for the whole grid.",
+      "group": "charts",
+      "types": [
+        "Heatmap",
+        "RowSummary",
+        "GridLabels"
+      ],
+      "thumb": "heatmap/thumb",
+      "anatomy": "heatmap/default",
+      "examples": [
+        "heatmap/thumb",
+        "heatmap/default",
+        "heatmap/bands",
+        "heatmap/categories",
+        "heatmap/states"
       ]
     },
     {
@@ -40116,7 +40158,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -40287,7 +40329,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -40509,7 +40551,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -40705,7 +40747,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -40907,7 +40949,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -41115,7 +41157,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -41349,7 +41391,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -41577,7 +41619,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -41679,7 +41721,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -41876,7 +41918,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42092,7 +42134,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42308,7 +42350,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42505,7 +42547,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42676,7 +42718,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -42878,7 +42920,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43100,7 +43142,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43322,7 +43364,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43506,7 +43548,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43716,7 +43758,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -43932,7 +43974,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44134,7 +44176,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44287,7 +44329,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44465,7 +44507,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44669,7 +44711,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -44873,7 +44915,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -45077,7 +45119,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -45255,7 +45297,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -45426,7 +45468,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -45623,7 +45665,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -45807,7 +45849,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46011,7 +46053,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46227,7 +46269,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46419,7 +46461,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46585,7 +46627,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46776,7 +46818,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -46955,7 +46997,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -47134,7 +47176,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -47799,7 +47841,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -47927,7 +47969,7 @@
       "width": 520,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -48080,7 +48122,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -48258,7 +48300,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -48436,7 +48478,699 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stack",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-state",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-spacer",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waterfall/thumb",
+      "component": "waterfall",
+      "slug": "thumb",
+      "title": "A waterfall",
+      "kind": "single",
+      "code": "Waterfall::new(\"Settlement\")\n    .id(\"waterfall-thumb\")\n    .hide_title()\n    .table(TableMode::ScreenReader)\n    .locale(\"en-IN\")\n    .format(NumberFormat::currency(\"₹\").max_decimals(0))\n    .start(\"Orders\", 2_50_000)\n    .step(\"Fees\", -29_500)\n    .step(\"Returns\", -12_000)\n    .total(\"Paid\")",
+      "src": "/ui-preview/waterfall/thumb.html",
+      "height": 250,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-rows",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-row",
+                      "tag": "div",
+                      "count": 5,
+                      "children": [
+                        {
+                          "slot": "chart-row-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-track",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 5,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-bar",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-link",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-row-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waterfall/default",
+      "component": "waterfall",
+      "slug": "default",
+      "title": "A settlement in seven rows, in rupees",
+      "kind": "single",
+      "code": "Waterfall::new(\"This month's settlement\")\n    .id(\"waterfall-default\")\n    .description(\"From what the store's customers paid to what reached the bank\")\n    .locale(\"en-IN\")\n    .format(NumberFormat::currency(\"₹\").max_decimals(0))\n    .start(\"Orders\", 2_50_000)\n    .step(\"Store fee\", -25_000)\n    .step(\"Tax on the fee\", -4_500)\n    .step(\"Returns\", -12_000)\n    .step(\"Promotions refunded\", 3_000)\n    .step(\"Tax withheld\", -2_500)\n    .total(\"Paid to the bank\")",
+      "src": "/ui-preview/waterfall/default.html",
+      "height": 400,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-rows",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-row",
+                      "tag": "div",
+                      "count": 8,
+                      "children": [
+                        {
+                          "slot": "chart-row-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-track",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 5,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-bar",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-link",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-row-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waterfall/subtotals",
+      "component": "waterfall",
+      "slug": "subtotals",
+      "title": "A subtotal between the steps, in tones",
+      "kind": "single",
+      "code": "Waterfall::new(\"Studio profit, October\")\n    .id(\"waterfall-subtotals\")\n    .description(\"Classes and retail, less what they cost\")\n    .locale(\"en-IN\")\n    .format(NumberFormat::currency(\"₹\").max_decimals(0))\n    .step(\"Classes\", 4_20_000)\n    .step(\"Retail\", 85_000)\n    .total(\"Revenue\")\n    .step(\"Instructors\", -1_90_000)\n    .step(\"Premises\", -95_000)\n    .step(\"Stock\", -42_000)\n    .total(\"Profit\")\n    .colors(\n        Ink::tone(Tone::Success),\n        Ink::tone(Tone::Danger),\n        Ink::slot(7),\n    )",
+      "src": "/ui-preview/waterfall/subtotals.html",
+      "height": 400,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-rows",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-row",
+                      "tag": "div",
+                      "count": 8,
+                      "children": [
+                        {
+                          "slot": "chart-row-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-track",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 3,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-bar",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-link",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-row-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waterfall/states",
+      "component": "waterfall",
+      "slug": "states",
+      "title": "Loading, failed and empty",
+      "kind": "single",
+      "code": "let state = |caption: &'static str, chart: Waterfall| {\n    Stack::gap(2).children((Text::muted(caption), chart))\n};\nGrid::cols(3).gap(4).children((\n    state(\n        \"Loading\",\n        Waterfall::new(\"This month's settlement\")\n            .id(\"waterfall-loading\")\n            .loading(),\n    ),\n    state(\n        \"Failed\",\n        Waterfall::new(\"This month's settlement\")\n            .id(\"waterfall-failed\")\n            .failed(None)\n            .retry(\"/settlements\"),\n    ),\n    state(\n        \"Empty\",\n        Waterfall::new(\"This month's settlement\")\n            .id(\"waterfall-empty\")\n            .empty(\n                \"No settlement yet\",\n                Some(\"The month's settlement appears after its first order.\".to_owned()),\n            ),\n    ),\n))",
+      "src": "/ui-preview/waterfall/states.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -48540,7 +49274,7 @@
       "scripts": [
         "overlay-d30ab67a4ddf.js",
         "dates-b35d213fc86d.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -48705,7 +49439,7 @@
       "scripts": [
         "overlay-d30ab67a4ddf.js",
         "dates-b35d213fc86d.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -49063,7 +49797,7 @@
       "scripts": [
         "overlay-d30ab67a4ddf.js",
         "dates-b35d213fc86d.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -49394,7 +50128,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -49618,7 +50352,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [
         "1 day: hours",
@@ -50486,7 +51220,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -52125,7 +52859,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js",
+        "charts-55462f9f9efa.js",
         "count-up-e3e9aed1a65f.js"
       ],
       "captions": [],
@@ -52339,7 +53073,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -52530,7 +53264,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js",
+        "charts-55462f9f9efa.js",
         "count-up-e3e9aed1a65f.js"
       ],
       "captions": [],
@@ -52827,7 +53561,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53117,7 +53851,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53400,7 +54134,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53520,7 +54254,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53709,7 +54443,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -53892,7 +54626,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54081,7 +54815,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54215,7 +54949,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54392,7 +55126,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54494,7 +55228,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54660,7 +55394,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -54851,7 +55585,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55042,7 +55776,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55176,7 +55910,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55347,7 +56081,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55506,7 +56240,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55620,7 +56354,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -55740,7 +56474,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [
         "Body mass index, with words at the ends",
@@ -55940,6 +56674,761 @@
       ]
     },
     {
+      "id": "heatmap/thumb",
+      "component": "heatmap",
+      "slug": "thumb",
+      "title": "A heat map",
+      "kind": "single",
+      "code": "steps_by_hour(4).into_iter().fold(\n    Heatmap::new(\"Steps by hour\")\n        .id(\"heatmap-thumb\")\n        .hide_title()\n        .table(TableMode::ScreenReader)\n        .columns(hours())\n        .ink(Ink::slot(3)),\n    |chart, (day, values)| chart.row(day, values),\n)",
+      "src": "/ui-preview/heatmap/thumb.html",
+      "height": 200,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-legend-word",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 5,
+                  "children": []
+                },
+                {
+                  "slot": "heat-legend-word",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-grid",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heat-row",
+                      "tag": "div",
+                      "count": 8,
+                      "children": [
+                        {
+                          "slot": "heat-corner",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-colhead",
+                          "tag": "span",
+                          "count": 24,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heatmap/default",
+      "component": "heatmap",
+      "slug": "default",
+      "title": "A week of steps by hour, with each day's total",
+      "kind": "single",
+      "code": "steps_by_hour(9).into_iter().fold(\n    Heatmap::new(\"Steps by hour\")\n        .id(\"heatmap-default\")\n        .description(\"Last week, Harleen Kaur\")\n        .locale(\"en-IN\")\n        .row_name(\"Day\")\n        .columns(hours())\n        .range(0, 2_500)\n        .value_name(\"Steps\")\n        .ink(Ink::slot(3))\n        .row_summary(RowSummary::Total),\n    |chart, (day, values)| chart.row(day, values),\n)",
+      "src": "/ui-preview/heatmap/default.html",
+      "height": 400,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-legend-word",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 5,
+                  "children": []
+                },
+                {
+                  "slot": "heat-legend-word",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-grid",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heat-row",
+                      "tag": "div",
+                      "count": 8,
+                      "children": [
+                        {
+                          "slot": "heat-corner",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-colhead",
+                          "tag": "span",
+                          "count": 24,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-rowend",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heatmap/bands",
+      "component": "heatmap",
+      "slug": "bands",
+      "title": "A diverging scale in five bands, with the values",
+      "kind": "single",
+      "code": "Heatmap::new(\"Resting heart rate against usual\")\n    .id(\"heatmap-bands\")\n    .description(\"Each week's average, as a share of the person's own usual\")\n    .row_name(\"Person\")\n    .columns([\"Week 1\", \"Week 2\", \"Week 3\", \"Week 4\", \"Week 5\", \"Week 6\"])\n    .row(\"Harleen Kaur\", [0.97, 1.01, 1.04, 0.99, 0.95, 0.94])\n    .row(\n        \"Gurpreet Singh\",\n        [\n            Some(1.02),\n            Some(1.09),\n            None,\n            Some(1.13),\n            Some(1.06),\n            Some(1.01),\n        ],\n    )\n    .row(\"Simran Kaur\", [0.99, 0.98, 1.00, 1.03, 1.08, 1.12])\n    .row(\"Arjun Mehta\", [1.05, 1.00, 0.96, 0.93, 0.91, 0.95])\n    .colors(\n        ColorScale::new(Ink::slot(1))\n            .label(\"Well under\")\n            .from(0.94, Ink::slot(1).soft())\n            .label(\"Under\")\n            .from(0.98, Ink::muted().soft())\n            .label(\"As usual\")\n            .from(1.02, Ink::slot(2).soft())\n            .label(\"Over\")\n            .from(1.08, Ink::slot(2))\n            .label(\"Well over\"),\n    )\n    .format(NumberFormat::percent().max_decimals(0))\n    .value_name(\"Of usual\")\n    .show_values()",
+      "src": "/ui-preview/heatmap/bands.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 6,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-grid",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heat-row",
+                      "tag": "div",
+                      "count": 5,
+                      "children": [
+                        {
+                          "slot": "heat-corner",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-colhead",
+                          "tag": "span",
+                          "count": 6,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heatmap/categories",
+      "component": "heatmap",
+      "slug": "categories",
+      "title": "A category in each cell",
+      "kind": "single",
+      "code": "Heatmap::new(\"Workouts by day\")\n    .id(\"heatmap-categories\")\n    .description(\"Last week\")\n    .row_name(\"Person\")\n    .columns([\"Mon\", \"Tue\", \"Wed\", \"Thu\", \"Fri\", \"Sat\", \"Sun\"])\n    .category(\"Run\", Ink::slot(1))\n    .category(\"Strength\", Ink::slot(2))\n    .category(\"Yoga\", Ink::slot(7))\n    .category(\"Rest\", Ink::muted())\n    .category_row(\n        \"Harleen Kaur\",\n        [\"Run\", \"Strength\", \"Rest\", \"Run\", \"Yoga\", \"\", \"Run\"],\n    )\n    .category_row(\n        \"Gurpreet Singh\",\n        [\n            \"Strength\", \"Rest\", \"Strength\", \"Rest\", \"Strength\", \"Run\", \"Rest\",\n        ],\n    )\n    .category_row(\n        \"Simran Kaur\",\n        [\"Yoga\", \"Yoga\", \"Run\", \"Yoga\", \"Rest\", \"Yoga\", \"Run\"],\n    )",
+      "src": "/ui-preview/heatmap/categories.html",
+      "height": 240,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 5,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-grid",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heat-row",
+                      "tag": "div",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "heat-corner",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heat-colhead",
+                          "tag": "span",
+                          "count": 7,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heatmap/states",
+      "component": "heatmap",
+      "slug": "states",
+      "title": "Loading, failed and empty",
+      "kind": "single",
+      "code": "let state = |caption: &'static str, chart: Heatmap| {\n    Stack::gap(2).children((Text::muted(caption), chart))\n};\nGrid::cols(3).gap(4).children((\n    state(\n        \"Loading\",\n        Heatmap::new(\"Steps by hour\")\n            .id(\"heatmap-loading\")\n            .loading(),\n    ),\n    state(\n        \"Failed\",\n        Heatmap::new(\"Steps by hour\")\n            .id(\"heatmap-failed\")\n            .failed(None)\n            .retry(\"/activity\"),\n    ),\n    state(\n        \"Empty\",\n        Heatmap::new(\"Steps by hour\").id(\"heatmap-empty\").empty(\n            \"No steps yet\",\n            Some(\"Hours appear here once your watch syncs.\".to_owned()),\n        ),\n    ),\n))",
+      "src": "/ui-preview/heatmap/states.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [
+        "charts-55462f9f9efa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stack",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-state",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-spacer",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "calendar-heatmap/thumb",
       "component": "calendar-heatmap",
       "slug": "thumb",
@@ -55956,7 +57445,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -56114,7 +57603,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -56297,7 +57786,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -56480,7 +57969,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -56657,7 +58146,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -56759,7 +58248,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -56893,7 +58382,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -57052,7 +58541,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -57211,7 +58700,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -57313,7 +58802,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -57459,7 +58948,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -57630,7 +59119,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -57802,7 +59291,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -57917,7 +59406,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -58063,7 +59552,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -58274,7 +59763,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -71233,7 +72722,7 @@
       "fit": true,
       "scripts": [
         "menus-a3553608f59a.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -75091,7 +76580,7 @@
       "scripts": [
         "sidebar-366c16d19fc8.js",
         "overlay-d30ab67a4ddf.js",
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
@@ -86225,7 +87714,7 @@
       "width": 1200,
       "fit": true,
       "scripts": [
-        "charts-4e49471269af.js"
+        "charts-55462f9f9efa.js"
       ],
       "captions": [],
       "slots": [
