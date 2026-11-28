@@ -18,11 +18,12 @@ use navree_plugin_geo::{
 use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use navree_ui::app_files::IMAGE_CSP;
 use navree_ui::form::Rejected;
+use navree_ui::marketing::Brand;
 use navree_ui::pages::region_answer;
 use navree_ui::{
-    AppImage, AppShell, Directive, ExtensionFile, Form, IslandScript, LazyItem, LazyPage, Node,
-    PAGE_CSP, PagePolicy, PagePolicyOptions, PageSources, Reply, SafeHtml, Shell, Submit, Text,
-    UiExtension, UiModule, Validate, View, assets, el,
+    AppImage, AppSheet, AppShell, AuthLayout, Directive, ExtensionFile, Form, IslandScript,
+    LazyItem, LazyPage, Node, PAGE_CSP, PagePolicy, PagePolicyOptions, PageSources, PagesOptions,
+    Reply, SafeHtml, Shell, Submit, Text, UiExtension, UiModule, Validate, View, assets, el,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -281,6 +282,20 @@ impl Controller for Pages {
             RouteDef::on(Method::GET, "!/sign-in", || async { sign_in(true) })
                 .public()
                 .page(),
+            RouteDef::on(Method::GET, "!/sign-in-styled", || async {
+                // The sign-in page in a layout of the app's own: the panel after the form,
+                // the brand over it and a line at its foot.
+                View::new("Sign in")
+                    .body(
+                        AuthLayout::new(el("form").child(password("password")))
+                            .aside(Text::new("Deals and contacts"))
+                            .aside_end()
+                            .brand(Brand::new("Agra", "/"))
+                            .footer(Text::muted("Every sign-in is checked")),
+                    )
+                    .fresh()
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/sign-in-plain", || async { sign_in(false) })
                 .public()
                 .page(),
@@ -1631,6 +1646,58 @@ async fn fresh_route_probes_never_spoof_loopback_strip_flash_cookies_and_cache_p
             obs.cookies_seen
         );
     }
+
+    app.shutdown().await.unwrap();
+}
+
+/// The app's own stylesheet, which error pages drawn on their own link in the app's look.
+static BRAND_SHEET: AppSheet = AppSheet::new("brand", b":root{--accent:#0b5}", 1024);
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_auth_layouts_sheet_and_an_error_pages_own_look_hold_on_a_page_that_starts_clean() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = TestApp::builder()
+        .config("http.per_ip_rate_limit", serde_json::Value::Null)
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule::with_pages(
+            PagesOptions::default().stylesheet(&BRAND_SHEET),
+        ))
+        .module(PagesModule)
+        .module(GeoWithMap)
+        .build()
+        .await;
+
+    // A sign-in page that starts clean, in a layout of the app's own: the toolkit's policy,
+    // and the layout's own sheet linked after the app blocks' sheet, both the toolkit's files.
+    let styled = page(&app, "/sign-in-styled").await;
+    assert_eq!(styled.header("x-navree-fresh"), Some("1"));
+    assert_eq!(styled.header("content-security-policy"), Some(PAGE_CSP));
+    let html = styled.text();
+    assert!(root_tag(&html).ends_with(" data-ui-fresh-page"), "{html}");
+    let blocks = html
+        .find(assets::APP_BLOCKS_URL)
+        .expect("the app blocks' sheet");
+    let layout = html
+        .find(assets::AUTH_LAYOUT_URL)
+        .expect("the auth layout's sheet");
+    assert!(blocks < layout, "{html}");
+    assert!(html.contains(r#"data-slot="auth-brand""#), "{html}");
+
+    // An error page a guest gets at a fresh address is drawn on its own in the app's look: it
+    // is fresh, keeps the toolkit's policy and links the app's stylesheet.
+    let expired = app
+        .client()
+        .get("/credentials?expired=1")
+        .header("accept", BROWSER)
+        .send()
+        .await
+        .assert_status(400);
+    assert_eq!(expired.header("x-navree-fresh"), Some("1"));
+    assert_eq!(expired.header("content-security-policy"), Some(PAGE_CSP));
+    let html = expired.text();
+    assert!(root_tag(&html).ends_with(" data-ui-fresh-page"), "{html}");
+    assert!(html.contains(&BRAND_SHEET.url()), "{html}");
 
     app.shutdown().await.unwrap();
 }
