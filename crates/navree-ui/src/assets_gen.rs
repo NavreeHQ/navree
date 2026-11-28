@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "a759019ce7df";
+pub const BUILD: &str = "3a2893f6c013";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-8984b59d1fec.js";
@@ -184,6 +184,9 @@ pub const DATES_STYLES_URL: &str = "/_navree/ui/dates-styles-bf5355979336.css";
 
 /// The URL of `time-styles.css`.
 pub const TIME_STYLES_URL: &str = "/_navree/ui/time-styles-b370f469d323.css";
+
+/// The URL of `looks.css`.
+pub const LOOKS_URL: &str = "/_navree/ui/looks-7accc0a98757.css";
 
 /// The URL of `shell-parts.css`.
 pub const SHELL_PARTS_URL: &str = "/_navree/ui/shell-parts-4c873f4ff6c3.css";
@@ -732,6 +735,15 @@ pub static FILES: &[Asset] = &[
         bytes: include_bytes!("../dist/time-styles.css"),
         gzip: Some(include_bytes!("../dist/time-styles.css.gz")),
         brotli: Some(include_bytes!("../dist/time-styles.css.br")),
+    },
+    Asset {
+        name: "looks",
+        ext: "css",
+        hash: "7accc0a98757",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/looks.css"),
+        gzip: Some(include_bytes!("../dist/looks.css.gz")),
+        brotli: Some(include_bytes!("../dist/looks.css.br")),
     },
     Asset {
         name: "shell-parts",

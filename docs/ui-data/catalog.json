@@ -282,7 +282,8 @@
       "examples": [
         "button-group/thumb",
         "button-group/default",
-        "button-group/vertical"
+        "button-group/vertical",
+        "button-group/segmented"
       ]
     },
     {
@@ -887,7 +888,8 @@
         "card/thumb",
         "card/default",
         "card/stats",
-        "card/plain"
+        "card/plain",
+        "card/inverse"
       ]
     },
     {
@@ -899,6 +901,7 @@
       "types": [
         "Badge",
         "BadgeVariant",
+        "StatusDot",
         "Tone"
       ],
       "thumb": "badge/default",
@@ -908,6 +911,7 @@
         "badge/variants",
         "badge/icon",
         "badge/dot",
+        "badge/status-dot",
         "badge/tones",
         "badge/outcome",
         "badge/status"
@@ -1042,7 +1046,8 @@
         "code-block/thumb",
         "code-block/default",
         "code-block/copy",
-        "code-block/languages"
+        "code-block/languages",
+        "code-block/inverse"
       ]
     },
     {
@@ -1076,6 +1081,7 @@
         "Timeline",
         "TimelineEvent",
         "TimelineState",
+        "TimelineVariant",
         "Meta"
       ],
       "thumb": "timeline/thumb",
@@ -1088,7 +1094,8 @@
         "timeline/meta",
         "timeline/hidden",
         "timeline/empty",
-        "timeline/text"
+        "timeline/text",
+        "timeline/plain"
       ]
     },
     {
@@ -1126,7 +1133,8 @@
       "examples": [
         "fact-card/thumb",
         "fact-card/default",
-        "fact-card/single"
+        "fact-card/single",
+        "fact-card/narrow"
       ]
     },
     {
@@ -1419,7 +1427,8 @@
       "examples": [
         "popover/thumb",
         "popover/default",
-        "popover/sides"
+        "popover/sides",
+        "popover/icon"
       ]
     },
     {
@@ -1756,7 +1765,8 @@
         "Stepper",
         "Step",
         "StepState",
-        "StepperLabels"
+        "StepperLabels",
+        "StepperVariant"
       ],
       "thumb": "stepper/thumb",
       "anatomy": "stepper/default",
@@ -1765,7 +1775,9 @@
         "stepper/default",
         "stepper/vertical",
         "stepper/links",
-        "stepper/narrow"
+        "stepper/narrow",
+        "stepper/tiles",
+        "stepper/track"
       ]
     },
     {
@@ -1943,6 +1955,7 @@
       "group": "data",
       "types": [
         "Stat",
+        "StatVariant",
         "Bars"
       ],
       "thumb": "stat/thumb",
@@ -1951,6 +1964,7 @@
         "stat/thumb",
         "stat/default",
         "stat/bars",
+        "stat/inverse",
         "stat/tile",
         "stat/tile-ring",
         "stat/tiles"
@@ -2693,7 +2707,8 @@
       "thumb": "thread-list/default",
       "anatomy": null,
       "examples": [
-        "thread-list/default"
+        "thread-list/default",
+        "thread-list/groups"
       ]
     },
     {
@@ -3317,7 +3332,7 @@
       "slug": "variants",
       "title": "Variants",
       "kind": "gallery",
-      "code": "[\n    (\"Primary\", Button::primary(\"Save\")),\n    (\"Secondary\", Button::new(\"Save\")),\n    (\"Outline\", Button::outline(\"Save\")),\n    (\"Ghost\", Button::ghost(\"Save\")),\n    (\"Destructive\", Button::destructive(\"Delete\")),\n    (\n        \"Link\",\n        Button::new(\"Read more\").variant(ButtonVariant::Link),\n    ),\n]",
+      "code": "[\n    (\"Primary\", Button::primary(\"Save\")),\n    (\"Secondary\", Button::new(\"Save\")),\n    (\"Outline\", Button::outline(\"Save\")),\n    (\"Ghost\", Button::ghost(\"Save\")),\n    (\"Destructive\", Button::destructive(\"Delete\")),\n    (\n        \"Destructive outline\",\n        Button::new(\"Delete deal\").variant(ButtonVariant::DestructiveOutline),\n    ),\n    (\n        \"Link\",\n        Button::new(\"Read more\").variant(ButtonVariant::Link),\n    ),\n]",
       "src": "/ui-preview/button/variants.html",
       "height": 120,
       "layout": "center",
@@ -3334,6 +3349,7 @@
         "Outline",
         "Ghost",
         "Destructive",
+        "Destructive outline",
         "Link"
       ],
       "slots": []
@@ -3650,6 +3666,40 @@
                   "children": []
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "button-group/segmented",
+      "component": "button-group",
+      "slug": "segmented",
+      "title": "Segmented links",
+      "kind": "single",
+      "code": "ButtonGroup::new(\"Mode\").segmented().children((\n    Button::new(\"Mine\").href(\"/deals/mine\").current(true),\n    Button::new(\"Team\").href(\"/deals/team\"),\n))",
+      "src": "/ui-preview/button-group/segmented.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "button-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "a",
+              "count": 2,
+              "children": []
             }
           ]
         }
@@ -14752,6 +14802,73 @@
       ]
     },
     {
+      "id": "card/inverse",
+      "component": "card",
+      "slug": "inverse",
+      "title": "On the inverse surface",
+      "kind": "single",
+      "code": "Card::titled(\"Security, in every mode\")\n    .variant(CardVariant::Inverse)\n    .body(Text::new(\n        \"Every team works in its own pipeline, with its own contacts.\",\n    ))\n    .footer((\n        Button::primary(\"Request a quote\"),\n        Button::outline(\"Read the details\"),\n    ))",
+      "src": "/ui-preview/card/inverse.html",
+      "height": 200,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-footer",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "badge/default",
       "component": "badge",
       "slug": "default",
@@ -16123,6 +16240,60 @@
       "slots": []
     },
     {
+      "id": "code-block/inverse",
+      "component": "code-block",
+      "slug": "inverse",
+      "title": "On the inverse surface",
+      "kind": "single",
+      "code": "CodeBlock::new(\n    \"sh\",\n    \"curl -fsSL https://get.example.com/crm | sh\\ncrm import --file \\\"$FILE\\\" # once\",\n)\n.copy_button()\n.inverse()",
+      "src": "/ui-preview/code-block/inverse.html",
+      "height": 170,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 620,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "code-block",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "code-block-bar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "code-block-language",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "timeline/thumb",
       "component": "timeline",
       "slug": "thumb",
@@ -16831,6 +17002,99 @@
               "tag": "p",
               "count": 1,
               "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timeline/plain",
+      "component": "timeline",
+      "slug": "plain",
+      "title": "Plain",
+      "kind": "single",
+      "code": "Timeline::new(\"deal-events\", \"Deal events\")\n    .variant(TimelineVariant::Plain)\n    .day(\n        \"Today\",\n        [\n            TimelineEvent::new(\"Deal 4 signed\")\n                .time_text(\"09:41\")\n                .detail(\"Eight seats added\"),\n            TimelineEvent::new(\"Rep assigned\")\n                .time_text(\"09:12\")\n                .detail(\"By Harleen Kaur\"),\n        ],\n    )",
+      "src": "/ui-preview/timeline/plain.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "timeline",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "timeline-day",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "timeline-day-title",
+                  "tag": "h3",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "timeline-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "timeline-event",
+                      "tag": "li",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "timeline-time",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "timeline-head",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "timeline-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "timeline-detail",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
@@ -17587,6 +17851,66 @@
       ]
     },
     {
+      "id": "fact-card/narrow",
+      "component": "fact-card",
+      "slug": "narrow",
+      "title": "Eight tiles in a row",
+      "kind": "single",
+      "code": "FactGrid::new()\n    .min_tile(128)\n    .cards((1..=8).map(|n| FactCard::new(format!(\"Rep {n}\"), \"Away\").detail(\"8 won\")))",
+      "src": "/ui-preview/fact-card/narrow.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1180,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "fact-grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "fact-card",
+              "tag": "div",
+              "count": 8,
+              "children": [
+                {
+                  "slot": "fact-body",
+                  "tag": "dl",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "fact-label",
+                      "tag": "dt",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "fact-value",
+                      "tag": "dd",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "fact-detail",
+                      "tag": "dd",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "badge/dot",
       "component": "badge",
       "slug": "dot",
@@ -17622,6 +17946,40 @@
                   "children": []
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "badge/status-dot",
+      "component": "badge",
+      "slug": "status-dot",
+      "title": "A status dot",
+      "kind": "single",
+      "code": "Row::gap(4).children((\n    StatusDot::new(\"Awaiting signature\").tone(Tone::Success),\n    StatusDot::new(\"No deals yet\"),\n))",
+      "src": "/ui-preview/badge/status-dot.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "status-dot",
+              "tag": "span",
+              "count": 2,
+              "children": []
             }
           ]
         }
@@ -21346,6 +21704,67 @@
         "Right"
       ],
       "slots": []
+    },
+    {
+      "id": "popover/icon",
+      "component": "popover",
+      "slug": "icon",
+      "title": "A button with a name of its own",
+      "kind": "single",
+      "code": "Row::gap(2).children((\n    Popover::icon_only(\"alerts\", icons::BELL, \"Notifications\").body(\"Nothing new.\"),\n    Popover::new(\"inbox\", \"3\")\n        .trigger_label(\"3 new messages\")\n        .body(\"Three messages.\"),\n))",
+      "src": "/ui-preview/popover/icon.html",
+      "height": 160,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "overlay-d30ab67a4ddf.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "popover-content",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "popover-content",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "tooltip/thumb",
@@ -30252,6 +30671,162 @@
       ]
     },
     {
+      "id": "stepper/tiles",
+      "component": "stepper",
+      "slug": "tiles",
+      "title": "Tiles",
+      "kind": "single",
+      "code": "Stepper::new(\"Import contacts\")\n    .variant(StepperVariant::Tiles)\n    .step(Step::new(\"File\").link(\"/imports/new/file\"))\n    .step(Step::new(\"Columns\").link(\"/imports/new/columns\"))\n    .step(Step::new(\"Matches\"))\n    .step(Step::new(\"Owners\"))\n    .step(Step::new(\"Import\"))\n    .current(2)",
+      "src": "/ui-preview/stepper/tiles.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stepper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stepper-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "step",
+                  "tag": "li",
+                  "count": 5,
+                  "children": [
+                    {
+                      "slot": "step-trigger",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step-indicator",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "step-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "step-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stepper/track",
+      "component": "stepper",
+      "slug": "track",
+      "title": "A track",
+      "kind": "single",
+      "code": "Stepper::new(\"Deal\")\n    .variant(StepperVariant::Track)\n    .steps([\"Lead\", \"Qualified\", \"Proposal\", \"Closing\", \"Won\"].map(Step::new))\n    .current(2)",
+      "src": "/ui-preview/stepper/track.html",
+      "height": 90,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stepper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stepper-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "step",
+                  "tag": "li",
+                  "count": 5,
+                  "children": [
+                    {
+                      "slot": "step-trigger",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step-indicator",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "step-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "step-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "stepper-count",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "wizard/thumb",
       "component": "wizard",
       "slug": "thumb",
@@ -37896,6 +38471,66 @@
                   "tag": "svg",
                   "count": 1,
                   "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stat/inverse",
+      "component": "stat",
+      "slug": "inverse",
+      "title": "On the inverse surface",
+      "kind": "single",
+      "code": "Grid::cols(2).gap(4).children((\n    Stat::new(\"Invoices due, Mon 16 Nov\", \"₹9,12,400\")\n        .caption(\"from 14 customers\")\n        .variant(StatVariant::Inverse),\n    Stat::new(\"Won this month\", \"₹14,80,000\").trend(\"+8.2%\", true),\n))",
+      "src": "/ui-preview/stat/inverse.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stat",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "stat-label",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-value",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-trend",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stat-caption",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
                 }
               ]
             }
@@ -59103,6 +59738,26 @@
       "code": "ThreadList::new(\"Your conversations\")\n    .thread(\"Payments by method this week\", \"/assistant/7\", true)\n    .thread(\"Pending refunds in Ludhiana\", \"/assistant/6\", false)\n    .thread(\"GST summary for October\", \"/assistant/5\", false)",
       "src": "/ui-preview/thread-list/default.html",
       "height": 190,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": []
+    },
+    {
+      "id": "thread-list/groups",
+      "component": "thread-list",
+      "slug": "groups",
+      "title": "Groups",
+      "kind": "single",
+      "code": "ThreadList::new(\"Your conversations\")\n    .group(\n        \"Today\",\n        [(\"Payments by method this week\", \"/assistant/7\", true)],\n    )\n    .group(\n        \"Earlier\",\n        [\n            (\"Pending refunds in Ludhiana\", \"/assistant/6\", false),\n            (\"GST summary for October\", \"/assistant/5\", false),\n        ],\n    )",
+      "src": "/ui-preview/thread-list/groups.html",
+      "height": 230,
       "layout": "start",
       "cells": "narrow",
       "show": false,

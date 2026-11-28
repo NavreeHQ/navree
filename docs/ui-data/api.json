@@ -1945,6 +1945,12 @@
         "doc": "Makes this a link."
       },
       {
+        "name": "current",
+        "generics": "",
+        "args": "current: bool",
+        "doc": "Says this link is the page being shown: `aria-current=\"page\"`, which a screen reader reads out. The button is drawn raised, as the chosen item of a segmented group is. `false` writes nothing."
+      },
+      {
         "name": "prefetch",
         "generics": "",
         "args": "",
@@ -2077,6 +2083,18 @@
         "doc": "Stacks the buttons."
       },
       {
+        "name": "segmented",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the group as a segmented control: a track in the theme's segment colour, its buttons on it, and the current one raised in the chosen segment's colour, as segmented tabs are drawn. Its items are often links, one to each place: each stays a link, with a link's keys, and the page needs no script. It links the looks stylesheet."
+      },
+      {
+        "name": "block",
+        "generics": "",
+        "args": "",
+        "doc": "Fills the width, sharing it equally among the buttons. It links the looks stylesheet."
+      },
+      {
         "name": "children",
         "generics": "",
         "args": "children: impl IntoNodes",
@@ -2148,6 +2166,11 @@
       {
         "name": "Link",
         "doc": "Looks like a link.",
+        "default": false
+      },
+      {
+        "name": "DestructiveOutline",
+        "doc": "Something that destroys, quieter than `Destructive`: the danger colour on no fill, with a faint line of it around, and a thin tint of it on hover. It links the looks stylesheet.",
         "default": false
       }
     ],
@@ -2626,13 +2649,19 @@
         "name": "variant",
         "generics": "",
         "args": "variant: CardVariant",
-        "doc": "Sets how the card is drawn. The default needs nothing more; the others link the parts stylesheet."
+        "doc": "Sets how the card is drawn. The default and the inverse surface need nothing more; the others link the parts stylesheet."
       },
       {
         "name": "description",
         "generics": "",
         "args": "description: impl Into<Node>",
         "doc": "Sets the description."
+      },
+      {
+        "name": "raised",
+        "generics": "",
+        "args": "",
+        "doc": "Raises the card on the theme's soft shadow (`Elevation::Soft`); a flat theme draws none. It links the looks stylesheet."
       },
       {
         "name": "action",
@@ -3964,6 +3993,12 @@
         "generics": "",
         "args": "",
         "doc": "Adds a button that copies the code (short blocks only). It needs the core runtime."
+      },
+      {
+        "name": "inverse",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the block on the inverse surface: a dark code panel on a light page, a light one on a dark page, its text, its colours and its copy button reading the theme's other palette, or the inverse colours of its `Roles`."
       },
       {
         "name": "labels",
@@ -7538,6 +7573,12 @@
         "generics": "",
         "args": "columns: u8",
         "doc": "Fixes the number of columns (2 to 6) from 768 px wide; narrower, it is one. Without this the grid fits as many as the width allows."
+      },
+      {
+        "name": "min_tile",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "Sets the narrowest a tile may be, in pixels, so the grid fits as many tiles of at least that width as the row holds: 128 for eight small tiles in a row. The width is taken to the nearest of 96, 112, 128, 144, 160, 176, 192, 208, 224, 256 and 320; 224, the 14 rem a tile is by default, writes nothing. Fixed `cols` win from 768 px wide. Another width links the looks stylesheet."
       }
     ],
     "variants": [],
@@ -13654,9 +13695,21 @@
         "generics": "",
         "args": "id: impl Into<String>, trigger: impl Into<Node>",
         "doc": "A popover with the id `id`, opened by a button showing `trigger`."
+      },
+      {
+        "name": "icon_only",
+        "generics": "",
+        "args": "id: impl Into<String>, glyph: icons::Icon, label: impl Into<String>",
+        "doc": "A popover with the id `id`, opened by a square button showing `glyph` alone and named `label` for assistive technology, such as a bell that opens the notifications. The button is a ghost button unless `variant` says otherwise."
       }
     ],
     "methods": [
+      {
+        "name": "trigger_label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the button that opens it for assistive technology, when what it shows doesn't say, such as an icon or a count. `label` names the popup."
+      },
       {
         "name": "variant",
         "generics": "",
@@ -15886,13 +15939,13 @@
         "name": "segment_track",
         "generics": "",
         "args": "light: Rgb, dark: Rgb",
-        "doc": "The track of segmented tabs. Without it, `ink-2`."
+        "doc": "The track of segmented tabs and of a segmented button group. Without it, `ink-2`."
       },
       {
         "name": "segment_on",
         "generics": "",
         "args": "light: Rgb, dark: Rgb",
-        "doc": "The chosen tab on a segmented track. Without it, `ink-3`."
+        "doc": "The chosen tab, or the current link, on a segmented track. Without it, `ink-3`."
       },
       {
         "name": "selected_row",
@@ -19165,6 +19218,12 @@
         "generics": "",
         "args": "href: impl Into<Href>",
         "doc": "Makes the whole tile a link to `href`; the label is the link's name."
+      },
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: StatVariant",
+        "doc": "Sets how the tile is drawn. Neither look links a stylesheet of its own."
       }
     ],
     "variants": [],
@@ -19198,6 +19257,27 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "StatVariant": {
+    "name": "StatVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "How a `Stat` is drawn.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Default",
+        "doc": "A line around a surface, as a card: the default.",
+        "default": true
+      },
+      {
+        "name": "Inverse",
+        "doc": "The inverse surface: the tile drawn on the theme's other palette, a dark tile on a light page, for the one figure a page leads with. Its label, figure and caption read the flipped colours.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "State": {
@@ -19490,6 +19570,30 @@
     ],
     "shared": []
   },
+  "StatusDot": {
+    "name": "StatusDot",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A status as a dot and a word, with no chip around them: \"Awaiting signature\" beside a green dot. The word carries the meaning, so the dot is never the only sign; the dot takes the `Tone`'s colour, grey with none.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "word: impl Into<Node>",
+        "doc": "A dot beside `word`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the dot. A `Tone::Named` colour comes from the stylesheet."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Step": {
     "name": "Step",
     "kind": "struct",
@@ -19626,6 +19730,12 @@
         "doc": "Stacks the steps, with their descriptions beside the indicators."
       },
       {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: StepperVariant",
+        "doc": "Sets how the steps are drawn: circles joined by lines (the default), tiles or a track. The states, their words and the links are the same in each. Tiles and a track link the looks stylesheet."
+      },
+      {
         "name": "no_count",
         "generics": "",
         "args": "",
@@ -19655,6 +19765,32 @@
     "constructors": [],
     "methods": [],
     "variants": [],
+    "shared": []
+  },
+  "StepperVariant": {
+    "name": "StepperVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/flow/stepper.rs",
+    "summary": "How a `Stepper` looks.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Circles",
+        "doc": "Numbered circles joined by lines: the default.",
+        "default": true
+      },
+      {
+        "name": "Tiles",
+        "doc": "Each step a bordered tile, the done ones tinted in the success tone with a tick and the current one outlined in the accent. On a narrow screen every tile keeps its name and the tiles wrap onto more rows.",
+        "default": false
+      },
+      {
+        "name": "Track",
+        "doc": "The steps in a row in a muted box: small dots joined by hairlines, the current step's dot in the success tone and its name bold, the steps after it hollow and quieter. It shows each step's name only, and is always a row.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Suggestions": {
@@ -20833,6 +20969,12 @@
         "generics": "",
         "args": "title: impl Into<String>, href: impl Into<LocalHref>, current: bool",
         "doc": "Adds a conversation called `title`, whose page is `href`; `current` when it is the one open."
+      },
+      {
+        "name": "group",
+        "generics": "<T, H>",
+        "args": "label: impl Into<String>, threads: impl IntoIterator<Item =(T, H, bool)>",
+        "doc": "Adds conversations under a heading of their own, such as \"Today\" and \"Earlier\": each thread a `(title, href, current)` as `thread` takes it. The group is a list named by its label, after the threads given without one."
       }
     ],
     "variants": [],
@@ -21248,6 +21390,12 @@
         "doc": "Replaces the words."
       },
       {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: TimelineVariant",
+        "doc": "Sets how the events are drawn: on a rail with dots (the default), or plain."
+      },
+      {
         "name": "loading",
         "generics": "",
         "args": "",
@@ -21397,6 +21545,27 @@
       {
         "name": "Muted",
         "doc": "It happened but is set aside, such as work a machine did: a dashed ring and quieter text.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "TimelineVariant": {
+    "name": "TimelineVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/timeline.rs",
+    "summary": "How a `Timeline` is drawn.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Rail",
+        "doc": "A rail down the side with a dot for each event: the default.",
+        "default": true
+      },
+      {
+        "name": "Plain",
+        "doc": "No rail and no dot: a column of times, each event's title in bold and its detail quieter under it, as a log of what happened at a place. An event's tone, icon and state still read in words where they are written. It links the looks stylesheet.",
         "default": false
       }
     ],
