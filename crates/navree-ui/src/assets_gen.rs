@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "704114da1770";
+pub const BUILD: &str = "83126a69f957";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-8984b59d1fec.js";
@@ -138,6 +138,9 @@ pub const CHART_GRIDS_URL: &str = "/_navree/ui/chart-grids-70741be83598.css";
 
 /// The URL of `app-blocks.css`.
 pub const APP_BLOCKS_URL: &str = "/_navree/ui/app-blocks-019da61ba75f.css";
+
+/// The URL of `auth-layout.css`.
+pub const AUTH_LAYOUT_URL: &str = "/_navree/ui/auth-layout-900765c9e556.css";
 
 /// The URL of `parts-styles.css`.
 pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-2c3b193c96c5.css";
@@ -593,6 +596,15 @@ pub static FILES: &[Asset] = &[
         bytes: include_bytes!("../dist/app-blocks.css"),
         gzip: Some(include_bytes!("../dist/app-blocks.css.gz")),
         brotli: Some(include_bytes!("../dist/app-blocks.css.br")),
+    },
+    Asset {
+        name: "auth-layout",
+        ext: "css",
+        hash: "900765c9e556",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/auth-layout.css"),
+        gzip: Some(include_bytes!("../dist/auth-layout.css.gz")),
+        brotli: Some(include_bytes!("../dist/auth-layout.css.br")),
     },
     Asset {
         name: "parts-styles",

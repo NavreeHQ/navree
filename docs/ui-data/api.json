@@ -1092,6 +1092,42 @@
         "generics": "",
         "args": "corner: impl Into<Node>",
         "doc": "What stands in the top corner, over the form: a theme menu."
+      },
+      {
+        "name": "aside_end",
+        "generics": "",
+        "args": "",
+        "doc": "Puts the panel after the form, in reading order and on the screen: the form's column on the start side, the panel on the end side. Without it the panel comes first."
+      },
+      {
+        "name": "aside_inset",
+        "generics": "",
+        "args": "",
+        "doc": "Insets the panel from the window's edges by 0.75rem and rounds it in the theme's `panel` corner (`Corners::panel`), padded 3.5rem with 2.5rem between its parts and no line beside it. The form's column grows from 35rem and the panel from 30rem, by equal parts of the room that is left."
+      },
+      {
+        "name": "aside_inverse",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the panel on the theme's inverse surface (`data-inverse`): the other palette, a dark panel on a light page and a light one on a dark page, in the colours a theme's `Inverse` gives it, checked for contrast. Every part inside reads it."
+      },
+      {
+        "name": "brand",
+        "generics": "",
+        "args": "brand: impl Into<Node>",
+        "doc": "The app's brand at the top of the form's column, at every width, so it stays when the panel is hidden: a `Brand`, its name and mark linking home. Its name is drawn in the theme's `brand` text style (`TypeScale::brand`)."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl Into<Node>",
+        "doc": "A line at the foot of the form's column, in small quiet text: how sign-ins are kept safe, a link to the terms."
+      },
+      {
+        "name": "body_width",
+        "generics": "",
+        "args": "px: u16",
+        "doc": "The width of the form's column at most, in pixels: 360, 400, 448 (the default) or 480. Another number takes the nearest. On a narrower screen it takes the room there is."
       }
     ],
     "variants": [],
@@ -8301,6 +8337,12 @@
         "generics": "",
         "args": "",
         "doc": "Puts every field on its own line."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "field: &str, label: impl Into<String>",
+        "doc": "Gives the field `field` the label `label` in place of the one its type gives (its doc comment, or `#[form(label = \"...\")]`): words chosen when the page is drawn, such as an app's own settings give. The label is text, escaped when it is drawn. The field still posts under its own name, and the messages of the form's own checks still name it by its type's label. A field a `FieldControl` draws is given it as its `ControlField::label`. A name the form has no field of changes nothing."
       },
       {
         "name": "hidden",

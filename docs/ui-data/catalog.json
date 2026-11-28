@@ -2539,7 +2539,8 @@
       "anatomy": null,
       "examples": [
         "auth-layout/thumb",
-        "auth-layout/default"
+        "auth-layout/default",
+        "auth-layout/inset"
       ]
     },
     {
@@ -69105,6 +69106,159 @@
                           ]
                         }
                       ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "auth-layout/inset",
+      "component": "auth-layout",
+      "slug": "inset",
+      "title": "The panel after the form, inset and inverse, with a brand and a footer",
+      "kind": "single",
+      "code": "AuthLayout::new(\n    Stack::gap(6).children((\n        Stack::gap(2).children((\n            Heading::h1(\"Sign in to Kesar\"),\n            Text::muted(\"Sleep, heart and steps, scored every day.\"),\n        )),\n        Stack::gap(4).children((\n            Field::new(\"auth-inset-email\", \"Email\")\n                .control(Input::email(\"email\").autocomplete(\"email\")),\n            Button::primary(\"Continue\").block(),\n            Button::ghost(\"Email me a sign-in link\")\n                .href(\"/sign-in/link\")\n                .block(),\n        )),\n    )),\n)\n.brand(marketing::Brand::new(\"Kesar\", \"/\").icon(icons::SUN))\n.footer(Text::muted(\"Every sign-in is checked for a new device.\"))\n.aside(Stack::gap(4).children((\n    Heading::h2(\"Your health, clearly understood.\"),\n    Text::new(\"Sleep, heart, recovery and movement, scored every day from the phone and watch you already have.\"),\n    Text::muted(\"An example day, not real data.\"),\n)))\n.aside_label(\"About Kesar\")\n.aside_end()\n.aside_inset()\n.aside_inverse()\n.body_width(400)",
+      "src": "/ui-preview/auth-layout/inset.html",
+      "height": 640,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "fit": false,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "auth-layout",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "auth-main",
+              "tag": "main",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "auth-brand",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-brand-mark",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "site-brand-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "auth-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "stack",
+                          "tag": "div",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "field",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "label",
+                                  "tag": "label",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "input",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "auth-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "text",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "auth-aside",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stack",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heading",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "text",
+                      "tag": "p",
+                      "count": 2,
+                      "children": []
                     }
                   ]
                 }
