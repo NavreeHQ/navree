@@ -585,6 +585,42 @@
         "doc": "Puts `node` in the middle of the top bar for this page: what belongs to the page and the request, such as a pager between days that depends on the day shown. It stands centred in the bar, between the navigation and the bar's own controls, and stays on phones."
       },
       {
+        "name": "topbar_actions",
+        "generics": "",
+        "args": "actions: impl IntoNodes",
+        "doc": "Puts `actions` at the end of the top bar, before its search and theme menu: a detail page's buttons (\"Export CSV\", \"Close account\"). On a phone too narrow for them they scroll sideways inside the bar, and the page never does."
+      },
+      {
+        "name": "current_crumb",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "Names the breadcrumb's last part, in place of the page's title: \"LDH-1\" over a page titled \"LDH-1, Ludhiana\". The heading and the browser's tab keep the title."
+      },
+      {
+        "name": "current_crumb_mono",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the breadcrumb's last part in the mono face: a name that is a code (\"INV-2041\"). See `Breadcrumb::current_mono`."
+      },
+      {
+        "name": "title_aside",
+        "generics": "",
+        "args": "nodes: impl IntoNodes",
+        "doc": "Puts `nodes` after the page's title, on its line and wrapping under it when there is no room: badges for the state of what the page shows (\"Paid\", \"Annual\")."
+      },
+      {
+        "name": "subtitle",
+        "generics": "",
+        "args": "text: impl Into<Cow<'static, str>>",
+        "doc": "Puts a line of quieter text under the title: what the page is about, in a few words."
+      },
+      {
+        "name": "title_face",
+        "generics": "",
+        "args": "face: Face",
+        "doc": "Draws the title in `face`, in place of the face the theme's page title takes: a mono title for a name that is a code."
+      },
+      {
         "name": "document_title",
         "generics": "",
         "args": "title: impl Into<Cow<'static, str>>",
@@ -768,6 +804,18 @@
         "generics": "",
         "args": "slot: impl Into<Node>",
         "doc": "Puts `slot` in the sidebar's header for this request, in place of the shell's `header_slot`: the switcher of the workspace this request is in."
+      },
+      {
+        "name": "footer_slot",
+        "generics": "",
+        "args": "slot: impl Into<Node>",
+        "doc": "Puts `slot` in the sidebar's foot for this request, above the person, in place of the shell's `footer_slot`: the seats of the plan signed in to."
+      },
+      {
+        "name": "badge",
+        "generics": "",
+        "args": "badge: Badge",
+        "doc": "Puts `badge` at the end of the brand row for this request, in place of the shell's `badge` and of its context line: \"Internal\" on the pages of a staff area."
       },
       {
         "name": "csrf",
@@ -1053,7 +1101,7 @@
     "name": "Avatar",
     "kind": "struct",
     "file": "crates/navree-ui/src/components/display.rs",
-    "summary": "A picture of a person: an image, or a neutral icon when there is none. There is no way to put initials in it.",
+    "summary": "A picture of a person or an organisation: an image, their initials, or a neutral icon when there is neither.",
     "constructors": [
       {
         "name": "image",
@@ -1066,6 +1114,12 @@
         "generics": "",
         "args": "label: impl Into<String>",
         "doc": "No image: the person icon, labelled `label`."
+      },
+      {
+        "name": "initials",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "The initials of `name`, a person's or an organisation's: the first letter of its first word and of its last, in capitals (`DO` for \"Dalbir Oberoi\", `N` for \"Narmada\", `ਗਸ` for \"ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ\"). A screen reader says the whole name. A name with no letter or digit in it draws the person icon, as `placeholder` does. Its styles come with the parts stylesheet."
       }
     ],
     "methods": [
@@ -1074,6 +1128,24 @@
         "generics": "",
         "args": "size: Size",
         "doc": "Sets the size."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours it in `tone`: a thin tint of the tone behind the initials or the icon, drawn in the tone, as a `Badge` in a tone is. `Tone::Neutral` leaves it as it is."
+      },
+      {
+        "name": "solid",
+        "generics": "",
+        "args": "",
+        "doc": "Fills it with the accent and draws its initials or icon in the accent's ink, as a primary button is drawn: an organisation's tile beside its name. A filled avatar takes no tone."
+      },
+      {
+        "name": "shape",
+        "generics": "",
+        "args": "shape: AvatarShape",
+        "doc": "Sets its shape: the theme's corner (the default) or a circle."
       },
       {
         "name": "fallback",
@@ -1125,6 +1197,27 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "AvatarShape": {
+    "name": "AvatarShape",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "The shape of an `Avatar`.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Rounded",
+        "doc": "The theme's corner for avatars (`Corners::avatar`), 4 px unless the theme says otherwise: the default.",
+        "default": true
+      },
+      {
+        "name": "Circle",
+        "doc": "A circle, whatever the theme's corner.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Backdrop": {
@@ -1244,6 +1337,11 @@
       {
         "name": "Danger",
         "doc": "Bad news.",
+        "default": false
+      },
+      {
+        "name": "Solid",
+        "doc": "Filled with the accent, its text in the accent's ink, as a primary button is drawn: a marker that stands out, such as \"Internal\" in the brand row. Its styles come with the parts stylesheet. A table's badge column (`#[col(badge = ..)]`) draws it as `Neutral`: a cell is no place for a marker.",
         "default": false
       }
     ],
@@ -1436,6 +1534,12 @@
         "generics": "",
         "args": "label: impl Into<Node>",
         "doc": "Adds the current page."
+      },
+      {
+        "name": "current_mono",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "Adds the current page, its name in the mono face: a name that is a code (\"INV-2041\"). Its style comes with the parts stylesheet."
       },
       {
         "name": "prefetch",
@@ -10243,6 +10347,27 @@
     "variants": [],
     "shared": []
   },
+  "LogoStyle": {
+    "name": "LogoStyle",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "How the app's mark is drawn at the start of the brand row.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Tile",
+        "doc": "The mark in a tile of the theme's raised colour, 32 px square: the default.",
+        "default": true
+      },
+      {
+        "name": "Bare",
+        "doc": "The mark alone, 22 px, with no tile behind it, and the row 30 px high with room at its sides: for a mark drawn to stand on the sidebar's own colour.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Markdown": {
     "name": "Markdown",
     "kind": "struct",
@@ -17019,10 +17144,34 @@
         "doc": "Draws the picture at `src` as the app's mark, in place of Navree's: a path on the app, an `https://` URL, or an `AppImage` the toolkit serves (`.logo(&MARK)`). It is decorative, beside the app's name."
       },
       {
+        "name": "logo_dark",
+        "generics": "",
+        "args": "src: impl Into<Href>",
+        "doc": "Draws the picture at `src` as the app's mark in dark mode, in place of the `logo`: a mark drawn for a light sidebar that would vanish on a dark one. A page in light or in dark draws the one it needs; a page that follows the device draws a `<picture>` whose dark source the browser picks with `prefers-color-scheme`, as `Picture::dark` does. Without a `logo` it draws nothing."
+      },
+      {
+        "name": "logo_style",
+        "generics": "",
+        "args": "style: LogoStyle",
+        "doc": "Sets how the mark is drawn: in a tile (`LogoStyle::Tile`, the default) or alone (`LogoStyle::Bare`)."
+      },
+      {
+        "name": "badge",
+        "generics": "",
+        "args": "badge: Badge",
+        "doc": "Puts `badge` at the end of the brand row, in place of the context line: a marker such as \"Internal\" or \"Staging\" (`Badge::new(\"Internal\").variant(BadgeVariant::Solid)`). It hides with the app's name when the sidebar folds to its icons. `AppShell::badge` sets one for a request, in place of this one."
+      },
+      {
         "name": "header_slot",
         "generics": "",
         "args": "slot: impl Into<Node>",
         "doc": "Puts `slot` in the sidebar's header, under the app's name: a workspace switcher. `AppShell::header_slot` sets one for a request, in place of this one. It hides with the names when the sidebar folds to its icons."
+      },
+      {
+        "name": "footer_slot",
+        "generics": "",
+        "args": "slot: impl Into<Node>",
+        "doc": "Puts `slot` in the sidebar's foot, above the person: a tile with the plan's seats and a button to add some. `AppShell::footer_slot` sets one for a request, in place of this one. It hides with the names when the sidebar folds to its icons."
       },
       {
         "name": "home",
@@ -17191,7 +17340,7 @@
         "name": "gap",
         "generics": "",
         "args": "px: u16",
-        "doc": "The space between its blocks (the brand, each group of links, the footer), from 0 to 64 px."
+        "doc": "The space between its blocks (the brand, a slot under it, each group of links, the footer), from 0 to 64 px."
       },
       {
         "name": "item_height",
@@ -22703,7 +22852,7 @@
         "name": "breadcrumb",
         "generics": "",
         "args": "style: TextStyle",
-        "doc": "A breadcrumb trail. Without it: 13 px."
+        "doc": "A breadcrumb trail: its size, line, tracking and face, and the current page's weight (the links keep the text's). Without it: 13 px."
       },
       {
         "name": "stat_value",
@@ -23123,6 +23272,18 @@
       }
     ],
     "methods": [
+      {
+        "name": "avatar",
+        "generics": "",
+        "args": "avatar: Avatar",
+        "doc": "Draws `avatar` at the start of the row, in place of the person icon: the person's initials (`Avatar::initials(name).shape(AvatarShape::Circle)`) or their picture. The row's name says who it is, so give the avatar the same name."
+      },
+      {
+        "name": "chevron",
+        "generics": "",
+        "args": "shown: bool",
+        "doc": "Draws the chevron at the end of the row (`true`, the default) or not. The row opens the menu either way, and tells assistive technology that it does."
+      },
       {
         "name": "link",
         "generics": "",

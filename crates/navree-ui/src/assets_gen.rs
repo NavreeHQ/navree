@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "155c00e56d3f";
+pub const BUILD: &str = "704114da1770";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-8984b59d1fec.js";
@@ -98,7 +98,7 @@ pub const PHONE_URL: &str = "/_navree/ui/phone-e7a815361487.js";
 pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-7d8ad667768d.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-00c3c73c425c.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -140,7 +140,7 @@ pub const CHART_GRIDS_URL: &str = "/_navree/ui/chart-grids-70741be83598.css";
 pub const APP_BLOCKS_URL: &str = "/_navree/ui/app-blocks-019da61ba75f.css";
 
 /// The URL of `parts-styles.css`.
-pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-baa6f1ef2002.css";
+pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-2c3b193c96c5.css";
 
 /// The URL of `sortable-grid-styles.css`.
 pub const SORTABLE_GRID_STYLES_URL: &str = "/_navree/ui/sortable-grid-styles-c22d032878e6.css";
@@ -181,6 +181,9 @@ pub const DATES_STYLES_URL: &str = "/_navree/ui/dates-styles-bf5355979336.css";
 
 /// The URL of `time-styles.css`.
 pub const TIME_STYLES_URL: &str = "/_navree/ui/time-styles-b370f469d323.css";
+
+/// The URL of `shell-parts.css`.
+pub const SHELL_PARTS_URL: &str = "/_navree/ui/shell-parts-4c873f4ff6c3.css";
 
 /// The URL of `geist.woff2`.
 pub const GEIST_URL: &str = "/_navree/ui/geist-685b571ab077.woff2";
@@ -468,7 +471,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "7d8ad667768d",
+        hash: "00c3c73c425c",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -594,7 +597,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "parts-styles",
         ext: "css",
-        hash: "baa6f1ef2002",
+        hash: "2c3b193c96c5",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/parts-styles.css"),
         gzip: Some(include_bytes!("../dist/parts-styles.css.gz")),
@@ -717,6 +720,15 @@ pub static FILES: &[Asset] = &[
         bytes: include_bytes!("../dist/time-styles.css"),
         gzip: Some(include_bytes!("../dist/time-styles.css.gz")),
         brotli: Some(include_bytes!("../dist/time-styles.css.br")),
+    },
+    Asset {
+        name: "shell-parts",
+        ext: "css",
+        hash: "4c873f4ff6c3",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/shell-parts.css"),
+        gzip: Some(include_bytes!("../dist/shell-parts.css.gz")),
+        brotli: Some(include_bytes!("../dist/shell-parts.css.br")),
     },
     Asset {
         name: "geist",

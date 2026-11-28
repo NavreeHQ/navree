@@ -916,16 +916,18 @@
       "id": "avatar",
       "name": "Avatar",
       "url": "/docs/components/avatar/",
-      "summary": "A picture of a person: an image, or a neutral icon when there is none. There is no way to put initials in it.",
+      "summary": "A picture of a person or an organisation: an image, their initials, or a neutral icon when there is neither.",
       "group": "display",
       "types": [
-        "Avatar"
+        "Avatar",
+        "AvatarShape"
       ],
       "thumb": "avatar/default",
       "anatomy": "avatar/default",
       "examples": [
         "avatar/default",
-        "avatar/sizes"
+        "avatar/sizes",
+        "avatar/initials"
       ]
     },
     {
@@ -1635,7 +1637,8 @@
         "NavItem",
         "UserMenu",
         "AppPage",
-        "AppShell"
+        "AppShell",
+        "LogoStyle"
       ],
       "thumb": "app-shell/default",
       "anatomy": "app-shell/default",
@@ -14784,7 +14787,7 @@
       "slug": "variants",
       "title": "Variants",
       "kind": "gallery",
-      "code": "[\n    (\"Neutral\", Badge::new(\"Lead\")),\n    (\"Outline\", Badge::new(\"Lead\").variant(BadgeVariant::Outline)),\n    (\"Success\", Badge::new(\"Won\").variant(BadgeVariant::Success)),\n    (\n        \"Warning\",\n        Badge::new(\"At risk\").variant(BadgeVariant::Warning),\n    ),\n    (\"Danger\", Badge::new(\"Lost\").variant(BadgeVariant::Danger)),\n]",
+      "code": "[\n    (\"Neutral\", Badge::new(\"Lead\")),\n    (\"Outline\", Badge::new(\"Lead\").variant(BadgeVariant::Outline)),\n    (\"Success\", Badge::new(\"Won\").variant(BadgeVariant::Success)),\n    (\n        \"Warning\",\n        Badge::new(\"At risk\").variant(BadgeVariant::Warning),\n    ),\n    (\"Danger\", Badge::new(\"Lost\").variant(BadgeVariant::Danger)),\n    (\"Solid\", Badge::new(\"Internal\").variant(BadgeVariant::Solid)),\n]",
       "src": "/ui-preview/badge/variants.html",
       "height": 120,
       "layout": "center",
@@ -14800,7 +14803,8 @@
         "Outline",
         "Success",
         "Warning",
-        "Danger"
+        "Danger",
+        "Solid"
       ],
       "slots": []
     },
@@ -14910,6 +14914,40 @@
         "Lg"
       ],
       "slots": []
+    },
+    {
+      "id": "avatar/initials",
+      "component": "avatar",
+      "slug": "initials",
+      "title": "Initials, in a tone and filled",
+      "kind": "single",
+      "code": "Row::gap(2).children((\n    Avatar::initials(\"Narmada Roadways\").solid(),\n    Avatar::initials(\"Dalbir Oberoi\").shape(AvatarShape::Circle),\n    Avatar::initials(\"Harleen Kaur\")\n        .tone(Tone::Info)\n        .shape(AvatarShape::Circle),\n    Avatar::initials(\"ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ\")\n        .tone(Tone::Success)\n        .shape(AvatarShape::Circle),\n))",
+      "src": "/ui-preview/avatar/initials.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "avatar",
+              "tag": "span",
+              "count": 4,
+              "children": []
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "item/thumb",
